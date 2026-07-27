@@ -176,7 +176,8 @@ export default function Deposit() {
       if (data.gateway === "paynow" && data.checkout_url) {
         setWaitDep(data);
         setWaitState("waiting");
-        try { window.open(data.checkout_url, "_blank", "noopener,noreferrer"); } catch {}
+        // Note: we no longer window.open() the checkout URL. It's loaded inside
+        // the waiting drawer as an iframe so the user never sees the gateway domain.
       } else {
         toast.success("Deposit submitted. Admin will approve shortly.");
       }
@@ -355,54 +356,64 @@ export default function Deposit() {
       <Drawer open={!!waitDep} onOpenChange={(o) => !o && closeWait()}>
         <DrawerContent
           data-testid="waiting-drawer"
-          className="bg-[#0B1524] border-t border-[#1A2B44] text-white max-w-lg mx-auto rounded-t-2xl"
+          className="bg-[#0B1524] border-t border-[#1A2B44] text-white max-w-xl mx-auto rounded-t-2xl max-h-[95vh]"
         >
           <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-[#1A2B44]" />
-          <DrawerHeader>
+          <DrawerHeader className="pb-2">
             <DrawerTitle className="font-display flex items-center gap-2">
               {waitState === "approved" ? (
                 <><CheckCircle2 className="w-5 h-5 text-[#10B981]" /> Payment received</>
               ) : waitState === "rejected" ? (
                 <><X className="w-5 h-5 text-[#EF4444]" /> Payment failed</>
               ) : (
-                <><Clock className="w-5 h-5 text-[#F59E0B]" /> Waiting for your payment</>
+                <><Clock className="w-5 h-5 text-[#F59E0B]" /> Complete your payment</>
               )}
             </DrawerTitle>
-            <DrawerDescription className="text-[#94A3B8]">
+            <DrawerDescription className="text-[#94A3B8] text-xs">
               {waitState === "approved"
                 ? "Your wallet has been credited."
                 : waitState === "rejected"
                 ? "This payment was reported as failed or expired."
-                : "This screen updates the moment your bank confirms the transfer."}
+                : `Amount ${formatNaira(waitDep?.amount || 0)} — this window will auto-update once received.`}
             </DrawerDescription>
           </DrawerHeader>
 
           {waitDep && (
-            <div className="px-4 pb-2 space-y-4">
-              <Card className="bg-[#020813] border-[#1A2B44] rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Amount</div>
-                  <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Status</div>
+            <div className="px-4 pb-3 space-y-3 overflow-y-auto" style={{ maxHeight: "calc(95vh - 180px)" }}>
+              {/* Embedded checkout — no window.open, no visible URL bar */}
+              {waitState === "waiting" && waitDep.checkout_url && (
+                <div
+                  className="relative rounded-xl border border-[#1A2B44] bg-white overflow-hidden"
+                  style={{ height: "min(62vh, 560px)" }}
+                >
+                  <div className="absolute inset-0 grid place-items-center bg-[#0B1524] text-[#94A3B8] text-xs pointer-events-none z-0">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-[#0055FF]" />
+                      Loading secure payment page…
+                    </div>
+                  </div>
+                  <iframe
+                    key={waitDep.id}
+                    src={waitDep.checkout_url}
+                    title="Secure payment"
+                    referrerPolicy="no-referrer"
+                    sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+                    className="relative z-10 w-full h-full border-0"
+                    data-testid="deposit-checkout-iframe"
+                  />
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <div className="font-display font-800 text-2xl tabular">{formatNaira(waitDep.amount)}</div>
-                  <StatusPill status={waitState === "approved" ? "approved" : waitState === "rejected" ? "rejected" : "pending"} />
-                </div>
-              </Card>
+              )}
 
               {waitState === "waiting" && (
                 <>
-                  <div className="rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-4 text-xs text-[#94A3B8] flex items-start gap-3">
-                    <Loader2 className="w-4 h-4 text-[#0055FF] animate-spin mt-0.5" />
+                  <div className="rounded-lg border border-[#0055FF]/40 bg-[#0055FF]/10 p-3 text-[11px] text-[#94A3B8] flex items-start gap-2">
+                    <Loader2 className="w-3.5 h-3.5 text-[#0055FF] animate-spin mt-0.5 shrink-0" />
                     <div>
-                      Checking every 5s. As soon as your payment lands, this drawer flips to success. If the checkout tab closed, tap <b className="text-white">Reopen checkout</b>.
+                      Complete the transfer above. We'll auto-credit your wallet within a few seconds of receipt.
+                      If it takes longer, tap the verify button below.
                     </div>
                   </div>
-                  <a href={waitDep.checkout_url} target="_blank" rel="noreferrer" data-testid="reopen-checkout" className="block">
-                    <Button className="w-full h-12 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl">
-                      <ExternalLink className="w-4 h-4 mr-2" /> Reopen checkout
-                    </Button>
-                  </a>
+
                   <Button
                     variant="outline"
                     onClick={manualVerify}
@@ -448,7 +459,7 @@ export default function Deposit() {
             </div>
           )}
 
-          <DrawerFooter className="pt-3">
+          <DrawerFooter className="pt-2">
             <DrawerClose asChild>
               <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white h-11 rounded-xl" data-testid="waiting-close">
                 {waitState === "approved" ? "Done" : "Close"}

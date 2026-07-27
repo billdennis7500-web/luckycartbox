@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ArrowDownToLine, ArrowUpFromLine, Users as UsersIcon, LogOut,
-  Shield, Copy, ChevronRight, Ticket, Landmark, Receipt,
+  Shield, Copy, ChevronRight, Ticket, Landmark, Receipt, History,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,6 +62,7 @@ export default function Profile() {
       {/* Menu links */}
       <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
         <ProfileLink to="/referrals" icon={UsersIcon} label="Referrals" hint="Invite & earn 3-gen commissions" testid="profile-link-referrals" />
+        <ProfileLink to="/transactions" icon={History} label="Transaction history" hint="Every wallet movement" testid="profile-link-transactions" />
         <ProfileLink to="/deposit" icon={ArrowDownToLine} label="Deposit" hint="Fund your wallet" testid="profile-link-deposit" />
         <ProfileLink to="/deposit-history" icon={Receipt} label="Deposit history" hint="Every top-up you've made" testid="profile-link-deposit-history" />
         <ProfileLink to="/withdraw" icon={ArrowUpFromLine} label="Withdraw" hint="Cash out to bank" testid="profile-link-withdraw" />

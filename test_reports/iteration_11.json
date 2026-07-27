@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only validation for iteration 11: (1) Deposit iframe embedding — verified no window.open, no new tab opened on submit, no a[target=_blank] on /deposit, no 'Reopen checkout' anchor. Instant Pay tile hidden as expected (PayNow currently IP-blocked); /deposit shows exactly 2 manual account tiles (ACCESS BANK, GTCO). Manual submit works with no new page / no iframe rendered. (2) Profile page — new 'Transaction history' link (data-testid=profile-link-transactions) is present, has History icon, and is positioned between Referrals and Deposit (order confirmed: referrals → transactions → deposit → deposit-history → withdraw → withdraw-history → bank → coupon). Clicking navigates to /transactions. (3) /transactions page — data-testid=transactions-page renders; header shows '11 wallet events · +₦56,300 in · −₦6,000 out'; 3 tabs with correct counts (All 11 / Credits 6 / Debits 5); search input filters correctly and triggers tx-empty for no-match; tx-load-more increments visible items by 10 and tx-counter updates from 'Showing 10 of 11' → 'Showing 11 of 11'; back arrow (tx-back-link) returns to /profile. (4) Regression: /deposit-history, /withdraw-history, /bank-account, /investments, /referrals, /coupon all load without errors. Iframe end-to-end path with real gateway can't be validated because outbound IP is still PayNow-blocked (as noted by main agent); code inspection confirms iframe src, title, referrerPolicy and sandbox attributes are all set as specified.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_11.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Deposit.jsx still imports ExternalLink from lucide-react but no longer uses it after removal of the 'Reopen checkout' anchor — dead import, safe to remove.",
+    "Transactions.jsx: `typeMeta` map does not include some common types like 'investment' (only 'invest'); observed rows in test data displayed as 'investment' via the fallback path which renders the raw type with underscores stripped — works but not ideal. Consider adding 'investment' key explicitly for consistency with 'Deposit'/'Withdrawal' labels.",
+    "Deposit.jsx iframe uses sandbox='allow-forms allow-scripts allow-same-origin allow-popups' — combining allow-scripts + allow-same-origin effectively disables the sandbox, which is worth flagging even though it's required for PayNow to function. Consider documenting this trade-off in code.",
+    "Iframe URL is still visible via DevTools (accepted by user per problem statement) — no code action needed, but note that users on desktop who inspect the network tab will see the paynow.checkouts.info domain."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (per request)", "frontend": "100%" },
+  "test_credentials": "User: +2348047969299 / pass1234 (11 transactions).",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PayNow gateway is IP-blocked in this env (outbound 34.170.12.145) so /paynow/banks returns enabled=false → Instant Pay tile is hidden and end-to-end iframe checkout cannot be exercised. When the IP is whitelisted, verify: (a) submitting method='instant-pay' opens the waiting Drawer, (b) iframe[data-testid=deposit-checkout-iframe] has src pointing at paynow.checkouts.info and loads, (c) context.on('page', ...) records zero new pages, (d) polling flips waitState to 'approved' after payment. Test user has 11 transactions (6 credit / 5 debit) with 4 categories: withdrawal_hold, investment/invest, referral_bonus/commission, and deposit — good coverage for regression.",
+  "rca of the issue": "N/A — all behaviors match the spec."
+}
