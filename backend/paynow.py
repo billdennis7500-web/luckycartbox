@@ -187,3 +187,19 @@ async def get_balance() -> Dict[str, Any]:
         return r.json()
     except Exception:
         return {"code": r.status_code, "msg": r.text, "data": None}
+
+
+_BALANCE_CACHE: Dict[str, Any] = {"data": None, "expires_at": 0.0}
+
+
+async def get_balance_cached(ttl_seconds: int = 3) -> Dict[str, Any]:
+    """PayNow rate-limits balance to 1 req/sec. Cache successful responses briefly to avoid 429s
+    on React StrictMode double-fires or rapid page navigations."""
+    now = time.time()
+    if _BALANCE_CACHE["data"] and _BALANCE_CACHE["expires_at"] > now:
+        return _BALANCE_CACHE["data"]
+    fresh = await get_balance()
+    if fresh.get("code") == 0:
+        _BALANCE_CACHE["data"] = fresh
+        _BALANCE_CACHE["expires_at"] = now + ttl_seconds
+    return fresh

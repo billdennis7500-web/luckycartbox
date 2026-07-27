@@ -808,6 +808,40 @@ async def my_deposits(user: dict = Depends(get_current_user)):
     return [clean(d) | {"user_id": str(d["user_id"])} for d in docs]
 
 
+@api.post("/deposits/{did}/verify")
+async def user_verify_deposit(did: str, user: dict = Depends(get_current_user)):
+    """Let a user self-check their own PayNow deposit and credit the wallet if PayNow reports paid.
+    Safer than the admin endpoint because it only touches the caller's own deposits."""
+    dep = await db.deposits.find_one({"_id": oid(did), "user_id": user["_id"]})
+    if not dep:
+        raise HTTPException(404, "Deposit not found")
+    if dep.get("gateway") != "paynow" or not dep.get("merchant_order_no"):
+        raise HTTPException(400, "Only PayNow deposits can be verified")
+    if dep["status"] != "pending":
+        return {"ok": True, "status": dep["status"]}
+    res = await paynow.query_payin([dep["merchant_order_no"]])
+    if res.get("code") != 0:
+        raise HTTPException(502, f"PayNow query failed: {res.get('msg') or 'unknown'}")
+    orders = res.get("data") or []
+    order = next((o for o in orders if o.get("merchantOrderNo") == dep["merchant_order_no"]), None)
+    if not order:
+        return {"ok": True, "status": "pending"}
+    status_code = int(order.get("status", 0) or 0)
+    if status_code == 2:
+        amount = float(order.get("payAmount") or order.get("amount") or dep["amount"])
+        await db.deposits.update_one(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_query": order, "credited_amount": amount, "reconciled": True}},
+        )
+        await db.users.update_one({"_id": dep["user_id"]}, {"$inc": {"wallet_balance": amount}})
+        await add_transaction(dep["user_id"], "deposit", amount,
+                              "Deposit approved (self-verify)",
+                              {"deposit_id": str(dep["_id"]), "gateway": "paynow"})
+        return {"ok": True, "status": "approved", "amount": amount}
+    return {"ok": True, "status": "pending", "paynow_status": status_code}
+
+
 # ---------------------------------------------------------------------------
 # Withdrawals
 # ---------------------------------------------------------------------------
@@ -1194,8 +1228,7 @@ async def admin_paynow_status(admin: dict = Depends(get_admin_user)):
 async def admin_paynow_balance(admin: dict = Depends(get_admin_user)):
     if not paynow.enabled():
         raise HTTPException(400, "PayNow is not configured")
-    resp = await paynow.get_balance()
-    return resp
+    return await paynow.get_balance_cached()
 
 
 @api.get("/admin/paynow/banks")
