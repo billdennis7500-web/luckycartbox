@@ -21,8 +21,8 @@ function StatChip({ label, value, tone = "default", testid }) {
     violet:   "text-[#8B5CF6]",
   };
   return (
-    <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-4" data-testid={testid}>
-      <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">{label}</div>
+    <div className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-4" data-testid={testid}>
+      <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">{label}</div>
       <div className={`mt-1 font-display font-800 text-xl tabular ${map[tone] || map.default}`}>{value}</div>
     </div>
   );
@@ -102,7 +102,7 @@ export default function AdminUserDetail() {
   const activeInv = useMemo(() => (data?.investments || []).filter((i) => i.status === "active"), [data]);
   const completedInv = useMemo(() => (data?.investments || []).filter((i) => i.status === "completed"), [data]);
 
-  if (!data) return <div className="text-[#94A3B8]">Loading…</div>;
+  if (!data) return <div className="text-[var(--nb-muted)]">Loading…</div>;
   const { user, transactions, investments, total_deposited, inviter, gen1_referrals } = data;
   const bank = user.bank_account;
   const adminCredited = Number(user.total_admin_credited || 0);
@@ -126,28 +126,28 @@ export default function AdminUserDetail() {
             <LogIn className="w-3 h-3 mr-1"/>{imperLoading ? "Switching…" : "Log in as user"}
           </Button>
           <Button variant="outline" size="sm" onClick={load} data-testid="user-detail-refresh"
-                  className="border-[#1A2B44] bg-transparent text-white">
+                  className="border-[var(--nb-border)] bg-transparent text-white">
             <RefreshCw className="w-3 h-3 mr-1"/>Refresh
           </Button>
         </div>
       </div>
 
       {/* Header card */}
-      <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl p-5 relative overflow-hidden">
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-5 relative overflow-hidden">
         <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#0055FF]/25 blur-3xl pointer-events-none" />
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Viewing dashboard as</div>
+            <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Viewing dashboard as</div>
             <h1 className="font-display text-2xl lg:text-3xl font-800 mt-1" data-testid="user-detail-heading">{user.name}</h1>
-            <div className="text-sm text-[#94A3B8] mt-1 tabular">{user.phone}</div>
+            <div className="text-sm text-[var(--nb-muted)] mt-1 tabular">{user.phone}</div>
             <div className="text-xs mt-2 flex items-center gap-2 flex-wrap">
-              <span className="text-[#94A3B8]">Referral code:</span>
+              <span className="text-[var(--nb-muted)]">Referral code:</span>
               <code className="text-[#0055FF]">{user.referral_code}</code>
-              <button onClick={() => copyText(user.referral_code)} className="text-[#94A3B8] hover:text-white" aria-label="Copy code">
+              <button onClick={() => copyText(user.referral_code)} className="text-[var(--nb-muted)] hover:text-white" aria-label="Copy code">
                 <Copy className="w-3 h-3" />
               </button>
               {inviter && (
-                <span className="text-[#94A3B8]">
+                <span className="text-[var(--nb-muted)]">
                   · invited by <Link to={`/admin/users/${inviter.id}`} className="text-[#0055FF] hover:underline">{inviter.name}</Link>
                 </span>
               )}
@@ -157,7 +157,7 @@ export default function AdminUserDetail() {
             <span className={`text-xs px-2 py-1 rounded-full border ${
               user.has_invested
                 ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                : "bg-[#1A2B44] text-[#94A3B8] border-[#1A2B44]"
+                : "bg-[var(--nb-border)] text-[var(--nb-muted)] border-[var(--nb-border)]"
             }`}>
               {user.has_invested ? "Investor" : "Signed up"}
             </span>
@@ -172,14 +172,14 @@ export default function AdminUserDetail() {
       </Card>
 
       {/* Balance ops */}
-      <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl p-5">
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Wallet balance</div>
+            <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Wallet balance</div>
             <div className="mt-1 font-display font-800 text-3xl tabular text-white" data-testid="user-wallet-balance">
               {formatNaira(user.wallet_balance)}
             </div>
-            <div className="text-xs text-[#94A3B8] mt-1">
+            <div className="text-xs text-[var(--nb-muted)] mt-1">
               Bonus: <span className="text-white tabular">{formatNaira(user.bonus_balance)}</span>
             </div>
           </div>
@@ -192,7 +192,7 @@ export default function AdminUserDetail() {
                 className={`h-9 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-1 ${
                   op === "credit"
                     ? "bg-[#10B981] text-white border-[#10B981]"
-                    : "bg-transparent border-[#1A2B44] text-[#94A3B8] hover:text-white"
+                    : "bg-transparent border-[var(--nb-border)] text-[var(--nb-muted)] hover:text-white"
                 }`}
               >
                 <Plus className="w-3 h-3" /> Credit
@@ -203,7 +203,7 @@ export default function AdminUserDetail() {
                 className={`h-9 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-1 ${
                   op === "debit"
                     ? "bg-[#EF4444] text-white border-[#EF4444]"
-                    : "bg-transparent border-[#1A2B44] text-[#94A3B8] hover:text-white"
+                    : "bg-transparent border-[var(--nb-border)] text-[var(--nb-muted)] hover:text-white"
                 }`}
               >
                 <Minus className="w-3 h-3" /> Debit
@@ -216,7 +216,7 @@ export default function AdminUserDetail() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 data-testid="user-balance-amount-input"
-                className="mt-1 bg-[#121E30] border-[#1A2B44] text-white h-10 tabular"
+                className="mt-1 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-10 tabular"
               />
             </div>
             <div>
@@ -226,7 +226,7 @@ export default function AdminUserDetail() {
                 onChange={(e) => setNote(e.target.value)}
                 placeholder={op === "credit" ? "Reason for crediting" : "Reason for debiting"}
                 data-testid="user-balance-note-input"
-                className="mt-1 bg-[#121E30] border-[#1A2B44] text-white h-10"
+                className="mt-1 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-10"
               />
             </div>
             <Button
@@ -254,7 +254,7 @@ export default function AdminUserDetail() {
         <StatChip label="Admin-credited (lifetime)"  value={formatNaira(adminCredited)}      tone="amber" testid="stat-admin-credited" />
       </div>
       {adminDebited > 0 && (
-        <div className="text-xs text-[#94A3B8]" data-testid="stat-admin-debited">
+        <div className="text-xs text-[var(--nb-muted)]" data-testid="stat-admin-debited">
           Also debited by admin over time: <span className="text-[#EF4444] tabular">{formatNaira(adminDebited)}</span>
         </div>
       )}
@@ -266,20 +266,20 @@ export default function AdminUserDetail() {
         </h2>
         {inviter ? (
           <Link to={`/admin/users/${inviter.id}`} data-testid="user-inviter-card"
-                className="block rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-4 hover:border-[#0055FF]/40 transition-colors">
+                className="block rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-4 hover:border-[#0055FF]/40 transition-colors">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
                 <UserCircle2 className="w-5 h-5 text-[#0055FF]" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-display font-600 truncate">{inviter.name}</div>
-                <div className="text-xs text-[#94A3B8] tabular truncate">{inviter.phone} · {inviter.referral_code}</div>
+                <div className="text-xs text-[var(--nb-muted)] tabular truncate">{inviter.phone} · {inviter.referral_code}</div>
               </div>
               <span className="text-[10px] text-[#0055FF]">Open →</span>
             </div>
           </Link>
         ) : (
-          <div className="rounded-xl border border-dashed border-[#1A2B44] p-4 text-sm text-[#94A3B8]" data-testid="user-inviter-empty">
+          <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-4 text-sm text-[var(--nb-muted)]" data-testid="user-inviter-empty">
             Direct signup — no inviter.
           </div>
         )}
@@ -289,34 +289,34 @@ export default function AdminUserDetail() {
       <section>
         <h2 className="font-display text-lg font-600 mb-3 flex items-center gap-2">
           <Users2 className="w-4 h-4 text-[#0055FF]" /> People they referred (Gen 1)
-          <span className="text-xs text-[#94A3B8] font-400">— {gen1_referrals.length}</span>
+          <span className="text-xs text-[var(--nb-muted)] font-400">— {gen1_referrals.length}</span>
         </h2>
         {gen1_referrals.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#1A2B44] p-4 text-sm text-[#94A3B8]" data-testid="user-gen1-empty">
+          <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-4 text-sm text-[var(--nb-muted)]" data-testid="user-gen1-empty">
             No referrals yet.
           </div>
         ) : (
-          <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl overflow-hidden divide-y divide-[#1A2B44]">
+          <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-xl overflow-hidden divide-y divide-[var(--nb-border)]">
             {gen1_referrals.map((r) => (
               <Link
                 key={r.id}
                 to={`/admin/users/${r.id}`}
                 data-testid={`user-gen1-row-${r.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-[#121E30]"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--nb-card2)]"
               >
                 <div className="w-8 h-8 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center text-xs font-display font-800 text-[#0055FF]">
                   {(r.name || "?").slice(0, 1).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm truncate">{r.name}</div>
-                  <div className="text-xs text-[#94A3B8] tabular truncate">{r.phone}</div>
+                  <div className="text-xs text-[var(--nb-muted)] tabular truncate">{r.phone}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs tabular">{formatNaira(r.total_invested)}</div>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
                     r.has_invested
                       ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                      : "bg-[#1A2B44] text-[#94A3B8]"
+                      : "bg-[var(--nb-border)] text-[var(--nb-muted)]"
                   }`}>
                     {r.has_invested ? "Investor" : "Signed up"}
                   </span>
@@ -333,22 +333,22 @@ export default function AdminUserDetail() {
           <Landmark className="w-4 h-4 text-[#0055FF]" /> Bound bank account
         </h2>
         {bank && bank.bank_name ? (
-          <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl p-4 flex items-center gap-3" data-testid="user-bank-card">
+          <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-4 flex items-center gap-3" data-testid="user-bank-card">
             <div className="w-11 h-11 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
               <Landmark className="w-5 h-5 text-[#0055FF]" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display font-600 truncate">{bank.bank_name}</div>
-              <div className="text-xs text-[#94A3B8] tabular truncate">
+              <div className="text-xs text-[var(--nb-muted)] tabular truncate">
                 {bank.account_number} · {bank.account_name}
               </div>
             </div>
-            <button onClick={() => copyText(bank.account_number)} className="text-[#94A3B8] hover:text-white" aria-label="Copy account number">
+            <button onClick={() => copyText(bank.account_number)} className="text-[var(--nb-muted)] hover:text-white" aria-label="Copy account number">
               <Copy className="w-4 h-4" />
             </button>
           </Card>
         ) : (
-          <div className="rounded-xl border border-dashed border-[#1A2B44] p-4 text-sm text-[#94A3B8]" data-testid="user-bank-empty">
+          <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-4 text-sm text-[var(--nb-muted)]" data-testid="user-bank-empty">
             No bank account bound yet.
           </div>
         )}
@@ -359,9 +359,9 @@ export default function AdminUserDetail() {
         <h2 className="font-display text-lg font-600 mb-3 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-[#0055FF]" /> Investments
         </h2>
-        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl overflow-hidden">
+        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase text-[#94A3B8] bg-[#121E30]">
+            <thead className="text-left text-xs uppercase text-[var(--nb-muted)] bg-[var(--nb-card2)]">
               <tr>
                 <th className="px-4 py-3">Plan</th>
                 <th className="px-4 py-3">Amount</th>
@@ -371,9 +371,9 @@ export default function AdminUserDetail() {
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1A2B44]">
+            <tbody className="divide-y divide-[var(--nb-border)]">
               {investments.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-8 text-[#94A3B8]" data-testid="user-inv-empty">
+                <tr><td colSpan={6} className="text-center py-8 text-[var(--nb-muted)]" data-testid="user-inv-empty">
                   <Sparkles className="w-5 h-5 text-[#0055FF] mx-auto mb-1"/>
                   No investments.
                 </td></tr>
@@ -389,7 +389,7 @@ export default function AdminUserDetail() {
                     <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
                       i.status === "active"
                         ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                        : "bg-[#94A3B8]/15 text-[#94A3B8] border-[#94A3B8]/30"
+                        : "bg-[var(--nb-muted)]/15 text-[var(--nb-muted)] border-[var(--nb-muted)]/30"
                     }`}>{i.status}</span>
                   </td>
                 </tr>
@@ -404,9 +404,9 @@ export default function AdminUserDetail() {
         <h2 className="font-display text-lg font-600 mb-3 flex items-center gap-2">
           <Gift className="w-4 h-4 text-[#0055FF]" /> Recent transactions
         </h2>
-        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl overflow-hidden">
+        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase text-[#94A3B8] bg-[#121E30]">
+            <thead className="text-left text-xs uppercase text-[var(--nb-muted)] bg-[var(--nb-card2)]">
               <tr>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Type</th>
@@ -414,15 +414,15 @@ export default function AdminUserDetail() {
                 <th className="px-4 py-3 text-right">Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1A2B44]">
+            <tbody className="divide-y divide-[var(--nb-border)]">
               {transactions.length === 0 && (
-                <tr><td colSpan={4} className="text-center py-8 text-[#94A3B8]">No transactions.</td></tr>
+                <tr><td colSpan={4} className="text-center py-8 text-[var(--nb-muted)]">No transactions.</td></tr>
               )}
               {transactions.map((t) => (
                 <tr key={t.id} data-testid={`user-tx-row-${t.id}`}>
-                  <td className="px-4 py-3 text-[#94A3B8] whitespace-nowrap">{new Date(t.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-[var(--nb-muted)] whitespace-nowrap">{new Date(t.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3 capitalize">{t.type.replace(/_/g, " ")}</td>
-                  <td className="px-4 py-3 text-[#94A3B8]">
+                  <td className="px-4 py-3 text-[var(--nb-muted)]">
                     {t.note}
                     {t.meta?.admin_name && (
                       <span className="ml-1 text-[10px] text-[#F59E0B]">

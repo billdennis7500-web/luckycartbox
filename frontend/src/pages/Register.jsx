@@ -36,36 +36,36 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-[#020813]">
+    <div className="min-h-screen grid lg:grid-cols-2 bg-[var(--nb-page)]">
       <div className="flex items-center justify-center p-6 lg:p-12 order-2 lg:order-1">
         <div className="w-full max-w-md">
           <h2 className="font-display text-3xl font-800 tracking-tight">Create your account</h2>
-          <p className="text-[#94A3B8] mt-2">Sign up in seconds. Claim your ₦500 welcome bonus.</p>
+          <p className="text-[var(--nb-muted)] mt-2">Sign up in seconds. Claim your ₦500 welcome bonus.</p>
 
           <form onSubmit={submit} className="mt-8 space-y-5">
             <div>
-              <Label htmlFor="name" className="text-[#F8FAFC]">Full name</Label>
+              <Label htmlFor="name" className="text-[var(--nb-text)]">Full name</Label>
               <Input id="name" data-testid="register-name-input" value={form.name} onChange={set("name")} required
-                     className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
+                     className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
             </div>
             <div>
-              <Label htmlFor="phone" className="text-[#F8FAFC]">Phone number</Label>
+              <Label htmlFor="phone" className="text-[var(--nb-text)]">Phone number</Label>
               <Input id="phone" data-testid="register-phone-input" value={form.phone} onChange={set("phone")} required
                      placeholder="08012345678"
-                     className="mt-2 bg-[#121E30] border-[#1A2B44] text-white placeholder:text-[#94A3B8]/60 h-11" />
+                     className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white placeholder:text-[var(--nb-muted)]/60 h-11" />
             </div>
             <div>
-              <Label htmlFor="password" className="text-[#F8FAFC]">Password</Label>
+              <Label htmlFor="password" className="text-[var(--nb-text)]">Password</Label>
               <Input id="password" data-testid="register-password-input" type="password" value={form.password}
                      onChange={set("password")} required minLength={6}
-                     className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
-              <p className="text-xs text-[#94A3B8] mt-1">At least 6 characters.</p>
+                     className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
+              <p className="text-xs text-[var(--nb-muted)] mt-1">At least 6 characters.</p>
             </div>
             <div>
-              <Label htmlFor="referral_code" className="text-[#F8FAFC]">Referral code <span className="text-[#94A3B8]">(optional)</span></Label>
+              <Label htmlFor="referral_code" className="text-[var(--nb-text)]">Referral code <span className="text-[var(--nb-muted)]">(optional)</span></Label>
               <Input id="referral_code" data-testid="register-referral-input" value={form.referral_code}
                      onChange={set("referral_code")}
-                     className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11 uppercase" />
+                     className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 uppercase" />
             </div>
             {err && <div data-testid="register-error" className="text-sm text-[#EF4444]">{err}</div>}
             <Button type="submit" disabled={loading} data-testid="register-submit-button"
@@ -74,7 +74,7 @@ export default function Register() {
             </Button>
           </form>
 
-          <p className="text-sm text-[#94A3B8] mt-6 text-center">
+          <p className="text-sm text-[var(--nb-muted)] mt-6 text-center">
             Already have an account?{" "}
             <Link to="/login" data-testid="register-to-login-link" className="text-[#0055FF] hover:underline">
               Sign in
@@ -83,7 +83,7 @@ export default function Register() {
         </div>
       </div>
 
-      <div className="hidden lg:flex flex-col justify-between p-12 border-l border-[#1A2B44] relative overflow-hidden order-1 lg:order-2">
+      <div className="hidden lg:flex flex-col justify-between p-12 border-l border-[var(--nb-border)] relative overflow-hidden order-1 lg:order-2">
         <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-[#0055FF]/20 blur-[140px]" />
         <Link to="/" className="flex items-center gap-2 relative z-10">
           <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
@@ -98,11 +98,11 @@ export default function Register() {
           <h1 className="font-display text-4xl font-800 tracking-tight leading-tight">
             Nigeria's smartest way to grow your naira.
           </h1>
-          <p className="text-[#94A3B8] mt-4 max-w-md">
+          <p className="text-[var(--nb-muted)] mt-4 max-w-md">
             Automated daily profits, 3-generation referrals, instant bank withdrawals.
           </p>
         </div>
-        <div className="text-xs text-[#94A3B8] relative z-10">© 2026 NaijaInvest</div>
+        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 NaijaInvest</div>
       </div>
     </div>
   );

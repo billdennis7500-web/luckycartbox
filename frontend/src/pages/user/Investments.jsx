@@ -42,7 +42,7 @@ function Ring({ pct = 0, tone = "#0055FF", size = 56 }) {
   const off = c - (pct / 100) * c;
   return (
     <svg width={size} height={size} className="shrink-0" aria-hidden>
-      <circle cx={size/2} cy={size/2} r={r} stroke="#1A2B44" strokeWidth={4} fill="none" />
+      <circle cx={size/2} cy={size/2} r={r} stroke="var(--nb-border)" strokeWidth={4} fill="none" />
       <circle
         cx={size/2} cy={size/2} r={r} stroke={tone} strokeWidth={4} fill="none"
         strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round"
@@ -51,7 +51,7 @@ function Ring({ pct = 0, tone = "#0055FF", size = 56 }) {
       />
       <text
         x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
-        fill="#F8FAFC" fontSize={size < 60 ? 11 : 13} fontFamily="Outfit" fontWeight={700}
+        fill="var(--nb-text)" fontSize={size < 60 ? 11 : 13} fontFamily="Outfit" fontWeight={700}
       >
         {Math.round(pct)}%
       </text>
@@ -71,7 +71,7 @@ function InvestmentCard({ inv }) {
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden border border-[#1A2B44] bg-[#0B1524]"
+      className="relative rounded-2xl overflow-hidden border border-[var(--nb-border)] bg-[var(--nb-card)]"
       data-testid={`inv-row-${inv.id}`}
     >
       {/* header strip */}
@@ -117,18 +117,18 @@ function InvestmentCard({ inv }) {
           <Ring pct={progress} tone={done ? "#94A3B8" : brand.bg} />
           <div className="flex-1 grid grid-cols-2 gap-2">
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Earned</div>
+              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Earned</div>
               <div className="mt-0.5 tabular font-display font-700 text-[#10B981]">
                 {formatNaira(inv.total_earned)}
               </div>
-              <div className="text-[10px] text-[#94A3B8] tabular">ROI {roiPct.toFixed(1)}%</div>
+              <div className="text-[10px] text-[var(--nb-muted)] tabular">ROI {roiPct.toFixed(1)}%</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Remaining</div>
+              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Remaining</div>
               <div className="mt-0.5 tabular font-display font-700 text-white">
                 {formatNaira(remaining)}
               </div>
-              <div className="text-[10px] text-[#94A3B8] tabular">
+              <div className="text-[10px] text-[var(--nb-muted)] tabular">
                 {Math.max(0, inv.duration_days - inv.drops_done)} days left
               </div>
             </div>
@@ -136,17 +136,17 @@ function InvestmentCard({ inv }) {
         </div>
 
         <div className="mt-4 flex items-center justify-between text-xs">
-          <span className="inline-flex items-center gap-1.5 text-[#94A3B8]">
+          <span className="inline-flex items-center gap-1.5 text-[var(--nb-muted)]">
             <Timer className="w-3 h-3" />
             Next payout <span className="text-white tabular ml-1">{nextPayoutText(inv)}</span>
           </span>
-          <span className="inline-flex items-center gap-1.5 text-[#94A3B8]">
+          <span className="inline-flex items-center gap-1.5 text-[var(--nb-muted)]">
             <Calendar className="w-3 h-3" />
             <span className="tabular">{inv.drops_done} / {inv.duration_days}</span>
           </span>
         </div>
 
-        <div className="mt-3 h-1.5 rounded-full bg-[#1A2B44] overflow-hidden">
+        <div className="mt-3 h-1.5 rounded-full bg-[var(--nb-border)] overflow-hidden">
           <div
             className="h-full transition-all"
             style={{
@@ -193,28 +193,28 @@ export default function Investments() {
   return (
     <div className="space-y-6" data-testid="investments-page">
       {/* Hero */}
-      <div className="relative rounded-2xl p-5 overflow-hidden border border-[#1A2B44]"
+      <div className="relative rounded-2xl p-5 overflow-hidden border border-[var(--nb-border)]"
            style={{ background: "linear-gradient(135deg,#0B1524 0%, #0A2A6C 100%)" }}>
         <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#0055FF]/25 blur-3xl pointer-events-none" />
         <div className="relative">
-          <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Portfolio value</div>
+          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Portfolio value</div>
           <div className="mt-1 flex items-baseline gap-2">
             <div className="font-display font-800 text-3xl tabular text-white" data-testid="inv-total-active">
               {formatNaira(totalActive)}
             </div>
-            <span className="text-[11px] text-[#94A3B8]">
+            <span className="text-[11px] text-[var(--nb-muted)]">
               across {active.length} active plan{active.length === 1 ? "" : "s"}
             </span>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <div className="uppercase tracking-widest text-[#94A3B8]">Earned so far</div>
+              <div className="uppercase tracking-widest text-[var(--nb-muted)]">Earned so far</div>
               <div className="mt-1 tabular font-display font-700 text-[#10B981]" data-testid="inv-total-earned">
                 {formatNaira(totalEarned)}
               </div>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <div className="uppercase tracking-widest text-[#94A3B8]">Projected remaining</div>
+              <div className="uppercase tracking-widest text-[var(--nb-muted)]">Projected remaining</div>
               <div className="mt-1 tabular font-display font-700 text-white" data-testid="inv-projected-remaining">
                 {formatNaira(projectedRemaining)}
               </div>
@@ -233,7 +233,7 @@ export default function Investments() {
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-[#0B1524] border border-[#1A2B44]">
+      <div className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)]">
         {[
           { k: "active",    label: `Active (${active.length})`,       tid: "tab-active" },
           { k: "completed", label: `Completed (${completed.length})`, tid: "tab-completed" },
@@ -244,7 +244,7 @@ export default function Investments() {
             onClick={() => setTab(k)}
             data-testid={tid}
             className={`h-9 text-xs rounded-lg font-medium transition-colors ${
-              tab === k ? "bg-[#0055FF] text-white" : "text-[#94A3B8] hover:text-white"
+              tab === k ? "bg-[#0055FF] text-white" : "text-[var(--nb-muted)] hover:text-white"
             }`}
           >
             {label}
@@ -253,13 +253,13 @@ export default function Investments() {
       </div>
 
       {loading ? (
-        <div className="rounded-xl border border-dashed border-[#1A2B44] p-8 text-center text-sm text-[#94A3B8]" data-testid="inv-loading">
+        <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-8 text-center text-sm text-[var(--nb-muted)]" data-testid="inv-loading">
           Loading investments…
         </div>
       ) : shown.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[#1A2B44] p-8 text-center space-y-3" data-testid="inv-empty">
+        <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-8 text-center space-y-3" data-testid="inv-empty">
           <Sparkles className="w-6 h-6 text-[#0055FF] mx-auto" />
-          <div className="text-sm text-[#94A3B8]">
+          <div className="text-sm text-[var(--nb-muted)]">
             {tab === "active"
               ? "No active investments yet."
               : tab === "completed"

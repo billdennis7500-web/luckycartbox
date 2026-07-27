@@ -23,16 +23,16 @@ export default function AdminReferrals() {
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail) || "Failed"); }
   };
 
-  if (!s) return <div className="text-[#94A3B8]">Loading…</div>;
+  if (!s) return <div className="text-[var(--nb-muted)]">Loading…</div>;
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="admin-referrals-heading">Referral commissions</h1>
-        <p className="text-[#94A3B8] mt-2">Set the commission percent for each generation.</p>
+        <p className="text-[var(--nb-muted)] mt-2">Set the commission percent for each generation.</p>
       </div>
 
-      <Card className="bg-[#0B1524] border-[#1A2B44] p-6 rounded-xl">
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl">
         <div className="grid grid-cols-3 gap-4">
           {[
             ["Gen 1", "referral_gen1_pct", "gen1"],
@@ -42,11 +42,11 @@ export default function AdminReferrals() {
             <div key={key}>
               <Label>{label} %</Label>
               <div className="relative mt-2">
-                <Percent className="w-4 h-4 absolute right-3 top-3.5 text-[#94A3B8]" />
+                <Percent className="w-4 h-4 absolute right-3 top-3.5 text-[var(--nb-muted)]" />
                 <Input type="number" step="0.1" value={s[key]}
                        onChange={(e) => setS({ ...s, [key]: e.target.value })}
                        data-testid={`ref-${tid}-input`}
-                       className="bg-[#121E30] border-[#1A2B44] text-white h-11 pr-9" />
+                       className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 pr-9" />
               </div>
             </div>
           ))}

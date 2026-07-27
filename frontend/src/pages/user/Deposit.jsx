@@ -40,8 +40,8 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       data-testid={testid}
       className={`relative rounded-xl px-2 py-2.5 border transition-all overflow-hidden text-left flex flex-col justify-between min-h-[92px] ${
         selected
-          ? "border-[#0055FF] ring-2 ring-[#0055FF]/40 bg-[#0B1524]"
-          : "border-[#1A2B44] bg-[#0B1524] hover:border-[#0055FF]/50"
+          ? "border-[#0055FF] ring-2 ring-[#0055FF]/40 bg-[var(--nb-card)]"
+          : "border-[var(--nb-border)] bg-[var(--nb-card)] hover:border-[#0055FF]/50"
       }`}
     >
       {/* ambient tint */}
@@ -58,7 +58,7 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
         </div>
         <span
           className={`w-3.5 h-3.5 rounded-full border grid place-items-center shrink-0 ${
-            selected ? "bg-[#0055FF] border-[#0055FF]" : "border-[#1A2B44]"
+            selected ? "bg-[#0055FF] border-[#0055FF]" : "border-[var(--nb-border)]"
           }`}
           aria-hidden
         >
@@ -67,7 +67,7 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       </div>
       <div className="relative mt-1.5">
         <div className="font-display font-700 text-[13px] leading-tight truncate">{label}</div>
-        <div className="text-[10px] text-[#94A3B8] mt-0.5 truncate tabular">{sub}</div>
+        <div className="text-[10px] text-[var(--nb-muted)] mt-0.5 truncate tabular">{sub}</div>
       </div>
     </button>
   );
@@ -83,7 +83,7 @@ function QuickAmount({ value, selected, onClick }) {
       className={`h-10 rounded-lg text-xs font-display font-700 tabular border transition-colors ${
         selected
           ? "bg-[#0055FF] text-white border-[#0055FF]"
-          : "bg-[#0B1524] border-[#1A2B44] text-white hover:border-[#0055FF]/40"
+          : "bg-[var(--nb-card)] border-[var(--nb-border)] text-white hover:border-[#0055FF]/40"
       }`}
     >
       ₦{value.toLocaleString()}
@@ -101,7 +101,7 @@ export function StatusPill({ status }) {
     failed: "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30",
   };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full border ${map[status] || "bg-[#1A2B44]"}`}>
+    <span className={`text-xs px-2 py-0.5 rounded-full border ${map[status] || "bg-[var(--nb-border)]"}`}>
       {status}
     </span>
   );
@@ -233,26 +233,26 @@ export default function Deposit() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="deposit-heading">Deposit funds</h1>
-          <p className="text-sm text-[#94A3B8] mt-1">Pick a payment option and add the amount you want to fund.</p>
+          <p className="text-sm text-[var(--nb-muted)] mt-1">Pick a payment option and add the amount you want to fund.</p>
         </div>
         <Link to="/deposit-history" data-testid="deposit-history-link"
-              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#1A2B44] bg-[#0B1524] text-xs text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 transition-colors">
+              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card)] text-xs text-[var(--nb-muted)] hover:text-white hover:border-[#0055FF]/40 transition-colors">
           <Receipt className="w-3.5 h-3.5" /> History
         </Link>
       </div>
 
       {/* Payment options — small equal blocks */}
       {initialLoad ? (
-        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-6 text-center text-sm text-[#94A3B8]" data-testid="deposit-loading">
+        <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-6 text-center text-sm text-[var(--nb-muted)]" data-testid="deposit-loading">
           Loading payment options…
         </div>
       ) : !hasAnyMethod ? (
-        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-6 text-center text-sm text-[#94A3B8]" data-testid="deposit-none-available">
+        <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-6 text-center text-sm text-[var(--nb-muted)]" data-testid="deposit-none-available">
           No deposit options are available right now. Please contact support.
         </div>
       ) : (
         <section>
-          <h2 className="font-display text-xs font-600 uppercase tracking-widest text-[#94A3B8] mb-3">
+          <h2 className="font-display text-xs font-600 uppercase tracking-widest text-[var(--nb-muted)] mb-3">
             Choose a payment option
           </h2>
           <div className="grid grid-cols-3 gap-3" data-testid="deposit-methods-grid">
@@ -296,7 +296,7 @@ export default function Deposit() {
 
       {/* Selected manual account detail */}
       {selectedAcct && !isInstant && (
-        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl p-4" data-testid="deposit-selected-panel">
+        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-4" data-testid="deposit-selected-panel">
           <div className="flex items-center gap-3">
             <div
               className="w-11 h-11 rounded-xl grid place-items-center font-display font-800 text-xs shrink-0"
@@ -305,9 +305,9 @@ export default function Deposit() {
               {initials(selectedAcct.bank_name)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Transfer to</div>
+              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Transfer to</div>
               <div className="font-display font-600 truncate">{selectedAcct.bank_name}</div>
-              <div className="text-xs text-[#94A3B8] truncate">{selectedAcct.account_name}</div>
+              <div className="text-xs text-[var(--nb-muted)] truncate">{selectedAcct.account_name}</div>
               <div className="mt-1 flex items-center gap-2">
                 <span className="font-display font-700 tabular tracking-wider text-lg text-white">
                   {selectedAcct.account_number}
@@ -316,7 +316,7 @@ export default function Deposit() {
                   type="button"
                   onClick={() => copy(selectedAcct.account_number)}
                   data-testid="deposit-copy-selected"
-                  className="w-7 h-7 rounded-md grid place-items-center border border-[#1A2B44] text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 shrink-0"
+                  className="w-7 h-7 rounded-md grid place-items-center border border-[var(--nb-border)] text-[var(--nb-muted)] hover:text-white hover:border-[#0055FF]/40 shrink-0"
                   aria-label="Copy account number"
                 >
                   <Copy className="w-3 h-3" />
@@ -329,7 +329,7 @@ export default function Deposit() {
 
       {/* Amount + reference */}
       {hasAnyMethod && (
-        <Card className="bg-[#0B1524] border-[#1A2B44] p-5 rounded-2xl">
+        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-5 rounded-2xl">
           <form onSubmit={submit} className="space-y-4">
             <div>
               <Label>Amount (₦)</Label>
@@ -340,7 +340,7 @@ export default function Deposit() {
                 required
                 disabled={!method}
                 data-testid="deposit-amount-input"
-                className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12 tabular text-lg"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-12 tabular text-lg"
               />
               {/* Quick amount chips (admin-configurable) */}
               <div className="mt-3 grid grid-cols-3 gap-2" data-testid="deposit-quick-amounts">
@@ -362,13 +362,13 @@ export default function Deposit() {
 
             {!isInstant && selectedAcct && (
               <div>
-                <Label>Transaction reference <span className="text-[#94A3B8]">(optional)</span></Label>
+                <Label>Transaction reference <span className="text-[var(--nb-muted)]">(optional)</span></Label>
                 <Input
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
                   data-testid="deposit-reference-input"
                   placeholder="Bank transfer ref / narration"
-                  className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12"
+                  className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-12"
                 />
               </div>
             )}
@@ -389,13 +389,13 @@ export default function Deposit() {
           Only closes via the explicit Close/Done button. No PayNow branding. */}
       {waitDep && (
         <div
-          className="fixed inset-0 z-[60] bg-[#0B1524] text-white flex flex-col overflow-hidden"
+          className="fixed inset-0 z-[60] bg-[var(--nb-card)] text-white flex flex-col overflow-hidden"
           data-testid="waiting-drawer"
           role="dialog"
           aria-modal="true"
         >
           {/* Header (fixed on top) */}
-          <div className="shrink-0 border-b border-[#1A2B44] bg-[#0B1524] px-4 py-3 flex items-center gap-3">
+          <div className="shrink-0 border-b border-[var(--nb-border)] bg-[var(--nb-card)] px-4 py-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-[#0055FF]/15 grid place-items-center shrink-0">
               {waitState === "approved" ? (
                 <CheckCircle2 className="w-5 h-5 text-[#10B981]" />
@@ -417,7 +417,7 @@ export default function Deposit() {
                   ? "Instant Pay is warming up"
                   : "Complete your payment"}
               </div>
-              <div className="text-[11px] text-[#94A3B8] leading-tight truncate">
+              <div className="text-[11px] text-[var(--nb-muted)] leading-tight truncate">
                 {waitState === "approved"
                   ? "Your wallet has been credited."
                   : waitState === "rejected"
@@ -433,7 +433,7 @@ export default function Deposit() {
                 type="button"
                 onClick={closeWait}
                 data-testid="waiting-header-close"
-                className="w-9 h-9 rounded-lg grid place-items-center border border-[#1A2B44] text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 shrink-0"
+                className="w-9 h-9 rounded-lg grid place-items-center border border-[var(--nb-border)] text-[var(--nb-muted)] hover:text-white hover:border-[#0055FF]/40 shrink-0"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -455,12 +455,12 @@ export default function Deposit() {
                   <div className="mt-3 font-display font-700 text-white">
                     Instant Pay is warming up
                   </div>
-                  <div className="text-xs text-[#94A3B8] mt-1.5 leading-relaxed max-w-md mx-auto">
+                  <div className="text-xs text-[var(--nb-muted)] mt-1.5 leading-relaxed max-w-md mx-auto">
                     {waitDep.gateway_message || "Our payment gateway is finalising server access checks. This usually clears in a few minutes."}
                   </div>
                   {waitDep.outbound_ip && (
-                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0B1524] border border-[#1A2B44] text-xs tabular text-white">
-                      <span className="text-[#94A3B8]">Server IP:</span>
+                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--nb-card)] border border-[var(--nb-border)] text-xs tabular text-white">
+                      <span className="text-[var(--nb-muted)]">Server IP:</span>
                       <span className="font-display font-700">{waitDep.outbound_ip}</span>
                       <button
                         type="button"
@@ -496,7 +496,7 @@ export default function Deposit() {
                       variant="outline"
                       onClick={closeWait}
                       data-testid="deposit-unavailable-close"
-                      className="w-full h-11 border-[#1A2B44] bg-transparent text-white rounded-xl"
+                      className="w-full h-11 border-[var(--nb-border)] bg-transparent text-white rounded-xl"
                     >
                       Try again later
                     </Button>
@@ -507,10 +507,10 @@ export default function Deposit() {
               {/* Embedded checkout — full-height iframe, no URL bar visible */}
               {waitState === "waiting" && waitDep.checkout_url && (
                 <div
-                  className="relative rounded-xl border border-[#1A2B44] bg-white overflow-hidden"
+                  className="relative rounded-xl border border-[var(--nb-border)] bg-white overflow-hidden"
                   style={{ height: "calc(100vh - 260px)", minHeight: "360px" }}
                 >
-                  <div className="absolute inset-0 grid place-items-center bg-[#0B1524] text-[#94A3B8] text-xs pointer-events-none z-0">
+                  <div className="absolute inset-0 grid place-items-center bg-[var(--nb-card)] text-[var(--nb-muted)] text-xs pointer-events-none z-0">
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin text-[#0055FF]" />
                       Loading secure payment page…
@@ -530,7 +530,7 @@ export default function Deposit() {
 
               {waitState === "waiting" && (
                 <>
-                  <div className="rounded-lg border border-[#0055FF]/40 bg-[#0055FF]/10 p-3 text-[11px] text-[#94A3B8] flex items-start gap-2">
+                  <div className="rounded-lg border border-[#0055FF]/40 bg-[#0055FF]/10 p-3 text-[11px] text-[var(--nb-muted)] flex items-start gap-2">
                     <Loader2 className="w-3.5 h-3.5 text-[#0055FF] animate-spin mt-0.5 shrink-0" />
                     <div>
                       Complete the transfer above. We'll auto-credit your wallet within a few seconds of receipt.
@@ -543,7 +543,7 @@ export default function Deposit() {
                     onClick={manualVerify}
                     disabled={waitState === "verifying"}
                     data-testid="manual-verify-btn"
-                    className="w-full h-11 border-[#1A2B44] bg-transparent text-white rounded-xl"
+                    className="w-full h-11 border-[var(--nb-border)] bg-transparent text-white rounded-xl"
                   >
                     {waitState === "verifying" ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Zap className="w-4 h-4 mr-2"/>}
                     I've paid — check now
@@ -552,9 +552,9 @@ export default function Deposit() {
               )}
 
               {waitState === "verifying" && (
-                <div className="rounded-xl border border-[#1A2B44] bg-[#121E30] p-6 text-center">
+                <div className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card2)] p-6 text-center">
                   <Loader2 className="w-6 h-6 text-[#0055FF] animate-spin mx-auto" />
-                  <div className="mt-2 text-sm text-[#94A3B8]">Checking payment…</div>
+                  <div className="mt-2 text-sm text-[var(--nb-muted)]">Checking payment…</div>
                 </div>
               )}
 
@@ -562,7 +562,7 @@ export default function Deposit() {
                 <div className="rounded-xl border border-[#10B981]/40 bg-[#10B981]/10 p-6 text-center" data-testid="approved-state">
                   <CheckCircle2 className="w-8 h-8 text-[#10B981] mx-auto" />
                   <div className="mt-3 font-display font-600">Wallet credited</div>
-                  <div className="text-xs text-[#94A3B8] mt-1">
+                  <div className="text-xs text-[var(--nb-muted)] mt-1">
                     {formatNaira(waitDep.amount)} is now in your wallet. Go invest.
                   </div>
                   <Link to="/marketplace" onClick={closeWait} className="inline-flex mt-3 text-xs text-[#0055FF] hover:underline items-center gap-1">
@@ -575,7 +575,7 @@ export default function Deposit() {
                 <div className="rounded-xl border border-[#EF4444]/40 bg-[#EF4444]/10 p-6 text-center" data-testid="rejected-state">
                   <X className="w-8 h-8 text-[#EF4444] mx-auto" />
                   <div className="mt-3 font-display font-600">Payment failed</div>
-                  <div className="text-xs text-[#94A3B8] mt-1">
+                  <div className="text-xs text-[var(--nb-muted)] mt-1">
                     No money left your account. Try depositing again.
                   </div>
                 </div>
@@ -583,12 +583,12 @@ export default function Deposit() {
           </div>
 
           {/* Footer (fixed on bottom) */}
-          <div className="shrink-0 border-t border-[#1A2B44] bg-[#0B1524] px-4 py-3">
+          <div className="shrink-0 border-t border-[var(--nb-border)] bg-[var(--nb-card)] px-4 py-3">
             <Button
               variant="outline"
               onClick={closeWait}
               disabled={waitState === "verifying"}
-              className="w-full border-[#1A2B44] bg-transparent text-white h-11 rounded-xl"
+              className="w-full border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
               data-testid="waiting-close"
             >
               {waitState === "approved" ? "Done" : "Close"}

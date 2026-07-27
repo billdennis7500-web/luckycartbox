@@ -36,7 +36,7 @@ export default function Referrals() {
     return currentTabUsers.filter((u) => (u.name || "").toLowerCase().includes(q));
   }, [currentTabUsers, search]);
 
-  if (!data) return <div className="text-[#94A3B8]">Loading…</div>;
+  if (!data) return <div className="text-[var(--nb-muted)]">Loading…</div>;
 
   const link = `${window.location.origin}/register?ref=${data.referral_code}`;
   const shareText = `Join me on NaijaInvest — earn daily naira profits. Use my code ${data.referral_code} to sign up and grab a ₦500 welcome bonus.`;
@@ -98,20 +98,20 @@ export default function Referrals() {
         <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="referrals-heading">
           Refer & earn
         </h1>
-        <p className="text-sm text-[#94A3B8] mt-1">3-generation commissions across every invite you make.</p>
+        <p className="text-sm text-[var(--nb-muted)] mt-1">3-generation commissions across every invite you make.</p>
       </div>
 
       {/* Hero card */}
       <Card
         data-testid="referral-hero-card"
-        className="relative overflow-hidden rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6"
+        className="relative overflow-hidden rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6"
       >
         <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[#0055FF]/25 blur-[100px] pointer-events-none" />
         <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full bg-[#0055FF]/15 blur-[100px] pointer-events-none" />
 
         <div className="relative space-y-5">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-[#94A3B8]">Your referral code</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--nb-muted)]">Your referral code</div>
             <div className="mt-2 flex items-center gap-3">
               <div className="font-display font-800 text-4xl sm:text-5xl tabular text-white" data-testid="referral-code">
                 {data.referral_code}
@@ -119,19 +119,19 @@ export default function Referrals() {
               <button
                 onClick={copyCode}
                 data-testid="copy-code-btn"
-                className="w-9 h-9 rounded-full grid place-items-center border border-[#1A2B44] hover:border-[#0055FF]/40 hover:bg-[#121E30] transition-colors"
+                className="w-9 h-9 rounded-full grid place-items-center border border-[var(--nb-border)] hover:border-[#0055FF]/40 hover:bg-[var(--nb-card2)] transition-colors"
                 title="Copy code"
               >
-                <Copy className="w-3.5 h-3.5 text-[#94A3B8]" />
+                <Copy className="w-3.5 h-3.5 text-[var(--nb-muted)]" />
               </button>
             </div>
           </div>
 
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-[#94A3B8] mb-2">Share link</div>
-            <div className="rounded-lg border border-[#1A2B44] bg-[#020813] p-3 flex items-center gap-2 min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--nb-muted)] mb-2">Share link</div>
+            <div className="rounded-lg border border-[var(--nb-border)] bg-[var(--nb-page)] p-3 flex items-center gap-2 min-w-0">
               <span
-                className="flex-1 min-w-0 text-xs sm:text-sm text-[#94A3B8] truncate tabular"
+                className="flex-1 min-w-0 text-xs sm:text-sm text-[var(--nb-muted)] truncate tabular"
                 title={link}
                 data-testid="referral-link"
               >
@@ -149,7 +149,7 @@ export default function Referrals() {
           </div>
 
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-[#94A3B8] mb-2">Share via</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--nb-muted)] mb-2">Share via</div>
             <div className="grid grid-cols-4 gap-2">
               {shares.map((s) => (
                 <a
@@ -172,7 +172,7 @@ export default function Referrals() {
       {/* Total earnings */}
       <Card
         data-testid="total-earnings-card"
-        className="rounded-2xl border border-[#0055FF]/40 bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[#0B1524] p-6 text-white"
+        className="rounded-2xl border border-[#0055FF]/40 bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[var(--nb-card)] p-6 text-white"
       >
         <div className="flex items-start justify-between">
           <div>
@@ -200,14 +200,14 @@ export default function Referrals() {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-display text-lg font-600">Your network</h2>
-          <div className="text-xs text-[#94A3B8]">
+          <div className="text-xs text-[var(--nb-muted)]">
             <span className="text-[#10B981]">{activeCount}</span> / {currentTab.users.length} active
           </div>
         </div>
 
         <div
           data-testid="referral-tabs"
-          className="grid grid-cols-3 rounded-lg border border-[#1A2B44] bg-[#0B1524] p-1 mb-3"
+          className="grid grid-cols-3 rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card)] p-1 mb-3"
         >
           {tabs.map((t) => (
             <button
@@ -217,7 +217,7 @@ export default function Referrals() {
               className={`py-2 rounded-md text-xs font-medium transition-colors ${
                 gen === t.key
                   ? "bg-[#0055FF] text-white"
-                  : "text-[#94A3B8] hover:text-white"
+                  : "text-[var(--nb-muted)] hover:text-white"
               }`}
             >
               {t.label} <span className="opacity-70">·</span> {t.pct}%
@@ -231,18 +231,18 @@ export default function Referrals() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name…"
             data-testid="referral-search"
-            className="w-full mb-3 h-10 px-3 rounded-md bg-[#121E30] border border-[#1A2B44] text-sm text-white placeholder:text-[#94A3B8]/60 focus:outline-none focus:border-[#0055FF]/50"
+            className="w-full mb-3 h-10 px-3 rounded-md bg-[var(--nb-card2)] border border-[var(--nb-border)] text-sm text-white placeholder:text-[var(--nb-muted)]/60 focus:outline-none focus:border-[#0055FF]/50"
           />
         )}
 
-        <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] overflow-hidden">
+        <Card className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card)] overflow-hidden">
           {filteredUsers.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#94A3B8]" data-testid={`no-${gen}`}>
+            <div className="p-8 text-center text-sm text-[var(--nb-muted)]" data-testid={`no-${gen}`}>
               {search ? "No matches" : `No ${currentTab.label} referrals yet. Share your link to grow this generation.`}
             </div>
           ) : (
             <>
-              <div className="divide-y divide-[#1A2B44]">
+              <div className="divide-y divide-[var(--nb-border)]">
                 {filteredUsers.slice(0, visible).map((u, idx) => (
                   <div key={u.id} className="flex items-center gap-3 px-4 py-3" data-testid={`ref-user-${u.id}`}>
                     <div className="w-9 h-9 rounded-full bg-[#0055FF]/20 border border-[#0055FF]/40 grid place-items-center text-xs font-display font-800">
@@ -250,13 +250,13 @@ export default function Referrals() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{u.name}</div>
-                      <div className="text-xs text-[#94A3B8] tabular truncate">{u.phone}</div>
+                      <div className="text-xs text-[var(--nb-muted)] tabular truncate">{u.phone}</div>
                     </div>
                     <span
                       className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full border ${
                         u.has_invested
                           ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                          : "bg-[#1A2B44] text-[#94A3B8] border-[#1A2B44]"
+                          : "bg-[var(--nb-border)] text-[var(--nb-muted)] border-[var(--nb-border)]"
                       }`}
                     >
                       {u.has_invested ? "Active" : "Pending"}
@@ -275,7 +275,7 @@ export default function Referrals() {
         </Card>
 
         {currentTab.users.length === 0 && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-[#94A3B8]">
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-[var(--nb-muted)]">
             <Users className="w-3 h-3" />
             Every invite earns you {currentTab.pct}% forever.
           </div>

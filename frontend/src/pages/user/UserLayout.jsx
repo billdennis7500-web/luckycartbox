@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft, X } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
+import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft, X, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 import { isImpersonatingTab } from "@/lib/api";
 
@@ -81,12 +82,13 @@ function ImpersonationPill() {
 
 export default function UserLayout() {
   const { user } = useAuth();
+  const { mode, toggle } = useTheme();
 
   return (
-    <div className="min-h-screen bg-[#020813] text-[#F8FAFC] flex flex-col">
+    <div className="min-h-screen bg-[var(--nb-page)] text-[var(--nb-text)] flex flex-col">
       <ImpersonationPill />
       {/* Top bar */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-[#020813]/80 border-b border-[#1A2B44]">
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-[var(--nb-page)]/80 border-b border-[var(--nb-border)]">
         <div className="max-w-3xl mx-auto flex items-center justify-between px-5 py-4">
           <Link to="/dashboard" className="flex items-center gap-2" data-testid="user-brand-link">
             <div className="w-8 h-8 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
@@ -95,6 +97,15 @@ export default function UserLayout() {
             <span className="font-display font-bold text-lg">NaijaInvest</span>
           </Link>
           <div className="flex items-center gap-3">
+            <button
+              onClick={toggle}
+              data-testid="theme-toggle-btn"
+              aria-label={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={mode === "dark" ? "Light mode" : "Dark mode"}
+              className="w-9 h-9 rounded-md border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-[var(--nb-text)] hover:border-[#0055FF]/40 transition-colors"
+            >
+              {mode === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             {user?.role === "admin" && (
               <Link to="/admin" data-testid="user-admin-link"
                     className="hidden sm:inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md border border-[#0055FF]/40 text-[#0055FF] hover:bg-[#0055FF]/10">
@@ -116,7 +127,7 @@ export default function UserLayout() {
       {/* Bottom nav */}
       <nav
         data-testid="bottom-nav"
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1A2B44] bg-[#0B1524]/95 backdrop-blur-xl"
+        className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--nb-border)] bg-[var(--nb-card)]/95 backdrop-blur-xl"
       >
         <div className="max-w-3xl mx-auto grid grid-cols-5">
           {NAV.map((n) => (
@@ -128,7 +139,7 @@ export default function UserLayout() {
                 `flex flex-col items-center justify-center gap-1 py-3 transition-colors ${
                   isActive
                     ? "text-[#0055FF]"
-                    : "text-[#94A3B8] hover:text-white"
+                    : "text-[var(--nb-muted)] hover:text-white"
                 }`
               }
             >

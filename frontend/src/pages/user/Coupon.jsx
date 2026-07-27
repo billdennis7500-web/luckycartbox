@@ -34,7 +34,7 @@ export default function Coupon() {
   return (
     <div className="space-y-6 max-w-2xl mx-auto" data-testid="coupon-page">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6">
+      <div className="relative overflow-hidden rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6">
         <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#F59E0B]/30 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-16 -left-16 w-40 h-40 rounded-full bg-[#0055FF]/20 blur-3xl pointer-events-none" />
         <div className="relative flex items-center gap-4">
@@ -45,7 +45,7 @@ export default function Coupon() {
             <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="coupon-heading">
               Redeem a bonus code
             </h1>
-            <p className="text-sm text-[#94A3B8] mt-1">
+            <p className="text-sm text-[var(--nb-muted)] mt-1">
               Instant naira credited straight to your wallet.
             </p>
           </div>
@@ -57,7 +57,7 @@ export default function Coupon() {
           <Lock className="w-5 h-5 text-[#F59E0B] mt-0.5 shrink-0" />
           <div className="flex-1">
             <div className="font-display font-600 text-sm">Redemption locked</div>
-            <div className="text-xs text-[#94A3B8] mt-1">You must invest before redeeming coupon codes.</div>
+            <div className="text-xs text-[var(--nb-muted)] mt-1">You must invest before redeeming coupon codes.</div>
           </div>
           <Link to="/marketplace" className="shrink-0">
             <Button size="sm" className="bg-[#F59E0B] hover:bg-[#d97706] text-white">
@@ -70,15 +70,15 @@ export default function Coupon() {
       {/* Ticket-styled form */}
       <div className="relative" data-testid="coupon-ticket">
         <div
-          className="relative rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6 overflow-hidden"
+          className="relative rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6 overflow-hidden"
           style={{
             backgroundImage:
               "radial-gradient(circle at 0 50%, transparent 12px, transparent 12px, transparent 100%), radial-gradient(circle at 100% 50%, transparent 12px, transparent 12px, transparent 100%)",
           }}
         >
           {/* Notches */}
-          <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#020813] border border-[#1A2B44]" />
-          <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#020813] border border-[#1A2B44]" />
+          <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[var(--nb-page)] border border-[var(--nb-border)]" />
+          <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[var(--nb-page)] border border-[var(--nb-border)]" />
 
           <form onSubmit={redeem} className="space-y-4">
             <div>
@@ -90,9 +90,9 @@ export default function Coupon() {
                 placeholder="ENTER-CODE"
                 disabled={locked}
                 data-testid="coupon-code-input"
-                className="mt-2 bg-[#020813] border-[#1A2B44] text-white h-14 tracking-[0.35em] uppercase font-display font-700 text-xl text-center"
+                className="mt-2 bg-[var(--nb-page)] border-[var(--nb-border)] text-white h-14 tracking-[0.35em] uppercase font-display font-700 text-xl text-center"
               />
-              <p className="text-[10px] text-[#94A3B8] tabular mt-2 text-center">
+              <p className="text-[10px] text-[var(--nb-muted)] tabular mt-2 text-center">
                 Codes are case-insensitive. Paste-friendly.
               </p>
             </div>
@@ -116,7 +116,7 @@ export default function Coupon() {
           <CheckCircle2 className="w-5 h-5 text-[#10B981] shrink-0" />
           <div className="flex-1">
             <div className="font-display font-600 text-sm">Wallet credited</div>
-            <div className="text-xs text-[#94A3B8] mt-0.5">
+            <div className="text-xs text-[var(--nb-muted)] mt-0.5">
               Code <code className="text-white">{lastReward.code}</code> added{" "}
               <span className="text-[#10B981] tabular">{formatNaira(lastReward.amount)}</span>
             </div>
@@ -125,9 +125,9 @@ export default function Coupon() {
       )}
 
       {/* Balance card */}
-      <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl p-4 flex items-center justify-between">
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-xl p-4 flex items-center justify-between">
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Current wallet</div>
+          <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Current wallet</div>
           <div className="mt-1 font-display font-800 tabular text-lg" data-testid="coupon-wallet-balance">
             {formatNaira(user?.wallet_balance)}
           </div>

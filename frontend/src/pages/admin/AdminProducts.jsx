@@ -43,7 +43,7 @@ export default function AdminProducts() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="admin-products-heading">Products</h1>
-          <p className="text-[#94A3B8] mt-2">Add and manage investment plans.</p>
+          <p className="text-[var(--nb-muted)] mt-2">Add and manage investment plans.</p>
         </div>
         <Button onClick={() => setEditing(empty)} data-testid="admin-add-product-btn"
                 className="bg-[#0055FF] hover:bg-[#3377FF]"><Plus className="w-4 h-4 mr-1" /> Add product</Button>
@@ -51,33 +51,33 @@ export default function AdminProducts() {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.slice(0, visible).map((p) => (
-          <Card key={p.id} className="bg-[#0B1524] border-[#1A2B44] p-5 rounded-xl" data-testid={`admin-product-${p.id}`}>
+          <Card key={p.id} className="bg-[var(--nb-card)] border-[var(--nb-border)] p-5 rounded-xl" data-testid={`admin-product-${p.id}`}>
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-display font-600">{p.name}</div>
-                <div className="text-xs text-[#94A3B8] mt-1">{p.description}</div>
+                <div className="text-xs text-[var(--nb-muted)] mt-1">{p.description}</div>
               </div>
               <span className={`text-xs px-2 py-0.5 rounded-full border ${p.active ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30" : "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30"}`}>
                 {p.active ? "Active" : "Inactive"}
               </span>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-              <div className="border border-[#1A2B44] rounded p-2">
-                <div className="text-[#94A3B8]">Price</div>
+              <div className="border border-[var(--nb-border)] rounded p-2">
+                <div className="text-[var(--nb-muted)]">Price</div>
                 <div className="tabular">{formatNaira(p.price)}</div>
               </div>
-              <div className="border border-[#1A2B44] rounded p-2">
-                <div className="text-[#94A3B8]">Daily</div>
+              <div className="border border-[var(--nb-border)] rounded p-2">
+                <div className="text-[var(--nb-muted)]">Daily</div>
                 <div className="tabular">{p.daily_profit_pct}%</div>
               </div>
-              <div className="border border-[#1A2B44] rounded p-2">
-                <div className="text-[#94A3B8]">Days</div>
+              <div className="border border-[var(--nb-border)] rounded p-2">
+                <div className="text-[var(--nb-muted)]">Days</div>
                 <div className="tabular">{p.duration_days}</div>
               </div>
             </div>
             <div className="mt-4 flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setEditing(p)} data-testid={`edit-product-${p.id}`}
-                      className="border-[#1A2B44] bg-transparent text-white"><Pencil className="w-3 h-3 mr-1"/>Edit</Button>
+                      className="border-[var(--nb-border)] bg-transparent text-white"><Pencil className="w-3 h-3 mr-1"/>Edit</Button>
               <Button size="sm" variant="outline" onClick={() => remove(p)} data-testid={`delete-product-${p.id}`}
                       className="border-[#EF4444]/40 bg-transparent text-[#EF4444] hover:bg-[#EF4444]/10"><Trash2 className="w-3 h-3 mr-1"/>Delete</Button>
             </div>
@@ -87,7 +87,7 @@ export default function AdminProducts() {
       <LoadMore shown={Math.min(visible, items.length)} total={items.length} onMore={setVisible} step={9} testid="load-more-admin-products" />
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="bg-[#0B1524] border-[#1A2B44] text-white max-w-lg">
+        <DialogContent className="bg-[var(--nb-card)] border-[var(--nb-border)] text-white max-w-lg">
           <DialogHeader><DialogTitle className="font-display">{editing?.id ? "Edit product" : "New product"}</DialogTitle></DialogHeader>
           {editing && (
             <div className="space-y-4">
@@ -95,33 +95,33 @@ export default function AdminProducts() {
                 <Label>Name</Label>
                 <Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                        data-testid="prod-name-input"
-                       className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
+                       className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label>Price</Label>
                   <Input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })}
                          data-testid="prod-price-input"
-                         className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
+                         className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
                 </div>
                 <div>
                   <Label>Daily %</Label>
                   <Input type="number" step="0.1" value={editing.daily_profit_pct} onChange={(e) => setEditing({ ...editing, daily_profit_pct: e.target.value })}
                          data-testid="prod-daily-input"
-                         className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
+                         className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
                 </div>
                 <div>
                   <Label>Days</Label>
                   <Input type="number" value={editing.duration_days} onChange={(e) => setEditing({ ...editing, duration_days: e.target.value })}
                          data-testid="prod-days-input"
-                         className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
+                         className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
                 </div>
               </div>
               <div>
                 <Label>Description</Label>
                 <Textarea value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })}
                           data-testid="prod-desc-input"
-                          className="mt-2 bg-[#121E30] border-[#1A2B44] text-white" />
+                          className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white" />
               </div>
               <div className="flex items-center gap-3">
                 <Switch checked={editing.active} onCheckedChange={(v) => setEditing({ ...editing, active: v })} data-testid="prod-active-switch" />
@@ -130,7 +130,7 @@ export default function AdminProducts() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button variant="outline" className="border-[var(--nb-border)] bg-transparent text-white" onClick={() => setEditing(null)}>Cancel</Button>
             <Button onClick={save} data-testid="prod-save-btn" className="bg-[#0055FF] hover:bg-[#3377FF]">Save</Button>
           </DialogFooter>
         </DialogContent>

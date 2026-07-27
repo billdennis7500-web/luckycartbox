@@ -35,8 +35,8 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-[#020813] text-[#F8FAFC]">
-      <div className="hidden lg:flex flex-col justify-between p-12 border-r border-[#1A2B44] relative overflow-hidden">
+    <div className="min-h-screen grid lg:grid-cols-2 bg-[var(--nb-page)] text-[var(--nb-text)]">
+      <div className="hidden lg:flex flex-col justify-between p-12 border-r border-[var(--nb-border)] relative overflow-hidden">
         <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-[#0055FF]/25 blur-[140px]" />
         <div className="absolute -bottom-40 -right-40 w-[400px] h-[400px] rounded-full bg-[#0055FF]/15 blur-[120px]" />
 
@@ -54,25 +54,25 @@ export default function AdminLogin() {
           <h1 className="font-display text-4xl font-800 tracking-tight leading-tight">
             Approve, configure, control.
           </h1>
-          <p className="text-[#94A3B8] max-w-md leading-relaxed">
+          <p className="text-[var(--nb-muted)] max-w-md leading-relaxed">
             Manage users, plans, deposits, withdrawals, referral rates and gateway settings from a single dashboard.
           </p>
         </div>
 
-        <div className="text-xs text-[#94A3B8] relative z-10">© 2026 NaijaInvest</div>
+        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 NaijaInvest</div>
       </div>
 
       <div className="flex items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0B1524] border border-[#1A2B44] text-xs text-[#94A3B8] mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--nb-card)] border border-[var(--nb-border)] text-xs text-[var(--nb-muted)] mb-4">
             <Lock className="w-3 h-3 text-[#0055FF]" /> Admin sign in
           </div>
           <h2 className="font-display text-3xl font-800 tracking-tight">Welcome, admin</h2>
-          <p className="text-[#94A3B8] mt-2">Sign in with your admin email and password.</p>
+          <p className="text-[var(--nb-muted)] mt-2">Sign in with your admin email and password.</p>
 
           <form onSubmit={submit} className="mt-8 space-y-5">
             <div>
-              <Label htmlFor="email" className="text-[#F8FAFC]">Email</Label>
+              <Label htmlFor="email" className="text-[var(--nb-text)]">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -82,11 +82,11 @@ export default function AdminLogin() {
                 placeholder="you@example.com"
                 autoComplete="email"
                 required
-                className="mt-2 bg-[#121E30] border-[#1A2B44] text-white placeholder:text-[#94A3B8]/60 h-11"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white placeholder:text-[var(--nb-muted)]/60 h-11"
               />
             </div>
             <div>
-              <Label htmlFor="password" className="text-[#F8FAFC]">Password</Label>
+              <Label htmlFor="password" className="text-[var(--nb-text)]">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -95,7 +95,7 @@ export default function AdminLogin() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
-                className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
               />
             </div>
             {err && <div data-testid="admin-login-error" className="text-sm text-[#EF4444]">{err}</div>}
@@ -110,10 +110,10 @@ export default function AdminLogin() {
           </form>
 
           <div className="mt-6 flex items-center justify-between text-sm">
-            <Link to="/login" data-testid="admin-to-user-login" className="text-[#94A3B8] hover:text-white">
+            <Link to="/login" data-testid="admin-to-user-login" className="text-[var(--nb-muted)] hover:text-white">
               ← User sign in
             </Link>
-            <Link to="/" className="text-[#94A3B8] hover:text-white">Home</Link>
+            <Link to="/" className="text-[var(--nb-muted)] hover:text-white">Home</Link>
           </div>
         </div>
       </div>

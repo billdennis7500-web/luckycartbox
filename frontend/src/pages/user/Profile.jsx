@@ -28,7 +28,7 @@ export default function Profile() {
       {/* Header card */}
       <Card
         data-testid="profile-header-card"
-        className="rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6"
+        className="rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6"
       >
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-[#0055FF]/20 border border-[#0055FF]/40 grid place-items-center text-xl font-display font-800">
@@ -36,13 +36,13 @@ export default function Profile() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="font-display font-800 text-xl truncate" data-testid="profile-name">{user?.name}</div>
-            <div className="text-sm text-[#94A3B8] tabular" data-testid="profile-phone">{user?.phone}</div>
+            <div className="text-sm text-[var(--nb-muted)] tabular" data-testid="profile-phone">{user?.phone}</div>
           </div>
         </div>
 
         <div className="mt-5 flex items-center justify-between rounded-lg border border-[#0055FF]/40 bg-[#0055FF]/10 p-4">
           <div>
-            <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Referral code</div>
+            <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Referral code</div>
             <div className="mt-1 font-display font-800 text-lg tabular" data-testid="profile-referral-code">
               {user?.referral_code}
             </div>
@@ -52,7 +52,7 @@ export default function Profile() {
             variant="outline"
             onClick={() => copy(user?.referral_code || "")}
             data-testid="profile-copy-ref"
-            className="border-[#1A2B44] bg-transparent text-white"
+            className="border-[var(--nb-border)] bg-transparent text-white"
           >
             <Copy className="w-3 h-3 mr-1" /> Copy
           </Button>
@@ -60,7 +60,7 @@ export default function Profile() {
       </Card>
 
       {/* Menu links */}
-      <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
+      <Card className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card)] divide-y divide-[var(--nb-border)] overflow-hidden">
         <ProfileLink to="/referrals" icon={UsersIcon} label="Referrals" hint="Invite & earn 3-gen commissions" testid="profile-link-referrals" />
         <ProfileLink to="/transactions" icon={History} label="Transaction history" hint="Every wallet movement" testid="profile-link-transactions" />
         <ProfileLink to="/deposit" icon={ArrowDownToLine} label="Deposit" hint="Fund your wallet" testid="profile-link-deposit" />
@@ -75,14 +75,14 @@ export default function Profile() {
         <button
           onClick={onLogout}
           data-testid="profile-logout-button"
-          className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#121E30] transition-colors"
+          className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[var(--nb-card2)] transition-colors"
         >
           <div className="w-10 h-10 rounded-lg bg-[#EF4444]/15 border border-[#EF4444]/30 grid place-items-center">
             <LogOut className="w-4 h-4 text-[#EF4444]" />
           </div>
           <div className="flex-1">
             <div className="font-display font-600 text-sm">Sign out</div>
-            <div className="text-xs text-[#94A3B8]">End this session</div>
+            <div className="text-xs text-[var(--nb-muted)]">End this session</div>
           </div>
         </button>
       </Card>
@@ -95,16 +95,16 @@ function ProfileLink({ to, icon: Icon, label, hint, testid }) {
     <Link
       to={to}
       data-testid={testid}
-      className="flex items-center gap-3 px-5 py-4 hover:bg-[#121E30] transition-colors"
+      className="flex items-center gap-3 px-5 py-4 hover:bg-[var(--nb-card2)] transition-colors"
     >
       <div className="w-10 h-10 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
         <Icon className="w-4 h-4 text-[#0055FF]" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="font-display font-600 text-sm truncate">{label}</div>
-        <div className="text-xs text-[#94A3B8] truncate">{hint}</div>
+        <div className="text-xs text-[var(--nb-muted)] truncate">{hint}</div>
       </div>
-      <ChevronRight className="w-4 h-4 text-[#94A3B8]" />
+      <ChevronRight className="w-4 h-4 text-[var(--nb-muted)]" />
     </Link>
   );
 }

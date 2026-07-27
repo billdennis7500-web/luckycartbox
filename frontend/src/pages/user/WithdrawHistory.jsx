@@ -37,6 +37,25 @@ function accent(dateStr = "") {
   return palette[h % palette.length];
 }
 
+/* Mask user's own bank account number for privacy: keep first 2 + last 3 digits. */
+function maskAccount(num = "") {
+  const s = String(num || "");
+  if (s.length <= 5) return s;
+  return `${s.slice(0, 2)}${"•".repeat(Math.max(3, s.length - 5))}${s.slice(-3)}`;
+}
+
+/* Human-readable withdrawal status headline (used above the amount). */
+function withdrawalLabel(status) {
+  switch (status) {
+    case "approved":   return "Withdrawal successful";
+    case "processing": return "Withdrawal processing";
+    case "pending":    return "Withdrawal pending";
+    case "rejected":   return "Withdrawal rejected";
+    case "failed":     return "Withdrawal failed";
+    default:           return "Withdrawal";
+  }
+}
+
 export default function WithdrawHistory() {
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState("all");
@@ -78,25 +97,25 @@ export default function WithdrawHistory() {
     <div className="space-y-5" data-testid="withdraw-history-page">
       <div className="flex items-center gap-3">
         <Link to="/withdraw" data-testid="whist-back-link"
-              className="w-9 h-9 rounded-lg border border-[#1A2B44] grid place-items-center text-[#94A3B8] hover:text-white">
+              className="w-9 h-9 rounded-lg border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-white">
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div className="flex-1">
           <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="whist-heading">Withdrawal history</h1>
-          <p className="text-xs text-[#94A3B8] mt-1">
+          <p className="text-xs text-[var(--nb-muted)] mt-1">
             {items.length} withdrawal{items.length === 1 ? "" : "s"} · <span className="text-[#10B981] tabular">{formatNaira(totalApproved)}</span> paid out
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 p-1 rounded-xl bg-[#0B1524] border border-[#1A2B44]">
+      <div className="grid grid-cols-4 gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)]">
         {TABS.map(({ k, label }) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             data-testid={`whist-tab-${k}`}
             className={`h-9 text-xs rounded-lg font-medium transition-colors ${
-              tab === k ? "bg-[#0055FF] text-white" : "text-[#94A3B8] hover:text-white"
+              tab === k ? "bg-[#0055FF] text-white" : "text-[var(--nb-muted)] hover:text-white"
             }`}
           >
             {label} <span className="opacity-60 tabular">({counts[k]})</span>
@@ -105,27 +124,27 @@ export default function WithdrawHistory() {
       </div>
 
       <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-3.5 text-[#94A3B8]" />
+        <Search className="w-4 h-4 absolute left-3 top-3.5 text-[var(--nb-muted)]" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search bank, account or amount"
                data-testid="whist-search-input"
-               className="pl-9 bg-[#121E30] border-[#1A2B44] text-white h-11" />
+               className="pl-9 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-8 text-center text-sm text-[#94A3B8]" data-testid="whist-loading">
+        <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-8 text-center text-sm text-[var(--nb-muted)]" data-testid="whist-loading">
           Loading history…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-8 text-center space-y-2" data-testid="whist-empty">
+        <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-8 text-center space-y-2" data-testid="whist-empty">
           <Receipt className="w-6 h-6 text-[#0055FF] mx-auto" />
-          <div className="text-sm text-[#94A3B8]">
+          <div className="text-sm text-[var(--nb-muted)]">
             {tab === "all" ? "You haven't requested any withdrawals yet." : `No ${tab} withdrawals.`}
           </div>
           <Link to="/withdraw" className="inline-block text-xs text-[#0055FF] hover:underline">Request a withdrawal →</Link>
         </div>
       ) : (
         <>
-          <div className="text-[10px] text-[#94A3B8] tabular flex items-center justify-between" data-testid="whist-counter">
+          <div className="text-[10px] text-[var(--nb-muted)] tabular flex items-center justify-between" data-testid="whist-counter">
             <span>Showing {Math.min(visible, filtered.length)} of {filtered.length}</span>
             <span>{tab === "all" ? "all statuses" : tab}</span>
           </div>
@@ -138,7 +157,7 @@ export default function WithdrawHistory() {
                 <div
                   key={w.id}
                   data-testid={`whist-row-${w.id}`}
-                  className="relative overflow-hidden rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-4 group hover:border-[#0055FF]/40 transition-colors"
+                  className="relative overflow-hidden rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-4 group hover:border-[#0055FF]/40 transition-colors"
                 >
                   <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: `linear-gradient(180deg, ${c}, ${c}55)` }} />
                   <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-20 blur-2xl pointer-events-none" style={{ background: c }} />
@@ -152,17 +171,22 @@ export default function WithdrawHistory() {
                         <ArrowUpFromLine className="w-4 h-4" style={{ color: c }} />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-display font-800 tabular text-lg leading-tight">{formatNaira(w.amount)}</div>
-                        <div className="mt-1 text-[11px] text-[#94A3B8] truncate flex items-center gap-1">
-                          <Landmark className="w-3 h-3 text-[#94A3B8]" /> {w.bank_name}
+                        <div className="font-display font-700 text-sm leading-tight" data-testid={`whist-row-label-${w.id}`}>
+                          {withdrawalLabel(w.status)}
                         </div>
-                        <div className="text-[10px] text-[#94A3B8] tabular truncate">{w.account_number}</div>
+                        <div className="font-display font-800 tabular text-lg leading-tight mt-0.5">{formatNaira(w.amount)}</div>
+                        <div className="mt-1 text-[11px] text-[var(--nb-muted)] truncate flex items-center gap-1">
+                          <Landmark className="w-3 h-3 text-[var(--nb-muted)]" /> {w.bank_name}
+                        </div>
+                        <div className="text-[10px] text-[var(--nb-muted)] tabular truncate" data-testid={`whist-row-acct-${w.id}`}>
+                          {maskAccount(w.account_number)}
+                        </div>
                       </div>
                     </div>
                     <StatusBadge status={w.status} />
                   </div>
 
-                  <div className="relative mt-3 pt-3 border-t border-[#1A2B44] flex items-center justify-between text-[10px] text-[#94A3B8] tabular">
+                  <div className="relative mt-3 pt-3 border-t border-[var(--nb-border)] flex items-center justify-between text-[10px] text-[var(--nb-muted)] tabular">
                     <span>{dt.toLocaleDateString(undefined, { day: "numeric", month: "short" })} · {dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                     <span className="truncate max-w-[50%]" title={w.account_name}>{w.account_name}</span>
                   </div>

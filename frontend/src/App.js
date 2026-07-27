@@ -2,6 +2,7 @@ import React from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -45,13 +46,17 @@ function RootRedirect() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
         <Toaster
           position="top-right"
-          theme="dark"
           toastOptions={{
-            style: { background: "#0B1524", border: "1px solid #1A2B44", color: "#F8FAFC" },
+            style: {
+              background: "var(--nb-card)",
+              border: "1px solid var(--nb-border)",
+              color: "var(--nb-text)",
+            },
           }}
         />
         <Routes>
@@ -107,6 +112,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 

@@ -8,8 +8,8 @@ export function ProtectedRoute({ children, adminOnly = false }) {
 
   if (user === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020813]">
-        <div className="text-[#94A3B8] font-display">Loading…</div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--nb-page)]">
+        <div className="text-[var(--nb-muted)] font-display">Loading…</div>
       </div>
     );
   }

@@ -4,6 +4,41 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
 
+/* ---------------------------------------------------------------------------
+   Theme surface tokens
+   ---------------------------------------------------------------------------
+   Every hardcoded hex used across the app (bg-[#0B1524], text-[#94A3B8], etc.)
+   has been rewritten to bg-[var(--nb-card)] / text-[var(--nb-muted)]. Toggling
+   the `.theme-light` class on <html> swaps the entire palette in one shot
+   without touching any component code.
+   -------------------------------------------------------------------------- */
+:root {
+    /* Dark (default) */
+    --nb-page:   #020813;
+    --nb-card:   #0B1524;
+    --nb-card2:  #121E30;
+    --nb-border: #1A2B44;
+    --nb-text:   #F8FAFC;
+    --nb-muted:  #94A3B8;
+    --nb-scroll-track: #020813;
+    --nb-scroll-thumb: #1A2B44;
+    --nb-scroll-thumb-hover: #26406a;
+    color-scheme: dark;
+}
+
+html.theme-light {
+    --nb-page:   #F5F7FB;
+    --nb-card:   #FFFFFF;
+    --nb-card2:  #F1F5F9;
+    --nb-border: #E2E8F0;
+    --nb-text:   #0F172A;
+    --nb-muted:  #64748B;
+    --nb-scroll-track: #F1F5F9;
+    --nb-scroll-thumb: #CBD5E1;
+    --nb-scroll-thumb-hover: #94A3B8;
+    color-scheme: light;
+}
+
 @layer base {
     :root {
         --background: 214 78% 4%;
@@ -30,6 +65,23 @@
         --success: 160 84% 39%;
         --warning: 38 92% 50%;
     }
+
+    html.theme-light {
+        --background: 210 40% 98%;
+        --foreground: 222 47% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 11%;
+        --secondary: 210 40% 96%;
+        --secondary-foreground: 222 47% 11%;
+        --muted: 210 40% 96%;
+        --muted-foreground: 215 16% 47%;
+        --accent: 210 40% 96%;
+        --accent-foreground: 222 47% 11%;
+        --border: 214 32% 91%;
+        --input: 214 32% 91%;
+    }
 }
 
 * {
@@ -37,9 +89,10 @@
 }
 
 html, body, #root {
-    background-color: #020813;
-    color: #F8FAFC;
+    background-color: var(--nb-page);
+    color: var(--nb-text);
     min-height: 100vh;
+    transition: background-color 200ms ease, color 200ms ease;
 }
 
 body {
@@ -63,9 +116,9 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #020813; }
-::-webkit-scrollbar-thumb { background: #1A2B44; border-radius: 6px; }
-::-webkit-scrollbar-thumb:hover { background: #26406a; }
+::-webkit-scrollbar-track { background: var(--nb-scroll-track); }
+::-webkit-scrollbar-thumb { background: var(--nb-scroll-thumb); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--nb-scroll-thumb-hover); }
 
 /* Number typography */
 .tabular { font-variant-numeric: tabular-nums; }

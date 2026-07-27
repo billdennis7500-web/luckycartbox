@@ -40,7 +40,7 @@ export default function Marketplace() {
         <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="marketplace-heading">
           Investment plans
         </h1>
-        <p className="text-sm text-[#94A3B8] mt-1">Pick a plan. Profits drop every 24 hours until it matures.</p>
+        <p className="text-sm text-[var(--nb-muted)] mt-1">Pick a plan. Profits drop every 24 hours until it matures.</p>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -51,7 +51,7 @@ export default function Marketplace() {
           return (
             <Card
               key={p.id}
-              className="bg-[#0B1524] border border-[#1A2B44] rounded-2xl p-5 card-hover flex flex-col"
+              className="bg-[var(--nb-card)] border border-[var(--nb-border)] rounded-2xl p-5 card-hover flex flex-col"
               data-testid={`product-card-${p.id}`}
             >
               <div className="flex items-center justify-between">
@@ -64,7 +64,7 @@ export default function Marketplace() {
               </div>
 
               <h3 className="mt-4 font-display font-600 text-lg">{p.name}</h3>
-              <p className="text-xs text-[#94A3B8] mt-1 min-h-[36px] line-clamp-2">{p.description}</p>
+              <p className="text-xs text-[var(--nb-muted)] mt-1 min-h-[36px] line-clamp-2">{p.description}</p>
 
               {/* Daily figure highlight */}
               <div
@@ -77,18 +77,18 @@ export default function Marketplace() {
                 <div className="mt-1.5 font-display font-800 text-2xl tabular text-[#10B981]">
                   {formatNaira(dailyEarn)}
                 </div>
-                <div className="mt-0.5 text-[10px] text-[#94A3B8] tabular">
+                <div className="mt-0.5 text-[10px] text-[var(--nb-muted)] tabular">
                   ≈ {p.daily_profit_pct}% of your investment · daily
                 </div>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="border border-[#1A2B44] rounded-lg p-2.5">
-                  <div className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Stake</div>
+                <div className="border border-[var(--nb-border)] rounded-lg p-2.5">
+                  <div className="text-[10px] text-[var(--nb-muted)] uppercase tracking-wider">Stake</div>
                   <div className="mt-0.5 font-display font-600 tabular">{formatNaira(p.price)}</div>
                 </div>
-                <div className="border border-[#1A2B44] rounded-lg p-2.5">
-                  <div className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Duration</div>
+                <div className="border border-[var(--nb-border)] rounded-lg p-2.5">
+                  <div className="text-[10px] text-[var(--nb-muted)] uppercase tracking-wider">Duration</div>
                   <div className="mt-0.5 font-display font-600 tabular">{p.duration_days} days</div>
                 </div>
                 <div className="col-span-2 border border-[#0055FF]/40 bg-[#0055FF]/10 rounded-lg p-2.5">
@@ -117,26 +117,26 @@ export default function Marketplace() {
       <Drawer open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <DrawerContent
           data-testid="invest-drawer"
-          className="bg-[#0B1524] border-t border-[#1A2B44] text-white max-w-lg mx-auto rounded-t-2xl"
+          className="bg-[var(--nb-card)] border-t border-[var(--nb-border)] text-white max-w-lg mx-auto rounded-t-2xl"
         >
-          <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-[#1A2B44]" />
+          <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-[var(--nb-border)]" />
           <DrawerHeader>
             <DrawerTitle className="font-display text-xl">Confirm your investment</DrawerTitle>
-            <DrawerDescription className="text-[#94A3B8]">
+            <DrawerDescription className="text-[var(--nb-muted)]">
               We'll deduct the stake from your wallet and start dropping daily profits in 24 hours.
             </DrawerDescription>
           </DrawerHeader>
 
           {selected && (
             <div className="px-4 pb-2 space-y-4">
-              <Card className="bg-[#020813] border-[#1A2B44] rounded-xl p-4">
+              <Card className="bg-[var(--nb-page)] border-[var(--nb-border)] rounded-xl p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Plan</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Plan</div>
                     <div className="mt-1 font-display font-800 text-lg">{selected.name}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Stake</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Stake</div>
                     <div className="mt-1 font-display font-800 text-lg tabular">{formatNaira(selected.price)}</div>
                   </div>
                 </div>
@@ -151,8 +151,8 @@ export default function Marketplace() {
                     {formatNaira(selected.price * (selected.daily_profit_pct / 100))}
                   </div>
                 </div>
-                <div className="rounded-xl border border-[#1A2B44] p-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[#94A3B8] flex items-center gap-1">
+                <div className="rounded-xl border border-[var(--nb-border)] p-3">
+                  <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)] flex items-center gap-1">
                     <Timer className="w-3 h-3" /> Runs for
                   </div>
                   <div className="mt-1 font-display font-800 tabular">{selected.duration_days} days</div>
@@ -163,7 +163,7 @@ export default function Marketplace() {
                     {formatNaira(selected.price * (selected.daily_profit_pct / 100) * selected.duration_days)}
                   </div>
                 </div>
-                <div className="col-span-2 flex items-center justify-between text-xs text-[#94A3B8] px-1">
+                <div className="col-span-2 flex items-center justify-between text-xs text-[var(--nb-muted)] px-1">
                   <span className="flex items-center gap-1"><Wallet className="w-3 h-3"/> Your wallet</span>
                   <span className="tabular">{formatNaira(user?.wallet_balance)}</span>
                 </div>
@@ -181,7 +181,7 @@ export default function Marketplace() {
               {loading ? "Processing…" : "Confirm & invest"}
             </Button>
             <DrawerClose asChild>
-              <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white h-11 rounded-xl">
+              <Button variant="outline" className="border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl">
                 Cancel
               </Button>
             </DrawerClose>

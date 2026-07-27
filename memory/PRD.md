@@ -254,3 +254,17 @@ During testing the pod's outbound IP shifted from 34.170.12.145 → 104.198.214.
 - PayNow `query_payee` 429 retry/backoff hardening.
 - Product logo icon upload (next iteration).
 - Auto-reconciliation cron for stuck deposits >30 min.
+
+## 2026-07-27 · History labels + privacy + Light/Dark theme
+
+### Delivered
+- **Withdrawal history rows now lead with a clear status headline** — "Withdrawal successful" / "Withdrawal pending" / "Withdrawal rejected" (etc.) above the amount, so users can identify each row at a glance instead of just seeing a naked ₦ figure. `data-testid=whist-row-label-<id>`.
+- **Deposit history rows now lead with "Deposit successful" / "Deposit pending" / "Deposit rejected"** headline above the amount for the same reason. Removed the raw platform-account-number chip beside the method tag (was clutter).
+- **Withdrawal account number masked for privacy** — user's own account number is now displayed as `01•••••789` (first 2 + last 3 digits, middle bulleted) so screenshots or shoulder-surfing don't leak the full number. `data-testid=whist-row-acct-<id>`.
+- **Light / Dark theme toggle** — new `ThemeProvider` (`@/context/ThemeContext`) with a sun/moon button in both UserLayout header (top-right) and AdminLayout header (top-right). Choice persists in `localStorage.nb-theme`. Implemented via 6 CSS custom properties (`--nb-page`, `--nb-card`, `--nb-card2`, `--nb-border`, `--nb-text`, `--nb-muted`) that map to dark defaults at `:root` and light overrides at `html.theme-light`. Bulk-migrated ~650 hardcoded hex tokens (`#020813`, `#0B1524`, `#121E30`, `#1A2B44`, `#94A3B8`, `#F8FAFC`) across 40+ frontend files to `var(--nb-*)` in Tailwind arbitrary-value class strings. Toaster + scrollbar + Investments SVG ring all switched to the same tokens.
+
+### Deferred (unchanged)
+- SMS OTP for phone verification.
+- PayNow `query_payee` 429 retry/backoff hardening.
+- Product logo icon upload.
+- Auto-reconciliation cron for stuck deposits >30 min.

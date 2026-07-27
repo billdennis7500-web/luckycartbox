@@ -62,19 +62,19 @@ export default function ImpersonateBootstrap() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#050914] text-white grid place-items-center px-6">
-      <div className="max-w-sm w-full rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6 text-center">
+    <div className="min-h-screen bg-[var(--nb-page)] text-[var(--nb-text)] grid place-items-center px-6">
+      <div className="max-w-sm w-full rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6 text-center">
         {error ? (
           <>
             <ShieldAlert className="w-8 h-8 text-[#EF4444] mx-auto" />
             <div className="mt-3 font-display font-700">Impersonation failed</div>
-            <div className="mt-1 text-xs text-[#94A3B8]">{error}</div>
+            <div className="mt-1 text-xs text-[var(--nb-muted)]">{error}</div>
           </>
         ) : (
           <>
             <Loader2 className="w-8 h-8 text-[#0055FF] animate-spin mx-auto" />
             <div className="mt-3 font-display font-700">Switching to user view…</div>
-            <div className="mt-1 text-xs text-[#94A3B8]">Loading their dashboard in this tab.</div>
+            <div className="mt-1 text-xs text-[var(--nb-muted)]">Loading their dashboard in this tab.</div>
           </>
         )}
       </div>

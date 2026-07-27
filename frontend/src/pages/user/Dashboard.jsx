@@ -23,7 +23,7 @@ function QuickAction({ to, icon: Icon, label, tone, testid }) {
   const t = map[tone] || map.blue;
   return (
     <Link to={to} data-testid={testid} className="block">
-      <div className="rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-4 card-hover flex flex-col items-center justify-center gap-2 min-h-[110px]">
+      <div className="rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-4 card-hover flex flex-col items-center justify-center gap-2 min-h-[110px]">
         <div className={`w-12 h-12 rounded-xl ${t.bg} border ${t.ring} grid place-items-center`}>
           <Icon className={`w-5 h-5 ${t.fg}`} />
         </div>
@@ -68,7 +68,7 @@ export default function Dashboard() {
       {/* Greeting + Telegram chip */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Welcome</div>
+          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Welcome</div>
           <h1 className="font-display text-2xl font-800 tracking-tight mt-1" data-testid="dashboard-heading">
             Hi, {user?.name?.split(" ")[0] || "there"} 👋
           </h1>
@@ -89,7 +89,7 @@ export default function Dashboard() {
       {/* Wallet balance card */}
       <Card
         data-testid="wallet-card"
-        className="rounded-2xl border border-[#1A2B44] bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[#0B1524] p-6 text-white shadow-[0_20px_60px_-25px_rgba(0,85,255,0.6)]"
+        className="rounded-2xl border border-[var(--nb-border)] bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[var(--nb-card)] p-6 text-white shadow-[0_20px_60px_-25px_rgba(0,85,255,0.6)]"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/70">
@@ -125,7 +125,7 @@ export default function Dashboard() {
 
       {/* Quick actions — Deposit / Redeem / Withdraw / Invest in a 4-in-1 grid */}
       <section>
-        <h2 className="font-display text-xs font-600 uppercase tracking-widest text-[#94A3B8] mb-3">
+        <h2 className="font-display text-xs font-600 uppercase tracking-widest text-[var(--nb-muted)] mb-3">
           Quick actions
         </h2>
         <div className="grid grid-cols-4 gap-3" data-testid="quick-actions-grid">
@@ -147,7 +147,7 @@ export default function Dashboard() {
             <div className="font-display font-600 text-sm">
               You have {formatNaira(user?.bonus_balance)} welcome bonus.
             </div>
-            <div className="text-xs text-[#94A3B8] mt-1">
+            <div className="text-xs text-[var(--nb-muted)] mt-1">
               Invest to unlock withdrawals, referral commissions and coupon redemptions.
             </div>
           </div>
@@ -155,10 +155,10 @@ export default function Dashboard() {
       )}
 
       {/* Referral code hint */}
-      <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl p-5">
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-xl p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Your referral code</div>
+            <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Your referral code</div>
             <div className="mt-1 font-display font-800 text-xl tabular" data-testid="dashboard-ref-code">
               {user?.referral_code}
             </div>
@@ -169,7 +169,7 @@ export default function Dashboard() {
               variant="outline"
               onClick={copyCode}
               data-testid="dashboard-copy-ref"
-              className="border-[#1A2B44] bg-transparent text-white"
+              className="border-[var(--nb-border)] bg-transparent text-white"
             >
               <Copy className="w-3 h-3 mr-1" /> Copy
             </Button>
@@ -186,7 +186,7 @@ export default function Dashboard() {
       <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
         <DialogContent
           data-testid="welcome-dialog"
-          className="bg-[#0B1524] border-[#1A2B44] text-white max-w-md w-[calc(100vw-2rem)] rounded-2xl overflow-hidden"
+          className="bg-[var(--nb-card)] border-[var(--nb-border)] text-white max-w-md w-[calc(100vw-2rem)] rounded-2xl overflow-hidden"
         >
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-[#0055FF]/30 blur-3xl" />
@@ -200,7 +200,7 @@ export default function Dashboard() {
               <DialogTitle className="font-display text-xl">
                 Welcome back, {user?.name?.split(" ")[0] || "friend"}!
               </DialogTitle>
-              <DialogDescription className="text-[#94A3B8] text-sm leading-relaxed pt-1">
+              <DialogDescription className="text-[var(--nb-muted)] text-sm leading-relaxed pt-1">
                 {welcomeMsg}
               </DialogDescription>
             </DialogHeader>
@@ -218,7 +218,7 @@ export default function Dashboard() {
                 variant={tg ? "outline" : "default"}
                 data-testid="welcome-close-btn"
                 className={tg
-                  ? "w-full h-11 border-[#1A2B44] bg-transparent text-white"
+                  ? "w-full h-11 border-[var(--nb-border)] bg-transparent text-white"
                   : "w-full h-11 bg-[#0055FF] hover:bg-[#3377FF]"}
               >
                 Continue to dashboard
