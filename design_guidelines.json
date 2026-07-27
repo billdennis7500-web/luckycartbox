@@ -1,0 +1,91 @@
+{
+  "theme": "Dark Mode Default",
+  "archetype": "Swiss & High-Contrast mixed with Luxury (Dark Blue Variant)",
+  "description": "A highly professional, trustworthy, and modern Nigerian investment platform. Uses deep authoritative blues and crisp whites to signal financial security and premium service. The UI prioritizes data clarity and high contrast.",
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "usage": "H1 to H6 headings, large metrics.",
+      "rules": "Must use tight letter spacing (tracking-tight) for sizes above 32px. No Inter allowed for headings. Font weights: 400 (Light for elegance), 600 (Semibold), 800 (Black for impact)."
+    },
+    "body": {
+      "family": "IBM Plex Sans, sans-serif",
+      "usage": "Paragraphs, data tables, labels, form inputs.",
+      "rules": "Standard line-height (leading-relaxed). Highly legible for financial data and numbers."
+    }
+  },
+  "colors": {
+    "primary": "#0055FF",
+    "primary_hover": "#3377FF",
+    "background_dark": "#020813",
+    "surface_dark": "#0B1524",
+    "surface_lighter": "#121E30",
+    "border": "#1A2B44",
+    "text_main": "#F8FAFC",
+    "text_muted": "#94A3B8",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "danger": "#EF4444",
+    "forbidden_colors": ["#7351B7", "#1B93A4"]
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Used exclusively for sticky headers or floating navigation. Apply backdrop-blur-xl, bg-[#020813]/70, and a delicate 1px border-[#1A2B44] at the bottom.",
+    "grid_borders": "For Admin Dashboards: expose the skeleton. Use border-collapse and border-b border-r border-[#1A2B44] on grid items for a highly technical, data-dense look.",
+    "cards": "Dashboard and Investment Product cards should use flat solid surfaces (bg-[#0B1524]) with a crisp 1px border (border-[#1A2B44]). No muddy soft shadows. Use subtle glow or translation on hover.",
+    "glow": "Primary CTAs (like 'Invest' or 'Deposit') can have a subtle box-shadow glow using the primary color to draw the eye."
+  },
+  "grids_and_layouts": {
+    "marketing_pages": "Asymmetrical Bento grids with generous spacing (p-12 to p-32). Overlap elements slightly to break standard bootstrap columns.",
+    "user_dashboard": "High Density Bento Grid (grid-cols-1 md:grid-cols-3 lg:grid-cols-4). Tight gaps (gap-4 or gap-6). Use h-full so widgets stretch to match neighbors.",
+    "admin_dashboard": "Strict layout with a fixed sidebar (w-64) and main content area. Dense data tables with crisp alignment.",
+    "spacing_rules": "Always add internal padding (p-6 or p-8) inside bordered containers to prevent text collision."
+  },
+  "motion": {
+    "interactive": "Slight lift (-translate-y-1) and border color change on hover for clickable cards.",
+    "transitions": "Use specific properties ONLY: transition-colors, transition-transform duration-200 ease. NEVER use 'transition-all'.",
+    "loading": "Use skeleton loaders matching the exact shape of the delayed content."
+  },
+  "accessibility": {
+    "contrast": "Ensure text contrast meets APCA/WCAG standards against deep blue backgrounds.",
+    "focus": "All focusable elements must have focus:ring-2 focus:ring-[#0055FF] focus:outline-none.",
+    "testing": "All interactive elements (buttons, links, form inputs) MUST include a data-testid attribute in kebab-case."
+  },
+  "components": {
+    "buttons": "Pill-shaped or slightly rounded (rounded-md) with bold typography and interaction animations.",
+    "tables": "Shadcn UI tables customized for dark mode. Left-align most columns, right-align monetary figures.",
+    "forms": "Shadcn UI form components. Never use native inputs directly. Inputs should have bg-[#121E30] and border-[#1A2B44].",
+    "toasts": "Use Sonner for all notifications (success, error, copy to clipboard)."
+  },
+  "images": [
+    {
+      "url": "https://images.unsplash.com/photo-1723221907187-3e88c1d74b99?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHwzfHxuaWdlcmlhbiUyMGJ1c2luZXNzJTIwcGVvcGxlJTIwc21pbGluZ3xlbnwwfHx8fDE3ODUxNDc0Mzh8MA&ixlib=rb-4.1.0&q=85",
+      "category": "Hero / Testimonial",
+      "description": "Nigerian businessman smiling. Use on the landing page or welcome screen to build trust and local connection."
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxpbnZlc3RtZW50JTIwZ3Jvd3RoJTIwY2hhcnR8ZW58MHx8fHwxNzg1MTQ3NDM5fDA&ixlib=rb-4.1.0&q=85",
+      "category": "Marketing / Features",
+      "description": "Stock market candlestick chart on a dark screen. Matches the dark blue tech vibe perfectly."
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Build a modern Nigerian investment platform with a deep dark blue theme as requested.",
+    "Do NOT use HTML components for advanced interactions; use Shadcn UI.",
+    "Do NOT use transparent backgrounds on dropdowns or overlays.",
+    "Use Phosphor Icons or Lucide Icons for crisp, technical UI elements.",
+    "Implement the 3-generation referral logic visually in the User Dashboard (display earnings and active refs).",
+    "Admin Dashboard must include settings for referral percentages, product CRUD, deposit/withdrawal management, and welcome bonus config.",
+    "User frontend must include Wallet, Active Investments, Marketplace, and a Redeem Coupon section.",
+    "Ensure the Welcome Bonus of ₦500 is prominently displayed for new users."
+  ],
+  "universal_guidelines_for_main_agent": [
+    "Do not converge toward generic outputs. Use the custom colors and fonts defined above.",
+    "Create depth through layered design elements (z-index hierarchy).",
+    "Never apply universal transition (transition-all).",
+    "Do not center align the app container (.App { text-align: center; } is banned).",
+    "Always use modern button styles with proper interaction states.",
+    "Never use AI assistant Emojis for icons.",
+    "Use sonner for toasts from /app/frontend/src/components/ui/sonner.js",
+    "Ensure robust data-testid attributes are added to all interactive elements."
+  ]
+}
