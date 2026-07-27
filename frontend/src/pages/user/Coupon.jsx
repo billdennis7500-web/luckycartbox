@@ -1,17 +1,19 @@
 import React, { useState } from "react";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, formatNaira } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Ticket } from "lucide-react";
+import { Ticket, Lock, Sparkles, ArrowRight, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { Link } from "react-router-dom";
 
 export default function Coupon() {
   const { user, refresh } = useAuth();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lastReward, setLastReward] = useState(null); // {amount, code}
 
   const redeem = async (e) => {
     e.preventDefault();
@@ -19,41 +21,118 @@ export default function Coupon() {
     try {
       const { data } = await api.post("/coupons/redeem", { code });
       toast.success(`Coupon redeemed. ₦${data.amount.toLocaleString()} credited.`);
-      setCode(""); await refresh();
+      setLastReward({ amount: data.amount, code });
+      setCode("");
+      await refresh();
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Failed");
     } finally { setLoading(false); }
   };
 
+  const locked = !user?.has_invested;
+
   return (
-    <div className="space-y-8 max-w-2xl">
-      <div>
-        <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="coupon-heading">Redeem coupon</h1>
-        <p className="text-[#94A3B8] mt-2">Enter a promo code to top up your wallet.</p>
+    <div className="space-y-6 max-w-2xl mx-auto" data-testid="coupon-page">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6">
+        <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#F59E0B]/30 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-40 h-40 rounded-full bg-[#0055FF]/20 blur-3xl pointer-events-none" />
+        <div className="relative flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-[#F59E0B]/15 border border-[#F59E0B]/30 grid place-items-center shrink-0">
+            <Ticket className="w-6 h-6 text-[#F59E0B]" />
+          </div>
+          <div>
+            <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="coupon-heading">
+              Redeem a bonus code
+            </h1>
+            <p className="text-sm text-[#94A3B8] mt-1">
+              Instant naira credited straight to your wallet.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {!user?.has_invested && (
-        <div className="rounded-xl border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-5 text-sm" data-testid="coupon-locked-banner">
-          You must invest before redeeming coupon codes.
+      {locked && (
+        <div className="rounded-xl border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-4 flex items-start gap-3" data-testid="coupon-locked-banner">
+          <Lock className="w-5 h-5 text-[#F59E0B] mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="font-display font-600 text-sm">Redemption locked</div>
+            <div className="text-xs text-[#94A3B8] mt-1">You must invest before redeeming coupon codes.</div>
+          </div>
+          <Link to="/marketplace" className="shrink-0">
+            <Button size="sm" className="bg-[#F59E0B] hover:bg-[#d97706] text-white">
+              Invest <ArrowRight className="w-3 h-3 ml-1" />
+            </Button>
+          </Link>
         </div>
       )}
 
-      <Card className="bg-[#0B1524] border-[#1A2B44] p-6 rounded-xl">
-        <form onSubmit={redeem} className="space-y-4">
-          <div>
-            <Label>Coupon code</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required
-                   placeholder="ENTER-CODE"
-                   data-testid="coupon-code-input"
-                   className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12 tracking-widest uppercase font-display font-600 text-lg" />
+      {/* Ticket-styled form */}
+      <div className="relative" data-testid="coupon-ticket">
+        <div
+          className="relative rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-6 overflow-hidden"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 0 50%, transparent 12px, transparent 12px, transparent 100%), radial-gradient(circle at 100% 50%, transparent 12px, transparent 12px, transparent 100%)",
+          }}
+        >
+          {/* Notches */}
+          <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#020813] border border-[#1A2B44]" />
+          <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#020813] border border-[#1A2B44]" />
+
+          <form onSubmit={redeem} className="space-y-4">
+            <div>
+              <Label>Coupon code</Label>
+              <Input
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                required
+                placeholder="ENTER-CODE"
+                disabled={locked}
+                data-testid="coupon-code-input"
+                className="mt-2 bg-[#020813] border-[#1A2B44] text-white h-14 tracking-[0.35em] uppercase font-display font-700 text-xl text-center"
+              />
+              <p className="text-[10px] text-[#94A3B8] tabular mt-2 text-center">
+                Codes are case-insensitive. Paste-friendly.
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={loading || locked}
+              data-testid="coupon-redeem-button"
+              className="w-full h-12 bg-[#F59E0B] hover:bg-[#d97706] rounded-xl text-white font-display font-700"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              {loading ? "Redeeming…" : "Redeem code"}
+            </Button>
+          </form>
+        </div>
+      </div>
+
+      {/* Success chip */}
+      {lastReward && (
+        <div className="rounded-xl border border-[#10B981]/40 bg-[#10B981]/10 p-4 flex items-center gap-3" data-testid="coupon-success">
+          <CheckCircle2 className="w-5 h-5 text-[#10B981] shrink-0" />
+          <div className="flex-1">
+            <div className="font-display font-600 text-sm">Wallet credited</div>
+            <div className="text-xs text-[#94A3B8] mt-0.5">
+              Code <code className="text-white">{lastReward.code}</code> added{" "}
+              <span className="text-[#10B981] tabular">{formatNaira(lastReward.amount)}</span>
+            </div>
           </div>
-          <Button type="submit" disabled={loading || !user?.has_invested}
-                  data-testid="coupon-redeem-button"
-                  className="w-full h-11 bg-[#0055FF] hover:bg-[#3377FF] rounded-md glow-primary">
-            <Ticket className="w-4 h-4 mr-2" />
-            {loading ? "Redeeming…" : "Redeem code"}
-          </Button>
-        </form>
+        </div>
+      )}
+
+      {/* Balance card */}
+      <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Current wallet</div>
+          <div className="mt-1 font-display font-800 tabular text-lg" data-testid="coupon-wallet-balance">
+            {formatNaira(user?.wallet_balance)}
+          </div>
+        </div>
+        <Link to="/deposit" className="text-xs text-[#0055FF] hover:underline">Top up →</Link>
       </Card>
     </div>
   );

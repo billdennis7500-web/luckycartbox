@@ -41,7 +41,7 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       type="button"
       onClick={onClick}
       data-testid={testid}
-      className={`relative aspect-square rounded-2xl p-3 sm:p-4 border transition-all overflow-hidden text-left flex flex-col justify-between ${
+      className={`relative rounded-xl px-2 py-2.5 border transition-all overflow-hidden text-left flex flex-col justify-between min-h-[92px] ${
         selected
           ? "border-[#0055FF] ring-2 ring-[#0055FF]/40 bg-[#0B1524]"
           : "border-[#1A2B44] bg-[#0B1524] hover:border-[#0055FF]/50"
@@ -49,29 +49,48 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
     >
       {/* ambient tint */}
       <div
-        className="absolute -top-8 -right-8 w-28 h-28 rounded-full opacity-25 blur-2xl pointer-events-none"
+        className="absolute -top-6 -right-6 w-20 h-20 rounded-full opacity-25 blur-2xl pointer-events-none"
         style={{ background: tone.bg }}
       />
       <div className="relative flex items-start justify-between">
         <div
-          className="w-10 h-10 rounded-xl grid place-items-center font-display font-800 text-xs shrink-0"
+          className="w-8 h-8 rounded-lg grid place-items-center font-display font-800 text-[10px] shrink-0"
           style={{ background: tone.bg, color: tone.fg }}
         >
           {icon}
         </div>
         <span
-          className={`w-4 h-4 rounded-full border grid place-items-center shrink-0 ${
+          className={`w-3.5 h-3.5 rounded-full border grid place-items-center shrink-0 ${
             selected ? "bg-[#0055FF] border-[#0055FF]" : "border-[#1A2B44]"
           }`}
           aria-hidden
         >
-          {selected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+          {selected && <CheckCircle2 className="w-3 h-3 text-white" />}
         </span>
       </div>
-      <div className="relative">
-        <div className="font-display font-700 text-sm truncate">{label}</div>
-        <div className="text-[10px] text-[#94A3B8] mt-0.5 truncate">{sub}</div>
+      <div className="relative mt-1.5">
+        <div className="font-display font-700 text-[13px] leading-tight truncate">{label}</div>
+        <div className="text-[10px] text-[#94A3B8] mt-0.5 truncate tabular">{sub}</div>
       </div>
+    </button>
+  );
+}
+
+/* -------------- quick amount chip -------------- */
+const QUICK_AMOUNTS = [500, 1000, 2000, 5000, 10000, 20000];
+function QuickAmount({ value, selected, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(value)}
+      data-testid={`deposit-quick-${value}`}
+      className={`h-10 rounded-lg text-xs font-display font-700 tabular border transition-colors ${
+        selected
+          ? "bg-[#0055FF] text-white border-[#0055FF]"
+          : "bg-[#0B1524] border-[#1A2B44] text-white hover:border-[#0055FF]/40"
+      }`}
+    >
+      ₦{value.toLocaleString()}
     </button>
   );
 }
@@ -113,6 +132,13 @@ export default function Deposit() {
     api.get("/paynow/banks").then((r) => setInstantEnabled(!!r.data?.enabled)).catch(() => setInstantEnabled(false));
   };
   useEffect(() => { load(); }, []);
+
+  // Auto-select the first available payment method as soon as we know what's available.
+  useEffect(() => {
+    if (method || initialLoad) return;
+    if (instantEnabled) { setMethod("instant-pay"); return; }
+    if (accounts.length > 0) { setMethod(accounts[0].id); }
+  }, [instantEnabled, accounts, initialLoad, method]);
 
   useEffect(() => {
     if (!waitDep || waitState !== "waiting") return;
@@ -278,8 +304,19 @@ export default function Deposit() {
                 data-testid="deposit-amount-input"
                 className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12 tabular text-lg"
               />
+              {/* Quick amount chips */}
+              <div className="mt-3 grid grid-cols-3 gap-2" data-testid="deposit-quick-amounts">
+                {QUICK_AMOUNTS.map((v) => (
+                  <QuickAmount
+                    key={v}
+                    value={v}
+                    selected={Number(amount) === v}
+                    onClick={(val) => setAmount(String(val))}
+                  />
+                ))}
+              </div>
               {!method && (
-                <p className="text-xs text-[#F59E0B] mt-1" data-testid="deposit-pick-method-hint">
+                <p className="text-xs text-[#F59E0B] mt-2" data-testid="deposit-pick-method-hint">
                   Pick a payment option above to continue.
                 </p>
               )}

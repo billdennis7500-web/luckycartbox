@@ -5,38 +5,88 @@ import { api, formatNaira } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
   ArrowDownToLine, ArrowUpFromLine, Ticket, Sparkles, Gift, TrendingUp, Wallet,
-  Eye, EyeOff, Copy,
+  Eye, EyeOff, Copy, Send, PartyPopper,
 } from "lucide-react";
 import { toast } from "sonner";
 
+function QuickAction({ to, icon: Icon, label, tone, testid }) {
+  const map = {
+    green:  { bg: "bg-[#10B981]/15", ring: "border-[#10B981]/30", fg: "text-[#10B981]" },
+    blue:   { bg: "bg-[#0055FF]/15", ring: "border-[#0055FF]/30", fg: "text-[#0055FF]" },
+    amber:  { bg: "bg-[#F59E0B]/15", ring: "border-[#F59E0B]/30", fg: "text-[#F59E0B]" },
+    violet: { bg: "bg-[#8B5CF6]/15", ring: "border-[#8B5CF6]/30", fg: "text-[#8B5CF6]" },
+  };
+  const t = map[tone] || map.blue;
+  return (
+    <Link to={to} data-testid={testid} className="block">
+      <div className="rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-4 card-hover flex flex-col items-center justify-center gap-2 min-h-[110px]">
+        <div className={`w-12 h-12 rounded-xl ${t.bg} border ${t.ring} grid place-items-center`}>
+          <Icon className={`w-5 h-5 ${t.fg}`} />
+        </div>
+        <div className="text-xs font-display font-600 text-center">{label}</div>
+      </div>
+    </Link>
+  );
+}
+
 export default function Dashboard() {
   const { user, refresh } = useAuth();
-  const [tx, setTx] = useState([]);
   const [hidden, setHidden] = useState(false);
+  const [settings, setSettings] = useState({ telegram_url: "", welcome_message: "", site_name: "NaijaInvest" });
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   useEffect(() => {
     refresh();
-    api.get("/transactions").then((r) => setTx(r.data.slice(0, 5)));
+    api.get("/settings/public")
+      .then((r) => {
+        setSettings(r.data || {});
+        // Show welcome pop-up on every home visit / refresh (per user's request)
+        setWelcomeOpen(true);
+      })
+      .catch(() => setWelcomeOpen(true));
   }, []); // eslint-disable-line
 
-  const copyCode = () => {
+  const copyCode = async () => {
     if (!user?.referral_code) return;
-    navigator.clipboard.writeText(user.referral_code);
-    toast.success("Referral code copied");
+    try {
+      await navigator.clipboard.writeText(user.referral_code);
+      toast.success("Referral code copied");
+    } catch { toast.error("Clipboard blocked — copy manually"); }
   };
+
+  const tg = (settings.telegram_url || "").trim();
+  const brand = settings.site_name || "NaijaInvest";
+  const welcomeMsg = (settings.welcome_message || "").trim() ||
+    `Welcome to ${brand} — grow your money the smart way. Invest today, cash out tomorrow.`;
 
   return (
     <div className="space-y-6">
-      {/* Greeting */}
-      <div>
-        <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Welcome</div>
-        <h1 className="font-display text-2xl font-800 tracking-tight mt-1" data-testid="dashboard-heading">
-          Hi, {user?.name?.split(" ")[0] || "there"} 👋
-        </h1>
+      {/* Greeting + Telegram chip */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Welcome</div>
+          <h1 className="font-display text-2xl font-800 tracking-tight mt-1" data-testid="dashboard-heading">
+            Hi, {user?.name?.split(" ")[0] || "there"} 👋
+          </h1>
+        </div>
+        {tg && (
+          <a
+            href={tg}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="dashboard-telegram-chip"
+            className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-[#229ED9]/40 bg-[#229ED9]/10 text-[#229ED9] text-xs font-medium hover:bg-[#229ED9]/20 transition-colors"
+          >
+            <Send className="w-3.5 h-3.5" /> Join Telegram
+          </a>
+        )}
       </div>
 
-      {/* Wallet balance flat card */}
+      {/* Wallet balance card */}
       <Card
         data-testid="wallet-card"
         className="rounded-2xl border border-[#1A2B44] bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[#0B1524] p-6 text-white shadow-[0_20px_60px_-25px_rgba(0,85,255,0.6)]"
@@ -73,59 +123,20 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      {/* Primary actions: Deposit + Withdraw side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/deposit" data-testid="quick-deposit-link" className="block">
-          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
-            <div className="w-11 h-11 rounded-lg bg-[#10B981]/15 border border-[#10B981]/30 grid place-items-center">
-              <ArrowDownToLine className="w-5 h-5 text-[#10B981]" />
-            </div>
-            <div>
-              <div className="font-display font-600">Deposit</div>
-              <div className="text-xs text-[#94A3B8] mt-0.5">Fund your wallet</div>
-            </div>
-          </div>
-        </Link>
-        <Link to="/withdraw" data-testid="quick-withdraw-link" className="block">
-          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
-            <div className="w-11 h-11 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
-              <ArrowUpFromLine className="w-5 h-5 text-[#0055FF]" />
-            </div>
-            <div>
-              <div className="font-display font-600">Withdraw</div>
-              <div className="text-xs text-[#94A3B8] mt-0.5">Cash out to bank</div>
-            </div>
-          </div>
-        </Link>
-      </div>
+      {/* Quick actions — Deposit / Redeem / Withdraw / Invest in a 4-in-1 grid */}
+      <section>
+        <h2 className="font-display text-xs font-600 uppercase tracking-widest text-[#94A3B8] mb-3">
+          Quick actions
+        </h2>
+        <div className="grid grid-cols-4 gap-3" data-testid="quick-actions-grid">
+          <QuickAction to="/deposit"     icon={ArrowDownToLine} label="Deposit" tone="green"  testid="quick-deposit-link" />
+          <QuickAction to="/coupon"      icon={Ticket}          label="Redeem"  tone="amber"  testid="quick-redeem-link" />
+          <QuickAction to="/withdraw"    icon={ArrowUpFromLine} label="Withdraw" tone="blue"  testid="quick-withdraw-link" />
+          <QuickAction to="/marketplace" icon={TrendingUp}      label="Invest"   tone="violet" testid="quick-invest-link" />
+        </div>
+      </section>
 
-      {/* Secondary actions: Redeem + Invest */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/coupon" data-testid="quick-redeem-link" className="block">
-          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
-            <div className="w-11 h-11 rounded-lg bg-[#F59E0B]/15 border border-[#F59E0B]/30 grid place-items-center">
-              <Ticket className="w-5 h-5 text-[#F59E0B]" />
-            </div>
-            <div>
-              <div className="font-display font-600">Redeem</div>
-              <div className="text-xs text-[#94A3B8] mt-0.5">Use a bonus code</div>
-            </div>
-          </div>
-        </Link>
-        <Link to="/marketplace" data-testid="quick-invest-link" className="block">
-          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
-            <div className="w-11 h-11 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
-              <TrendingUp className="w-5 h-5 text-[#0055FF]" />
-            </div>
-            <div>
-              <div className="font-display font-600">Invest</div>
-              <div className="text-xs text-[#94A3B8] mt-0.5">Pick a plan</div>
-            </div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Not-invested banner */}
+      {/* Not-invested nudge */}
       {!user?.has_invested && (
         <div
           data-testid="not-invested-banner"
@@ -171,37 +182,51 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      {/* Recent activity */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-lg font-600">Recent activity</h2>
-          <Link to="/profile" className="text-xs text-[#0055FF] hover:underline">See all</Link>
-        </div>
-        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl divide-y divide-[#1A2B44] overflow-hidden">
-          {tx.length === 0 ? (
-            <div className="p-6 text-center text-sm text-[#94A3B8]" data-testid="no-recent-tx">
-              No transactions yet.
-            </div>
-          ) : (
-            tx.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <div className="min-w-0">
-                  <div className="capitalize truncate">{t.type.replace(/_/g, " ")}</div>
-                  <div className="text-xs text-[#94A3B8] truncate">{t.note}</div>
-                </div>
-                <div
-                  className={`tabular font-display font-600 shrink-0 ${
-                    t.amount >= 0 ? "text-[#10B981]" : "text-[#EF4444]"
-                  }`}
-                >
-                  {t.amount >= 0 ? "+" : ""}
-                  {formatNaira(t.amount)}
-                </div>
+      {/* Welcome modal (opens on every home visit / refresh) */}
+      <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
+        <DialogContent
+          data-testid="welcome-dialog"
+          className="bg-[#0B1524] border-[#1A2B44] text-white max-w-md rounded-2xl overflow-hidden"
+        >
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-[#0055FF]/30 blur-3xl" />
+            <div className="absolute -bottom-16 -left-16 w-40 h-40 rounded-full bg-[#8B5CF6]/20 blur-3xl" />
+          </div>
+          <div className="relative">
+            <DialogHeader className="text-center">
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center mb-2">
+                <PartyPopper className="w-6 h-6 text-[#0055FF]" />
               </div>
-            ))
-          )}
-        </Card>
-      </section>
+              <DialogTitle className="font-display text-xl">
+                Welcome back, {user?.name?.split(" ")[0] || "friend"}!
+              </DialogTitle>
+              <DialogDescription className="text-[#94A3B8] text-sm leading-relaxed pt-1">
+                {welcomeMsg}
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="mt-5 flex flex-col-reverse sm:flex-col gap-2">
+              {tg && (
+                <a href={tg} target="_blank" rel="noreferrer" data-testid="welcome-telegram-btn" className="block">
+                  <Button className="w-full h-11 bg-[#229ED9] hover:bg-[#1a8fc5]">
+                    <Send className="w-4 h-4 mr-2" /> Join our Telegram community
+                  </Button>
+                </a>
+              )}
+              <Button
+                onClick={() => setWelcomeOpen(false)}
+                variant={tg ? "outline" : "default"}
+                data-testid="welcome-close-btn"
+                className={tg
+                  ? "w-full h-11 border-[#1A2B44] bg-transparent text-white"
+                  : "w-full h-11 bg-[#0055FF] hover:bg-[#3377FF]"}
+              >
+                Continue to dashboard
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

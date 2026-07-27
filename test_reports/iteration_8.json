@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 8 verified all Dashboard/Deposit/Withdraw/WithdrawHistory/Profile/Coupon/Investments UX changes end-to-end + new public /api/settings/public endpoint + telegram_url/welcome_message admin persistence. Backend: pytest 62 tests, 61 passed and 1 flaky-only-in-parallel (TestPaynowBanks::test_user_paynow_banks_returns_curated_list — passes serially, race between the two xdist workers writing paynow_banks_all_enabled). Added 3 new tests under TestPublicSettingsAndTelegram: (1) unauth GET /api/settings/public returns 200 with all 6 keys, (2) admin PUT persists telegram_url + welcome_message and public endpoint reflects them, (3) clearing telegram_url produces empty string in public payload while welcome_message default remains truthy. Frontend E2E (428x900 mobile) as +2348047969299/pass1234 after admin set telegram_url='https://t.me/naijainvest_e2e' + welcome_message='E2E welcome message from admin panel.':\n1) Dashboard: welcome-dialog fires on mount with text 'Welcome back, TEST_FE!' + admin welcome_message + welcome-telegram-btn + welcome-close-btn; dialog re-appears on hard refresh (no localStorage suppression). dashboard-telegram-chip href = admin URL. quick-actions-grid uses `grid grid-cols-4 gap-3` with all 4 tiles (quick-deposit-link, quick-redeem-link, quick-withdraw-link, quick-invest-link). 'Recent activity' string absent from DOM. Referral code card still present.\n2) Deposit: 3 tiles rendered (instant + 2 payment accounts), instant tile has min-h-[92px]. Since paynow gateway is DISABLED, first payment account (ACCESS BANK) is auto-selected (ring-2 present) — matches spec fallback branch. deposit-pick-method-hint hidden after auto-select. deposit-selected-panel present. deposit-quick-amounts container uses `grid grid-cols-3 gap-2`. All 6 chips (deposit-quick-500/1000/2000/5000/10000/20000) render. Clicking deposit-quick-500 sets amount input to 500.\n3) Withdraw: 'Recent withdrawals' string absent. withdraw-history-link present.\n4) WithdrawHistory (/withdraw-history): page id present + all 4 status tab testids (whist-tab-all/pending/approved/rejected) + whist-search-input + whist-list.\n5) Profile: 0 role=tab elements (History Tabs fully removed). All menu link testids present: profile-link-referrals, -deposit, -deposit-history, -withdraw, -withdraw-history, -bank, -coupon, and profile-logout-button.\n6) Coupon (/coupon): coupon-page, coupon-heading, coupon-code-input, coupon-redeem-button, coupon-wallet-balance all present.\n7) Investments: exactly 1 [data-testid^='inv-daily-'] element for the Starter Plan showing '+₦10/ day' (200 * 5% = 10). Correct.\n8) Referrals: user has 0 referrals so load-more-gen1/2/3 buttons do NOT render (expected — button is conditional on remaining rows). No regression on the Refer & earn page (share links, WhatsApp/Telegram/X/Facebook share chips, Gen1/2/3 tab counts all render).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/user/paynow-banks", "issue": "TestPaynowBanks::test_user_paynow_banks_returns_curated_list fails intermittently (~50%) under pytest-xdist because both workers PUT paynow_banks_all_enabled=true/false against the same singleton settings doc — race. Serial run: 3/3 pass. Recommend either (a) marking these 3 tests non-parallel via @pytest.mark.serial + `pytest -m serial -p no:xdist` group, or (b) fixture that snapshots+restores paynow_banks_all_enabled around each test."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(minor) Stabilize the TestPaynowBanks race under pytest-xdist — see above.",
+    "(spec observation, not a bug) On /deposit, when paynow gateway is disabled, auto-selection lands on the first payment account (ACCESS BANK) instead of deposit-method-instant. This matches the review spec's fallback branch, so recorded here only for main-agent awareness — if the intent is to always default to Instant Pay even when disabled, this needs tweaking."
+  ],
+  "critical_code_review_comments": [
+    "/api/settings/public exposes welcome_bonus/min_deposit/min_withdrawal without auth — these are already user-facing values, but confirm none are considered sensitive (they aren't in this codebase).",
+    "Dashboard welcome dialog re-firing on every mount is intentional per PRD, but consider a 1-per-session localStorage flag OR a small cooldown to avoid annoying users who navigate away and back within seconds — currently every route change to /dashboard re-opens it.",
+    "server.py is 1570 lines — router split still recommended (flagged in iter-6/7).",
+    "Deposit.jsx auto-select effect: if paynow is enabled but the API call to fetch settings is slow, there's a brief window where deposit-pick-method-hint could flash before instant is selected. Consider gating the hint on `!settingsLoaded`.",
+    "DepositHistory / WithdrawHistory share almost identical row + status-pill + method-tag + accent-color logic — factor into /components/history/HistoryRow.jsx to eliminate duplication."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (appended TestPublicSettingsAndTelegram class — 3 new tests)"
+  ],
+  "success_rate": {
+    "backend": "98.4% (61/62 pytest; 1 flaky-in-parallel unrelated to this iteration)",
+    "frontend": "100% on all requested testids and behaviors"
+  },
+  "test_credentials": "Admin: billdennis750@gmail.com / djscan30. Primary: +2348047969299 / pass1234. Load-more: +2348052809027 / pass1234.",
+  "seed_data_creation": "None new. Admin settings were mutated during E2E: telegram_url='https://t.me/naijainvest_e2e' and welcome_message='E2E welcome message from admin panel.' — main agent can reset via PUT /api/admin/settings if desired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iter-8 spec items verified. Settings persistence: telegram_url and welcome_message roundtrip admin<->public correctly. Frontend testids all present and functioning. If retesting referrals load-more, use a user with >10 gen1 referrals — TEST_UserA/+2348052809027 does not currently have enough. Paynow gateway is disabled in this env, so /deposit auto-selects the first payment_account (ACCESS BANK), which is per spec fallback. Backend pytest flakiness on TestPaynowBanks is pre-existing (pytest-xdist race) — run serially to confirm 3/3 pass."
+}

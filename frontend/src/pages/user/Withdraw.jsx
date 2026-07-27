@@ -7,9 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { StatusPill } from "@/pages/user/Deposit";
-import { Lock, Zap, Landmark, ArrowRight } from "lucide-react";
-import LoadMore from "@/components/LoadMore";
+import { Lock, Zap, Landmark, ArrowRight, Receipt } from "lucide-react";
 
 function BankLogo({ brand }) {
   const b = brand || {};
@@ -26,18 +24,13 @@ function BankLogo({ brand }) {
 export default function Withdraw() {
   const { user, refresh } = useAuth();
   const [amount, setAmount] = useState("");
-  const [history, setHistory] = useState([]);
   const [bound, setBound] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [visible, setVisible] = useState(5);
   const [paynowEnabled, setPaynowEnabled] = useState(false);
 
   const load = () => {
-    api.get("/withdrawals").then((r) => setHistory(r.data));
     api.get("/me/bank-account").then((r) => setBound(r.data)).catch(() => setBound(null));
-    api.get("/paynow/banks")
-      .then((r) => setPaynowEnabled(!!r.data?.enabled))
-      .catch(() => setPaynowEnabled(false));
+    api.get("/paynow/banks").then((r) => setPaynowEnabled(!!r.data?.enabled)).catch(() => setPaynowEnabled(false));
   };
   useEffect(() => { load(); }, []);
 
@@ -55,7 +48,6 @@ export default function Withdraw() {
         : "Withdrawal requested. Awaiting admin approval.");
       setAmount("");
       await refresh();
-      load();
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Failed");
     } finally { setLoading(false); }
@@ -63,9 +55,18 @@ export default function Withdraw() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="withdraw-heading">Withdraw</h1>
-        <p className="text-sm text-[#94A3B8] mt-1">Cash out to your saved Nigerian bank account.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="withdraw-heading">Withdraw</h1>
+          <p className="text-sm text-[#94A3B8] mt-1">Cash out to your saved Nigerian bank account.</p>
+        </div>
+        <Link
+          to="/withdraw-history"
+          data-testid="withdraw-history-link"
+          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#1A2B44] bg-[#0B1524] text-xs text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 transition-colors"
+        >
+          <Receipt className="w-3.5 h-3.5" /> History
+        </Link>
       </div>
 
       {!canWithdraw && (
@@ -107,8 +108,7 @@ export default function Withdraw() {
           </Link>
         </Card>
       ) : (
-        <Link to="/bank-account" data-testid="withdraw-bind-cta"
-              className="block">
+        <Link to="/bank-account" data-testid="withdraw-bind-cta" className="block">
           <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl p-4 flex items-center gap-3 hover:border-[#0055FF]/40 transition-colors">
             <div className="w-11 h-11 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
               <Landmark className="w-5 h-5 text-[#0055FF]" />
@@ -124,7 +124,7 @@ export default function Withdraw() {
         </Link>
       )}
 
-      {/* Amount form (disabled until account bound) */}
+      {/* Amount form */}
       <Card className="bg-[#0B1524] border-[#1A2B44] p-5 rounded-2xl">
         <h2 className="font-display text-lg font-600 mb-4">Request withdrawal</h2>
         <form onSubmit={submit} className="space-y-4">
@@ -158,31 +158,6 @@ export default function Withdraw() {
           )}
         </form>
       </Card>
-
-      <section>
-        <h2 className="font-display text-lg font-600 mb-3">Recent withdrawals</h2>
-        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl overflow-hidden divide-y divide-[#1A2B44]">
-          {history.length === 0 ? (
-            <div className="p-6 text-center text-sm text-[#94A3B8]" data-testid="no-withdrawals">
-              No withdrawals yet.
-            </div>
-          ) : (
-            <>
-              {history.slice(0, visible).map((w) => (
-                <div key={w.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`withdraw-row-${w.id}`}>
-                  <div className="min-w-0">
-                    <div className="tabular font-display font-600">{formatNaira(w.amount)}</div>
-                    <div className="text-xs text-[#94A3B8] truncate">{w.bank_name} · {w.account_number}</div>
-                    <div className="text-xs text-[#94A3B8]">{new Date(w.created_at).toLocaleString()}</div>
-                  </div>
-                  <StatusPill status={w.status} />
-                </div>
-              ))}
-              <LoadMore shown={Math.min(visible, history.length)} total={history.length} onMore={setVisible} testid="load-more-withdrawals" />
-            </>
-          )}
-        </Card>
-      </section>
     </div>
   );
 }

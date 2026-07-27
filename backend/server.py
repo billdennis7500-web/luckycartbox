@@ -185,6 +185,8 @@ DEFAULT_SETTINGS = {
     "min_withdrawal": 1000.0,
     "min_deposit": 500.0,
     "site_name": "NaijaInvest",
+    "telegram_url": "",
+    "welcome_message": "Welcome to NaijaInvest — grow your money the smart way. Invest today, cash out tomorrow.",
 }
 
 
@@ -493,6 +495,8 @@ class SettingsIn(BaseModel):
     min_withdrawal: Optional[float] = None
     min_deposit: Optional[float] = None
     site_name: Optional[str] = None
+    telegram_url: Optional[str] = None
+    welcome_message: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -1519,6 +1523,20 @@ async def admin_get_settings(admin: dict = Depends(get_admin_user)):
     s = await get_settings()
     s.pop("_id", None)
     return s
+
+
+@api.get("/settings/public")
+async def public_settings():
+    """Non-sensitive settings safe to expose to any authenticated or anonymous client."""
+    s = await get_settings()
+    return {
+        "site_name": s.get("site_name") or "NaijaInvest",
+        "telegram_url": s.get("telegram_url") or "",
+        "welcome_message": s.get("welcome_message") or "",
+        "welcome_bonus": s.get("welcome_bonus") or 0,
+        "min_deposit": s.get("min_deposit") or 0,
+        "min_withdrawal": s.get("min_withdrawal") or 0,
+    }
 
 
 @api.put("/admin/settings")

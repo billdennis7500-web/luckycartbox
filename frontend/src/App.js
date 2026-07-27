@@ -15,6 +15,7 @@ import Marketplace from "@/pages/user/Marketplace";
 import Deposit from "@/pages/user/Deposit";
 import DepositHistory from "@/pages/user/DepositHistory";
 import Withdraw from "@/pages/user/Withdraw";
+import WithdrawHistory from "@/pages/user/WithdrawHistory";
 import Referrals from "@/pages/user/Referrals";
 import Coupon from "@/pages/user/Coupon";
 import Transactions from "@/pages/user/Transactions";
@@ -72,6 +73,7 @@ function App() {
             <Route path="deposit" element={<Deposit />} />
             <Route path="deposit-history" element={<DepositHistory />} />
             <Route path="withdraw" element={<Withdraw />} />
+            <Route path="withdraw-history" element={<WithdrawHistory />} />
             <Route path="bank-account" element={<BindAccount />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="coupon" element={<Coupon />} />

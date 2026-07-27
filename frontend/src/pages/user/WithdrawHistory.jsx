@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, Zap, Landmark, Receipt, ArrowDownToLine, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Search, Receipt, ArrowUpFromLine, Clock, CheckCircle2, XCircle, Landmark } from "lucide-react";
 import LoadMore from "@/components/LoadMore";
 
 const TABS = [
@@ -31,22 +30,6 @@ function StatusBadge({ status }) {
   );
 }
 
-function MethodTag({ d }) {
-  if (d.gateway === "paynow") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-[#0055FF]/30 bg-[#0055FF]/10 text-[#0055FF]">
-        <Zap className="w-3 h-3" /> Instant
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-[#1A2B44] bg-[#121E30] text-[#94A3B8]">
-      <Landmark className="w-3 h-3" /> {d.payment_account_bank || "Manual"}
-    </span>
-  );
-}
-
-/* Deterministic per-day tint so consecutive rows differ subtly */
 function accent(dateStr = "") {
   const palette = ["#0055FF", "#10B981", "#F59E0B", "#8B5CF6", "#EB1C24", "#0A6EBD"];
   let h = 0;
@@ -54,7 +37,7 @@ function accent(dateStr = "") {
   return palette[h % palette.length];
 }
 
-export default function DepositHistory() {
+export default function WithdrawHistory() {
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState("all");
   const [q, setQ] = useState("");
@@ -63,7 +46,7 @@ export default function DepositHistory() {
 
   useEffect(() => {
     setLoading(true);
-    api.get("/deposits").then((r) => setItems(r.data)).finally(() => setLoading(false));
+    api.get("/withdrawals").then((r) => setItems(r.data)).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { setVisible(10); }, [tab, q]);
@@ -74,8 +57,8 @@ export default function DepositHistory() {
     if (q) {
       const qq = q.toLowerCase();
       out = out.filter((d) =>
-        (d.reference || "").toLowerCase().includes(qq) ||
-        (d.payment_account_bank || "").toLowerCase().includes(qq) ||
+        (d.bank_name || "").toLowerCase().includes(qq) ||
+        (d.account_number || "").toLowerCase().includes(qq) ||
         String(d.amount || "").includes(qq)
       );
     }
@@ -92,27 +75,26 @@ export default function DepositHistory() {
   const totalApproved = items.filter((d) => d.status === "approved").reduce((s, d) => s + (d.amount || 0), 0);
 
   return (
-    <div className="space-y-5" data-testid="deposit-history-page">
+    <div className="space-y-5" data-testid="withdraw-history-page">
       <div className="flex items-center gap-3">
-        <Link to="/deposit" data-testid="hist-back-link"
+        <Link to="/withdraw" data-testid="whist-back-link"
               className="w-9 h-9 rounded-lg border border-[#1A2B44] grid place-items-center text-[#94A3B8] hover:text-white">
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div className="flex-1">
-          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="hist-heading">Deposit history</h1>
+          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="whist-heading">Withdrawal history</h1>
           <p className="text-xs text-[#94A3B8] mt-1">
-            {items.length} deposit{items.length === 1 ? "" : "s"} · <span className="text-[#10B981] tabular">{formatNaira(totalApproved)}</span> approved
+            {items.length} withdrawal{items.length === 1 ? "" : "s"} · <span className="text-[#10B981] tabular">{formatNaira(totalApproved)}</span> paid out
           </p>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="grid grid-cols-4 gap-2 p-1 rounded-xl bg-[#0B1524] border border-[#1A2B44]">
         {TABS.map(({ k, label }) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            data-testid={`hist-tab-${k}`}
+            data-testid={`whist-tab-${k}`}
             className={`h-9 text-xs rounded-lg font-medium transition-colors ${
               tab === k ? "bg-[#0055FF] text-white" : "text-[#94A3B8] hover:text-white"
             }`}
@@ -122,53 +104,44 @@ export default function DepositHistory() {
         ))}
       </div>
 
-      {/* Search */}
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3 top-3.5 text-[#94A3B8]" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search bank, reference or amount"
-               data-testid="hist-search-input"
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search bank, account or amount"
+               data-testid="whist-search-input"
                className="pl-9 bg-[#121E30] border-[#1A2B44] text-white h-11" />
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-8 text-center text-sm text-[#94A3B8]" data-testid="hist-loading">
+        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-8 text-center text-sm text-[#94A3B8]" data-testid="whist-loading">
           Loading history…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-8 text-center space-y-2" data-testid="hist-empty">
+        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-8 text-center space-y-2" data-testid="whist-empty">
           <Receipt className="w-6 h-6 text-[#0055FF] mx-auto" />
           <div className="text-sm text-[#94A3B8]">
-            {tab === "all" ? "You haven't made any deposits yet." : `No ${tab} deposits.`}
+            {tab === "all" ? "You haven't requested any withdrawals yet." : `No ${tab} withdrawals.`}
           </div>
-          <Link to="/deposit" className="inline-block text-xs text-[#0055FF] hover:underline">Make a deposit →</Link>
+          <Link to="/withdraw" className="inline-block text-xs text-[#0055FF] hover:underline">Request a withdrawal →</Link>
         </div>
       ) : (
         <>
-          <div className="text-[10px] text-[#94A3B8] tabular flex items-center justify-between" data-testid="hist-counter">
+          <div className="text-[10px] text-[#94A3B8] tabular flex items-center justify-between" data-testid="whist-counter">
             <span>Showing {Math.min(visible, filtered.length)} of {filtered.length}</span>
             <span>{tab === "all" ? "all statuses" : tab}</span>
           </div>
 
-          <div className="grid gap-3" data-testid="hist-list">
-            {filtered.slice(0, visible).map((d) => {
-              const c = accent(d.id || d.created_at || "");
-              const dt = new Date(d.created_at);
+          <div className="grid gap-3" data-testid="whist-list">
+            {filtered.slice(0, visible).map((w) => {
+              const c = accent(w.id || w.created_at || "");
+              const dt = new Date(w.created_at);
               return (
                 <div
-                  key={d.id}
-                  data-testid={`hist-row-${d.id}`}
+                  key={w.id}
+                  data-testid={`whist-row-${w.id}`}
                   className="relative overflow-hidden rounded-2xl border border-[#1A2B44] bg-[#0B1524] p-4 group hover:border-[#0055FF]/40 transition-colors"
                 >
-                  {/* Accent bar */}
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-1"
-                    style={{ background: `linear-gradient(180deg, ${c}, ${c}55)` }}
-                  />
-                  {/* Ambient tint */}
-                  <div
-                    className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-20 blur-2xl pointer-events-none"
-                    style={{ background: c }}
-                  />
+                  <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: `linear-gradient(180deg, ${c}, ${c}55)` }} />
+                  <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-20 blur-2xl pointer-events-none" style={{ background: c }} />
 
                   <div className="relative flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
@@ -176,32 +149,22 @@ export default function DepositHistory() {
                         className="w-10 h-10 rounded-xl grid place-items-center shrink-0"
                         style={{ background: `${c}20`, border: `1px solid ${c}55` }}
                       >
-                        <ArrowDownToLine className="w-4 h-4" style={{ color: c }} />
+                        <ArrowUpFromLine className="w-4 h-4" style={{ color: c }} />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-display font-800 tabular text-lg leading-tight">
-                          {formatNaira(d.amount)}
+                        <div className="font-display font-800 tabular text-lg leading-tight">{formatNaira(w.amount)}</div>
+                        <div className="mt-1 text-[11px] text-[#94A3B8] truncate flex items-center gap-1">
+                          <Landmark className="w-3 h-3 text-[#94A3B8]" /> {w.bank_name}
                         </div>
-                        <div className="mt-1 flex items-center gap-2 flex-wrap">
-                          <MethodTag d={d} />
-                          {d.payment_account_number && (
-                            <span className="text-[10px] text-[#94A3B8] tabular">
-                              {d.payment_account_number}
-                            </span>
-                          )}
-                        </div>
+                        <div className="text-[10px] text-[#94A3B8] tabular truncate">{w.account_number}</div>
                       </div>
                     </div>
-                    <StatusBadge status={d.status} />
+                    <StatusBadge status={w.status} />
                   </div>
 
                   <div className="relative mt-3 pt-3 border-t border-[#1A2B44] flex items-center justify-between text-[10px] text-[#94A3B8] tabular">
                     <span>{dt.toLocaleDateString(undefined, { day: "numeric", month: "short" })} · {dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    {d.reference && (
-                      <span className="truncate max-w-[50%]" title={d.reference}>
-                        Ref: <span className="text-white/70">{d.reference}</span>
-                      </span>
-                    )}
+                    <span className="truncate max-w-[50%]" title={w.account_name}>{w.account_name}</span>
                   </div>
                 </div>
               );
@@ -213,7 +176,7 @@ export default function DepositHistory() {
             total={filtered.length}
             onMore={setVisible}
             step={10}
-            testid="hist-load-more"
+            testid="whist-load-more"
           />
         </>
       )}

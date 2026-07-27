@@ -23,6 +23,8 @@ export default function AdminSettings() {
         min_deposit: Number(s.min_deposit),
         min_withdrawal: Number(s.min_withdrawal),
         site_name: s.site_name,
+        telegram_url: (s.telegram_url || "").trim(),
+        welcome_message: (s.welcome_message || "").trim(),
       });
       toast.success("Settings saved");
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail) || "Failed"); }
@@ -68,6 +70,32 @@ export default function AdminSettings() {
                    className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11" />
           </div>
         </div>
+
+        <div className="pt-3 border-t border-[#1A2B44]">
+          <div className="text-xs uppercase tracking-widest text-[#94A3B8] mb-3">Community & welcome pop-up</div>
+          <Label>Telegram community URL</Label>
+          <Input
+            value={s.telegram_url || ""}
+            onChange={(e) => setS({ ...s, telegram_url: e.target.value })}
+            placeholder="https://t.me/your-community"
+            data-testid="setting-telegram-url"
+            className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11"
+          />
+          <p className="text-xs text-[#94A3B8] mt-1">Shown as a "Join Telegram" chip on the user dashboard and welcome modal.</p>
+
+          <div className="mt-4">
+            <Label>Welcome pop-up message</Label>
+            <textarea
+              value={s.welcome_message || ""}
+              onChange={(e) => setS({ ...s, welcome_message: e.target.value })}
+              rows={3}
+              placeholder="Shown to users when they open or refresh the home page."
+              data-testid="setting-welcome-message"
+              className="mt-2 w-full rounded-md bg-[#121E30] border border-[#1A2B44] text-white px-3 py-2 text-sm focus:outline-none focus:border-[#0055FF]/40"
+            />
+          </div>
+        </div>
+
         <Button onClick={save} data-testid="setting-save-btn" className="bg-[#0055FF] hover:bg-[#3377FF]">Save</Button>
       </Card>
 

@@ -1,43 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { api, formatNaira } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  ArrowDownToLine, ArrowUpFromLine, Receipt, Users as UsersIcon, LogOut,
-  Shield, Copy, ChevronRight,
+  ArrowDownToLine, ArrowUpFromLine, Users as UsersIcon, LogOut,
+  Shield, Copy, ChevronRight, Ticket, Landmark, Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
-import { StatusPill } from "@/pages/user/Deposit";
-import LoadMore from "@/components/LoadMore";
 
 export default function Profile() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  const [tx, setTx] = useState([]);
-  const [deposits, setDeposits] = useState([]);
-  const [withdrawals, setWithdrawals] = useState([]);
-  const [tab, setTab] = useState("transactions");
-  const [visTx, setVisTx] = useState(10);
-  const [visDep, setVisDep] = useState(10);
-  const [visWd, setVisWd] = useState(10);
-
-  useEffect(() => {
-    api.get("/transactions").then((r) => setTx(r.data));
-    api.get("/deposits").then((r) => setDeposits(r.data));
-    api.get("/withdrawals").then((r) => setWithdrawals(r.data));
-  }, []);
 
   const onLogout = async () => {
     await logout();
     nav("/");
   };
 
-  const copy = (v) => {
-    navigator.clipboard.writeText(v);
-    toast.success("Copied");
+  const copy = async (v) => {
+    try { await navigator.clipboard.writeText(v); toast.success("Copied"); }
+    catch { toast.error("Clipboard blocked — copy manually"); }
   };
 
   return (
@@ -80,7 +63,11 @@ export default function Profile() {
       <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
         <ProfileLink to="/referrals" icon={UsersIcon} label="Referrals" hint="Invite & earn 3-gen commissions" testid="profile-link-referrals" />
         <ProfileLink to="/deposit" icon={ArrowDownToLine} label="Deposit" hint="Fund your wallet" testid="profile-link-deposit" />
+        <ProfileLink to="/deposit-history" icon={Receipt} label="Deposit history" hint="Every top-up you've made" testid="profile-link-deposit-history" />
         <ProfileLink to="/withdraw" icon={ArrowUpFromLine} label="Withdraw" hint="Cash out to bank" testid="profile-link-withdraw" />
+        <ProfileLink to="/withdraw-history" icon={Receipt} label="Withdrawal history" hint="Every payout you've requested" testid="profile-link-withdraw-history" />
+        <ProfileLink to="/bank-account" icon={Landmark} label="Bank account" hint="Bind or update your payout account" testid="profile-link-bank" />
+        <ProfileLink to="/coupon" icon={Ticket} label="Redeem coupon" hint="Use a promo code" testid="profile-link-coupon" />
         {user?.role === "admin" && (
           <ProfileLink to="/admin" icon={Shield} label="Admin panel" hint="Control center" testid="profile-link-admin" />
         )}
@@ -98,97 +85,6 @@ export default function Profile() {
           </div>
         </button>
       </Card>
-
-      {/* History tabs */}
-      <div>
-        <h2 className="font-display text-lg font-600 mb-3">History</h2>
-        <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <TabsList
-            data-testid="profile-tabs"
-            className="w-full grid grid-cols-3 bg-[#0B1524] border border-[#1A2B44] rounded-lg p-1 h-auto"
-          >
-            <TabsTrigger
-              value="transactions"
-              data-testid="profile-tab-transactions"
-              className="data-[state=active]:bg-[#0055FF] data-[state=active]:text-white text-[#94A3B8] rounded-md text-xs sm:text-sm"
-            >
-              Transactions
-            </TabsTrigger>
-            <TabsTrigger
-              value="deposits"
-              data-testid="profile-tab-deposits"
-              className="data-[state=active]:bg-[#0055FF] data-[state=active]:text-white text-[#94A3B8] rounded-md text-xs sm:text-sm"
-            >
-              Deposits
-            </TabsTrigger>
-            <TabsTrigger
-              value="withdrawals"
-              data-testid="profile-tab-withdrawals"
-              className="data-[state=active]:bg-[#0055FF] data-[state=active]:text-white text-[#94A3B8] rounded-md text-xs sm:text-sm"
-            >
-              Withdrawals
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="transactions" className="mt-4">
-            <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
-              {tx.length === 0 ? (
-                <EmptyRow label="No transactions yet" testid="no-tx" />
-              ) : tx.slice(0, visTx).map((t) => (
-                <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`profile-tx-${t.id}`}>
-                  <div className="min-w-0">
-                    <div className="capitalize truncate">{t.type.replace(/_/g, " ")}</div>
-                    <div className="text-xs text-[#94A3B8] truncate">{new Date(t.created_at).toLocaleString()}</div>
-                  </div>
-                  <div className={`tabular font-display font-600 shrink-0 ${t.amount >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
-                    {t.amount >= 0 ? "+" : ""}{formatNaira(t.amount)}
-                  </div>
-                </div>
-              ))}
-            </Card>
-            <LoadMore shown={Math.min(visTx, tx.length)} total={tx.length} onMore={setVisTx} testid="load-more-tx" />
-          </TabsContent>
-
-          <TabsContent value="deposits" className="mt-4">
-            <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
-              {deposits.length === 0 ? (
-                <EmptyRow label="No deposits yet" testid="no-deps" />
-              ) : deposits.slice(0, visDep).map((d) => (
-                <div key={d.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`profile-dep-${d.id}`}>
-                  <div className="min-w-0">
-                    <div className="tabular font-display font-600">{formatNaira(d.amount)}</div>
-                    <div className="text-xs text-[#94A3B8]">
-                      {new Date(d.created_at).toLocaleString()} · {d.gateway === "paynow" ? "Instant Pay" : "Manual"}
-                    </div>
-                  </div>
-                  <StatusPill status={d.status} />
-                </div>
-              ))}
-            </Card>
-            <LoadMore shown={Math.min(visDep, deposits.length)} total={deposits.length} onMore={setVisDep} testid="load-more-deps" />
-          </TabsContent>
-
-          <TabsContent value="withdrawals" className="mt-4">
-            <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
-              {withdrawals.length === 0 ? (
-                <EmptyRow label="No withdrawals yet" testid="no-wds" />
-              ) : withdrawals.slice(0, visWd).map((w) => (
-                <div key={w.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`profile-wd-${w.id}`}>
-                  <div className="min-w-0">
-                    <div className="tabular font-display font-600">{formatNaira(w.amount)}</div>
-                    <div className="text-xs text-[#94A3B8] truncate">
-                      {w.bank_name} · {w.account_number}
-                    </div>
-                    <div className="text-xs text-[#94A3B8]">{new Date(w.created_at).toLocaleString()}</div>
-                  </div>
-                  <StatusPill status={w.status} />
-                </div>
-              ))}
-            </Card>
-            <LoadMore shown={Math.min(visWd, withdrawals.length)} total={withdrawals.length} onMore={setVisWd} testid="load-more-wds" />
-          </TabsContent>
-        </Tabs>
-      </div>
     </div>
   );
 }
@@ -209,13 +105,5 @@ function ProfileLink({ to, icon: Icon, label, hint, testid }) {
       </div>
       <ChevronRight className="w-4 h-4 text-[#94A3B8]" />
     </Link>
-  );
-}
-
-function EmptyRow({ label, testid }) {
-  return (
-    <div className="p-8 text-center text-sm text-[#94A3B8]" data-testid={testid}>
-      {label}
-    </div>
   );
 }

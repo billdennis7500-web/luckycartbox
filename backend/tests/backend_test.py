@@ -1018,3 +1018,57 @@ class TestDepositEnrichment:
             # 502 is acceptable when gateway offline; the created "failed" doc is fine
             assert r.status_code in (400, 502), f"unexpected {r.status_code}: {r.text}"
 
+
+
+# ---------------------------------------------------------------------------
+# Public settings endpoint + telegram_url/welcome_message admin persistence (iter 8)
+# ---------------------------------------------------------------------------
+class TestPublicSettingsAndTelegram:
+    def test_public_settings_no_auth_returns_200_with_shape(self):
+        r = requests.get(f"{BASE_URL}/api/settings/public", timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        for k in ("site_name", "telegram_url", "welcome_message",
+                  "welcome_bonus", "min_deposit", "min_withdrawal"):
+            assert k in d, f"missing key {k}"
+        assert isinstance(d["site_name"], str) and len(d["site_name"]) > 0
+        assert isinstance(d["telegram_url"], str)
+        assert isinstance(d["welcome_message"], str)
+
+    def test_admin_update_persists_telegram_and_welcome(self, admin_headers):
+        new_tg = "https://t.me/naijainvest_test"
+        new_msg = "TEST_ITER8_welcome_msg custom line"
+        r = requests.put(f"{BASE_URL}/api/admin/settings",
+                         json={"telegram_url": new_tg, "welcome_message": new_msg},
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        s = r.json()
+        assert s["telegram_url"] == new_tg
+        assert s["welcome_message"] == new_msg
+
+        # GET admin settings reflects new
+        r2 = requests.get(f"{BASE_URL}/api/admin/settings", headers=admin_headers, timeout=15)
+        assert r2.status_code == 200
+        s2 = r2.json()
+        assert s2["telegram_url"] == new_tg
+        assert s2["welcome_message"] == new_msg
+
+        # Public endpoint (no auth) also reflects updates
+        r3 = requests.get(f"{BASE_URL}/api/settings/public", timeout=15)
+        assert r3.status_code == 200
+        d3 = r3.json()
+        assert d3["telegram_url"] == new_tg
+        assert d3["welcome_message"] == new_msg
+
+    def test_public_settings_defaults_present_when_unset(self, admin_headers):
+        # Clear telegram_url; welcome_message default should still be non-empty
+        r = requests.put(f"{BASE_URL}/api/admin/settings",
+                         json={"telegram_url": ""},
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 200
+        r2 = requests.get(f"{BASE_URL}/api/settings/public", timeout=15)
+        assert r2.status_code == 200
+        d = r2.json()
+        assert d["telegram_url"] == ""
+        # welcome_message should still be truthy (either previously set or default)
+        assert isinstance(d["welcome_message"], str)

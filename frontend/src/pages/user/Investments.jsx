@@ -61,7 +61,8 @@ function InvestmentCard({ inv }) {
   const done = inv.status === "completed";
   const progress = Math.min(100, Math.round((inv.drops_done / inv.duration_days) * 100));
   const roiPct = inv.price ? (inv.total_earned / inv.price) * 100 : 0;
-  const projected = inv.price * (inv.daily_profit_pct / 100) * inv.duration_days;
+  const dailyEarn = (inv.price || 0) * ((inv.daily_profit_pct || 0) / 100);
+  const projected = dailyEarn * (inv.duration_days || 0);
   const remaining = Math.max(0, projected - inv.total_earned);
 
   return (
@@ -97,6 +98,17 @@ function InvestmentCard({ inv }) {
 
       {/* body */}
       <div className="p-4">
+        {/* Daily earning strip */}
+        <div className="mb-4 rounded-xl border border-[#10B981]/30 bg-[#10B981]/10 px-3 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#10B981]/90">
+            <Timer className="w-3 h-3" /> Daily earnings
+          </div>
+          <div className="font-display font-800 tabular text-[#10B981]" data-testid={`inv-daily-${inv.id}`}>
+            +{formatNaira(dailyEarn)}
+            <span className="text-[10px] text-[#10B981]/70 font-500 ml-1">/ day</span>
+          </div>
+        </div>
+
         <div className="flex items-center gap-4">
           <Ring pct={progress} tone={done ? "#94A3B8" : brand.bg} />
           <div className="flex-1 grid grid-cols-2 gap-2">
