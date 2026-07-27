@@ -17,6 +17,7 @@ import Withdraw from "@/pages/user/Withdraw";
 import Referrals from "@/pages/user/Referrals";
 import Coupon from "@/pages/user/Coupon";
 import Transactions from "@/pages/user/Transactions";
+import Profile from "@/pages/user/Profile";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminOverview from "@/pages/admin/AdminOverview";
@@ -61,6 +62,7 @@ function App() {
             <Route path="referrals" element={<Referrals />} />
             <Route path="coupon" element={<Coupon />} />
             <Route path="transactions" element={<Transactions />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route

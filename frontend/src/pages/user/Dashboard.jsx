@@ -4,17 +4,17 @@ import { useAuth } from "@/context/AuthContext";
 import { api, formatNaira } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wallet, TrendingUp, Gift, Users, Sparkles, ArrowUpRight } from "lucide-react";
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend,
-} from "recharts";
+  ArrowDownToLine, ArrowUpFromLine, Ticket, Sparkles, Gift, TrendingUp, Wallet,
+  Eye, EyeOff, Copy,
+} from "lucide-react";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const { user, refresh } = useAuth();
   const [invs, setInvs] = useState([]);
   const [tx, setTx] = useState([]);
-  const [history, setHistory] = useState(null);
-  const [range, setRange] = useState(30);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     refresh();
@@ -22,197 +22,193 @@ export default function Dashboard() {
     api.get("/transactions").then((r) => setTx(r.data.slice(0, 5)));
   }, []); // eslint-disable-line
 
-  useEffect(() => {
-    api.get("/wallet-history", { params: { days: range } }).then((r) => setHistory(r.data));
-  }, [range, user?.wallet_balance]);
-
   const active = invs.filter((i) => i.status === "active");
-  const totalEarned = user?.total_earned || 0;
-  const totalInvested = user?.total_invested || 0;
 
-  const stats = [
-    { label: "Wallet", value: formatNaira(user?.wallet_balance), icon: Wallet, testid: "stat-wallet" },
-    { label: "Bonus", value: formatNaira(user?.bonus_balance), icon: Gift, testid: "stat-bonus" },
-    { label: "Total invested", value: formatNaira(totalInvested), icon: TrendingUp, testid: "stat-invested" },
-    { label: "Total earned", value: formatNaira(totalEarned), icon: Sparkles, testid: "stat-earned" },
-  ];
+  const copyCode = () => {
+    if (!user?.referral_code) return;
+    navigator.clipboard.writeText(user.referral_code);
+    toast.success("Referral code copied");
+  };
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="dashboard-heading">
-            Welcome back, {user?.name?.split(" ")[0]}.
-          </h1>
-          <p className="text-[#94A3B8] mt-2">Here's how your naira is doing today.</p>
+    <div className="space-y-6">
+      {/* Greeting */}
+      <div>
+        <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Welcome</div>
+        <h1 className="font-display text-2xl font-800 tracking-tight mt-1" data-testid="dashboard-heading">
+          Hi, {user?.name?.split(" ")[0] || "there"} 👋
+        </h1>
+      </div>
+
+      {/* Wallet balance flat card */}
+      <Card
+        data-testid="wallet-card"
+        className="rounded-2xl border border-[#1A2B44] bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[#0B1524] p-6 text-white shadow-[0_20px_60px_-25px_rgba(0,85,255,0.6)]"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/70">
+            <Wallet className="w-3.5 h-3.5" /> Wallet balance
+          </div>
+          <button
+            onClick={() => setHidden((v) => !v)}
+            data-testid="wallet-hide-toggle"
+            className="text-white/70 hover:text-white transition-colors"
+          >
+            {hidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
         </div>
-        <Link to="/marketplace" data-testid="dashboard-invest-link">
-          <Button className="bg-[#0055FF] hover:bg-[#3377FF] rounded-md glow-primary h-11">
-            Invest now <ArrowUpRight className="w-4 h-4 ml-1" />
-          </Button>
+        <div className="mt-3 font-display font-800 text-4xl sm:text-5xl tabular" data-testid="wallet-amount">
+          {hidden ? "₦ • • • • •" : formatNaira(user?.wallet_balance)}
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
+          <div>
+            <div className="text-white/60 uppercase tracking-wider">Bonus</div>
+            <div className="mt-1 font-display font-600 tabular">{formatNaira(user?.bonus_balance)}</div>
+          </div>
+          <div>
+            <div className="text-white/60 uppercase tracking-wider">Invested</div>
+            <div className="mt-1 font-display font-600 tabular">{formatNaira(user?.total_invested)}</div>
+          </div>
+          <div>
+            <div className="text-white/60 uppercase tracking-wider">Earned</div>
+            <div className="mt-1 font-display font-600 tabular">{formatNaira(user?.total_earned)}</div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Primary actions: Deposit + Withdraw side by side */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/deposit" data-testid="quick-deposit-link" className="block">
+          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-[#10B981]/15 border border-[#10B981]/30 grid place-items-center">
+              <ArrowDownToLine className="w-5 h-5 text-[#10B981]" />
+            </div>
+            <div>
+              <div className="font-display font-600">Deposit</div>
+              <div className="text-xs text-[#94A3B8] mt-0.5">Fund your wallet</div>
+            </div>
+          </div>
+        </Link>
+        <Link to="/withdraw" data-testid="quick-withdraw-link" className="block">
+          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
+              <ArrowUpFromLine className="w-5 h-5 text-[#0055FF]" />
+            </div>
+            <div>
+              <div className="font-display font-600">Withdraw</div>
+              <div className="text-xs text-[#94A3B8] mt-0.5">Cash out to bank</div>
+            </div>
+          </div>
         </Link>
       </div>
 
-      {!user?.has_invested && (
-        <div className="rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-5 flex flex-wrap items-center justify-between gap-4" data-testid="not-invested-banner">
-          <div className="flex items-start gap-3">
-            <Sparkles className="w-5 h-5 text-[#0055FF] mt-0.5" />
+      {/* Secondary actions: Redeem + Invest */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/coupon" data-testid="quick-redeem-link" className="block">
+          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-[#F59E0B]/15 border border-[#F59E0B]/30 grid place-items-center">
+              <Ticket className="w-5 h-5 text-[#F59E0B]" />
+            </div>
             <div>
-              <div className="font-display font-600">You have a ₦{Math.round(user?.bonus_balance || 0)} welcome bonus waiting.</div>
-              <div className="text-sm text-[#94A3B8] mt-1">
-                Deposit funds and pick a plan to activate withdrawals, referral commissions, and coupon redemptions.
-              </div>
+              <div className="font-display font-600">Redeem</div>
+              <div className="text-xs text-[#94A3B8] mt-0.5">Use a bonus code</div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Link to="/deposit"><Button variant="outline" className="border-[#1A2B44] bg-transparent hover:bg-[#121E30] text-white">Deposit</Button></Link>
-            <Link to="/marketplace"><Button className="bg-[#0055FF] hover:bg-[#3377FF]">See plans</Button></Link>
+        </Link>
+        <Link to="/marketplace" data-testid="quick-invest-link" className="block">
+          <div className="rounded-xl border border-[#1A2B44] bg-[#0B1524] p-5 card-hover flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
+              <TrendingUp className="w-5 h-5 text-[#0055FF]" />
+            </div>
+            <div>
+              <div className="font-display font-600">Invest</div>
+              <div className="text-xs text-[#94A3B8] mt-0.5">Pick a plan</div>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Not-invested banner */}
+      {!user?.has_invested && (
+        <div
+          data-testid="not-invested-banner"
+          className="rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-4 flex items-start gap-3"
+        >
+          <Sparkles className="w-5 h-5 text-[#0055FF] mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="font-display font-600 text-sm">
+              You have {formatNaira(user?.bonus_balance)} welcome bonus.
+            </div>
+            <div className="text-xs text-[#94A3B8] mt-1">
+              Invest to unlock withdrawals, referral commissions and coupon redemptions.
+            </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
-          <Card key={s.label} className="bg-[#0B1524] border border-[#1A2B44] p-5 rounded-xl card-hover" data-testid={s.testid}>
-            <div className="flex items-center justify-between">
-              <div className="text-xs uppercase tracking-widest text-[#94A3B8]">{s.label}</div>
-              <s.icon className="w-4 h-4 text-[#0055FF]" />
-            </div>
-            <div className="mt-3 font-display font-800 text-2xl tabular">{s.value}</div>
-          </Card>
-        ))}
-      </div>
-
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      {/* Referral code hint */}
+      <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl p-5">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl font-600">Wallet history</h2>
-            <p className="text-xs text-[#94A3B8] mt-1">Running balance & daily flow.</p>
+            <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Your referral code</div>
+            <div className="mt-1 font-display font-800 text-xl tabular" data-testid="dashboard-ref-code">
+              {user?.referral_code}
+            </div>
           </div>
-          <div className="inline-flex rounded-md border border-[#1A2B44] bg-[#0B1524] p-1" data-testid="range-toggle">
-            {[7, 30, 90].map((d) => (
-              <button
-                key={d}
-                onClick={() => setRange(d)}
-                data-testid={`range-${d}`}
-                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                  range === d ? "bg-[#0055FF] text-white" : "text-[#94A3B8] hover:text-white"
-                }`}
-              >
-                {d}D
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={copyCode}
+              data-testid="dashboard-copy-ref"
+              className="border-[#1A2B44] bg-transparent text-white"
+            >
+              <Copy className="w-3 h-3 mr-1" /> Copy
+            </Button>
+            <Link to="/referrals" data-testid="dashboard-referrals-link">
+              <Button size="sm" className="bg-[#0055FF] hover:bg-[#3377FF]">
+                <Gift className="w-3 h-3 mr-1" /> Invite
+              </Button>
+            </Link>
           </div>
         </div>
-        <div className="grid lg:grid-cols-3 gap-4">
-          <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl p-4 lg:col-span-2" data-testid="wallet-chart-card">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={history?.series || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="g-bal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0055FF" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="#0055FF" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#1A2B44" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#94A3B8"
-                    fontSize={11}
-                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}
-                    tick={{ fill: "#94A3B8" }}
-                  />
-                  <YAxis
-                    stroke="#94A3B8"
-                    fontSize={11}
-                    tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
-                    tick={{ fill: "#94A3B8" }}
-                    width={50}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: "#0B1524", border: "1px solid #1A2B44", borderRadius: 8, color: "#F8FAFC" }}
-                    labelFormatter={(d) => new Date(d).toLocaleDateString("en-NG", { weekday: "short", month: "short", day: "numeric" })}
-                    formatter={(v) => [formatNaira(v), "Balance"]}
-                  />
-                  <Area type="monotone" dataKey="balance" stroke="#0055FF" strokeWidth={2.5} fill="url(#g-bal)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
+      </Card>
 
-          <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl p-4" data-testid="flow-chart-card">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={history?.series || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="#1A2B44" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#94A3B8"
-                    fontSize={11}
-                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}
-                    tick={{ fill: "#94A3B8" }}
-                  />
-                  <YAxis
-                    stroke="#94A3B8"
-                    fontSize={11}
-                    tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
-                    tick={{ fill: "#94A3B8" }}
-                    width={50}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: "#0B1524", border: "1px solid #1A2B44", borderRadius: 8, color: "#F8FAFC" }}
-                    labelFormatter={(d) => new Date(d).toLocaleDateString("en-NG", { weekday: "short", month: "short", day: "numeric" })}
-                    formatter={(v, key) => [formatNaira(v), key === "credit" ? "In" : "Out"]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, color: "#94A3B8" }} />
-                  <Bar dataKey="credit" fill="#10B981" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="debit" fill="#EF4444" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
-      </section>
-
+      {/* Active investments */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-600">Active investments</h2>
-          <Link to="/marketplace" className="text-sm text-[#0055FF] hover:underline">Browse plans</Link>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-600">Active investments</h2>
+          <Link to="/marketplace" className="text-xs text-[#0055FF] hover:underline">Browse plans</Link>
         </div>
         {active.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#1A2B44] p-10 text-center text-[#94A3B8]" data-testid="no-active-investments">
-            No active investments yet. Pick a plan to start earning daily.
+          <div
+            className="rounded-xl border border-dashed border-[#1A2B44] p-8 text-center text-sm text-[#94A3B8]"
+            data-testid="no-active-investments"
+          >
+            No active investments. Pick a plan to start earning.
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid gap-3">
             {active.map((i) => {
               const progress = Math.min(100, Math.round((i.drops_done / i.duration_days) * 100));
               return (
-                <Card key={i.id} className="bg-[#0B1524] border border-[#1A2B44] p-5 rounded-xl card-hover" data-testid={`active-inv-${i.id}`}>
+                <Card
+                  key={i.id}
+                  className="bg-[#0B1524] border-[#1A2B44] p-4 rounded-xl"
+                  data-testid={`active-inv-${i.id}`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="font-display font-600">{i.product_name}</div>
-                    <div className="text-xs px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">Active</div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <div className="text-xs text-[#94A3B8]">Invested</div>
-                      <div className="tabular font-display font-600">{formatNaira(i.price)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#94A3B8]">Daily</div>
-                      <div className="tabular font-display font-600">{i.daily_profit_pct}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#94A3B8]">Earned</div>
-                      <div className="tabular text-[#10B981]">{formatNaira(i.total_earned)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#94A3B8]">Days</div>
-                      <div className="tabular">{i.drops_done} / {i.duration_days}</div>
+                    <div className="text-xs px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
+                      {i.daily_profit_pct}% / day
                     </div>
                   </div>
-                  <div className="mt-4 h-1.5 rounded-full bg-[#1A2B44] overflow-hidden">
+                  <div className="mt-3 flex items-center justify-between text-xs text-[#94A3B8]">
+                    <span>Earned <span className="text-[#10B981] tabular">{formatNaira(i.total_earned)}</span></span>
+                    <span className="tabular">{i.drops_done} / {i.duration_days} days</span>
+                  </div>
+                  <div className="mt-3 h-1.5 rounded-full bg-[#1A2B44] overflow-hidden">
                     <div className="h-full bg-[#0055FF]" style={{ width: `${progress}%` }} />
                   </div>
                 </Card>
@@ -222,25 +218,35 @@ export default function Dashboard() {
         )}
       </section>
 
+      {/* Recent activity */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-600">Recent activity</h2>
-          <Link to="/transactions" className="text-sm text-[#0055FF] hover:underline">See all</Link>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-600">Recent activity</h2>
+          <Link to="/profile" className="text-xs text-[#0055FF] hover:underline">See all</Link>
         </div>
-        <Card className="bg-[#0B1524] border border-[#1A2B44] rounded-xl divide-y divide-[#1A2B44] overflow-hidden">
+        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-xl divide-y divide-[#1A2B44] overflow-hidden">
           {tx.length === 0 ? (
-            <div className="p-6 text-center text-sm text-[#94A3B8]" data-testid="no-recent-tx">No transactions yet.</div>
-          ) : tx.map((t) => (
-            <div key={t.id} className="flex items-center justify-between px-5 py-3 text-sm">
-              <div>
-                <div className="capitalize">{t.type.replace(/_/g, " ")}</div>
-                <div className="text-xs text-[#94A3B8]">{t.note}</div>
-              </div>
-              <div className={`tabular font-display font-600 ${t.amount >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
-                {t.amount >= 0 ? "+" : ""}{formatNaira(t.amount)}
-              </div>
+            <div className="p-6 text-center text-sm text-[#94A3B8]" data-testid="no-recent-tx">
+              No transactions yet.
             </div>
-          ))}
+          ) : (
+            tx.map((t) => (
+              <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div className="min-w-0">
+                  <div className="capitalize truncate">{t.type.replace(/_/g, " ")}</div>
+                  <div className="text-xs text-[#94A3B8] truncate">{t.note}</div>
+                </div>
+                <div
+                  className={`tabular font-display font-600 shrink-0 ${
+                    t.amount >= 0 ? "text-[#10B981]" : "text-[#EF4444]"
+                  }`}
+                >
+                  {t.amount >= 0 ? "+" : ""}
+                  {formatNaira(t.amount)}
+                </div>
+              </div>
+            ))
+          )}
         </Card>
       </section>
     </div>
