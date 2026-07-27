@@ -1238,6 +1238,58 @@ async def admin_list_users(admin: dict = Depends(get_admin_user), q: Optional[st
     return [clean(d) for d in docs]
 
 
+class PlatformResetIn(BaseModel):
+    confirm: str = Field(..., description="Must exactly equal 'DELETE ALL DATA' to proceed")
+
+
+@api.post("/admin/reset")
+async def admin_reset_platform(payload: PlatformResetIn, admin: dict = Depends(get_admin_user)):
+    """Wipe all user-generated data from the platform.
+
+    Cleared: **users** (except admins), **deposits**, **withdrawals**, **transactions**,
+    **investments**, and coupon-redemption metadata on the coupon docs.
+    Preserved: **settings**, **products**, **payment_accounts**, **coupons** (as templates),
+    and every user with `role == "admin"`.
+
+    Guard rails:
+      * caller must be an admin
+      * payload.confirm must equal `"DELETE ALL DATA"` verbatim
+      * every deletion is logged with the admin identity and per-collection counts
+      * admin `wallet_balance` / `bonus_balance` are also reset to 0 so their KPI
+        widgets don't keep phantom balances from the old data
+    """
+    if payload.confirm != "DELETE ALL DATA":
+        raise HTTPException(400, "Confirmation phrase mismatch. Type 'DELETE ALL DATA' to proceed.")
+
+    result: dict = {}
+    result["users_deleted"] = (await db.users.delete_many({"role": {"$ne": "admin"}})).deleted_count
+    result["deposits_deleted"] = (await db.deposits.delete_many({})).deleted_count
+    result["withdrawals_deleted"] = (await db.withdrawals.delete_many({})).deleted_count
+    result["transactions_deleted"] = (await db.transactions.delete_many({})).deleted_count
+    result["investments_deleted"] = (await db.investments.delete_many({})).deleted_count
+    # Reset per-coupon redemption trackers so old codes can be re-used cleanly.
+    coupon_reset = await db.coupons.update_many(
+        {},
+        {"$set": {"redemption_count": 0, "redeemed_by": []}},
+    )
+    result["coupons_reset"] = coupon_reset.modified_count
+    # Reset the calling admin's balances so their dashboard KPIs start fresh.
+    await db.users.update_many(
+        {"role": "admin"},
+        {"$set": {"wallet_balance": 0.0, "bonus_balance": 0.0,
+                  "total_invested": 0.0, "total_earned": 0.0,
+                  "admin_credited_total": 0.0, "has_invested": False}},
+    )
+    logger.warning(
+        "Admin %s wiped the platform: users=%d deposits=%d withdrawals=%d "
+        "transactions=%d investments=%d coupons_reset=%d",
+        admin.get("email") or admin.get("_id"),
+        result["users_deleted"], result["deposits_deleted"], result["withdrawals_deleted"],
+        result["transactions_deleted"], result["investments_deleted"], result["coupons_reset"],
+    )
+    return {"ok": True, **result}
+
+
 @api.get("/admin/users/{uid}")
 async def admin_get_user(uid: str, admin: dict = Depends(get_admin_user)):
     u = await db.users.find_one({"_id": oid(uid)})

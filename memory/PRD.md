@@ -312,6 +312,17 @@ Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.
 - **AdminDeposits toast now shows** `Approved · Credited ₦X` with `{userName} · New balance ₦Y` — admin can visually confirm the credit landed and how much the wallet is now sitting at, without having to click through to the user detail page. Removes the guesswork behind the "approved but balance didn't change?" reports.
 - Verified end-to-end with a regression test (`/app/tmp/test_dep_approve.py`): TEST_Norm → deposit ₦750 → admin approves → response returns new balance ₦750 → DB confirms wallet_balance is ₦750 → double-approve properly 400s with "Already approved".
 
+## 2026-07-27 · Admin platform-wipe (Danger Zone)
+
+### Delivered
+- **New backend endpoint** `POST /api/admin/reset` — wipes all user-generated data in one operation. Payload requires `{ "confirm": "DELETE ALL DATA" }` verbatim; anything else returns `400 Confirmation phrase mismatch`.
+- Wipes: **users** (WHERE `role != "admin"`), **deposits**, **withdrawals**, **transactions**, **investments**. Also resets each coupon's `redemption_count` + `redeemed_by` so old codes are usable again.
+- Preserves: **admin accounts, products, payment_accounts, coupons (as templates), settings**.
+- Also resets every admin's own `wallet_balance` / `bonus_balance` / `total_invested` / `total_earned` / `admin_credited_total` / `has_invested` so KPI cards start from zero.
+- Every wipe is logged (`logger.warning`) with admin identity + per-collection counts.
+- **Frontend**: new **Danger Zone** card at the bottom of `AdminSettings` (red border, warning icon, explanatory copy). Opens a shadcn Dialog requiring the exact phrase `DELETE ALL DATA` before the destructive "Wipe platform" button enables. On success shows a summary grid (Users / Deposits / Withdrawals / Investments / Transactions / Coupons reset) with the counts that were removed.
+- Verified end-to-end via Playwright: card renders, dialog opens, wrong phrase keeps button disabled, correct phrase enables it. Backend guard also verified via curl (`nope` → 400 with mismatch message).
+
 ### Deferred (unchanged)
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.

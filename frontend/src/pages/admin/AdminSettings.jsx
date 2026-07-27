@@ -4,8 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy } from "lucide-react";
+import { Copy, AlertTriangle, Trash2, Loader2 } from "lucide-react";
 
 export default function AdminSettings() {
   const [s, setS] = useState(null);
@@ -199,7 +202,173 @@ export default function AdminSettings() {
           </div>
         </Card>
       )}
+
+      <DangerZoneCard />
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Danger Zone — wipe all user data                                          */
+/* -------------------------------------------------------------------------- */
+
+function DangerZoneCard() {
+  const [open, setOpen] = useState(false);
+  const [phrase, setPhrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const PHRASE = "DELETE ALL DATA";
+
+  const submit = async () => {
+    if (phrase.trim() !== PHRASE) {
+      toast.error(`Type "${PHRASE}" exactly to confirm`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data } = await api.post("/admin/reset", { confirm: PHRASE });
+      setResult(data);
+      toast.success(
+        `Platform wiped · ${data.users_deleted} users removed`,
+        {
+          description: `Deposits ${data.deposits_deleted} · Withdrawals ${data.withdrawals_deleted} · Investments ${data.investments_deleted} · Transactions ${data.transactions_deleted}`,
+        },
+      );
+      setPhrase("");
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Reset failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const close = () => {
+    if (busy) return;
+    setOpen(false);
+    setPhrase("");
+    setResult(null);
+  };
+
+  return (
+    <Card
+      className="bg-[#3b0d10] border border-[#EF4444]/40 p-5 rounded-2xl"
+      data-testid="admin-danger-zone-card"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl grid place-items-center bg-[#EF4444]/20 border border-[#EF4444]/40 shrink-0">
+          <AlertTriangle className="w-5 h-5 text-[#EF4444]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display text-lg font-700 text-white">Danger zone</h3>
+          <p className="text-xs text-[#FCA5A5] mt-1 leading-relaxed">
+            Wipe every regular user + all deposits, withdrawals, investments and transactions.
+            Admin accounts, products, payment accounts, and platform settings are preserved.
+            This action cannot be undone.
+          </p>
+
+          <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : close())}>
+            <DialogTrigger asChild>
+              <Button
+                className="mt-4 bg-[#EF4444] hover:bg-[#dc2626] text-white rounded-xl"
+                data-testid="open-reset-dialog-btn"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear all user data
+              </Button>
+            </DialogTrigger>
+            <DialogContent
+              className="bg-[var(--nb-card)] border-[var(--nb-border)] text-white max-w-md"
+              data-testid="reset-confirmation-dialog"
+            >
+              {!result ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="font-display flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-[#EF4444]" />
+                      Wipe all user data?
+                    </DialogTitle>
+                    <DialogDescription className="text-[var(--nb-muted)] text-xs leading-relaxed">
+                      This removes every non-admin user and every deposit, withdrawal,
+                      investment, and transaction on the platform. Admin accounts,
+                      products, payment accounts, and settings stay.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-2 pt-2">
+                    <Label className="text-xs text-[var(--nb-muted)]">
+                      Type <span className="font-display font-700 text-[#EF4444]">{PHRASE}</span> to enable the button
+                    </Label>
+                    <Input
+                      value={phrase}
+                      onChange={(e) => setPhrase(e.target.value)}
+                      placeholder={PHRASE}
+                      autoFocus
+                      disabled={busy}
+                      className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+                      data-testid="reset-confirm-input"
+                    />
+                  </div>
+
+                  <DialogFooter className="gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={close}
+                      disabled={busy}
+                      className="border-[var(--nb-border)] bg-transparent text-white"
+                      data-testid="reset-cancel-btn"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={submit}
+                      disabled={busy || phrase.trim() !== PHRASE}
+                      className="bg-[#EF4444] hover:bg-[#dc2626] text-white disabled:opacity-40"
+                      data-testid="reset-confirm-btn"
+                    >
+                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                      Wipe platform
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="font-display">Reset complete</DialogTitle>
+                    <DialogDescription className="text-[var(--nb-muted)] text-xs">
+                      The platform is now clean. Numbers below are what was removed.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid grid-cols-2 gap-2 py-2" data-testid="reset-result-summary">
+                    {[
+                      ["Users", result.users_deleted],
+                      ["Deposits", result.deposits_deleted],
+                      ["Withdrawals", result.withdrawals_deleted],
+                      ["Investments", result.investments_deleted],
+                      ["Transactions", result.transactions_deleted],
+                      ["Coupons reset", result.coupons_reset],
+                    ].map(([label, n]) => (
+                      <div key={label} className="rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card2)] p-3">
+                        <div className="text-[10px] uppercase text-[var(--nb-muted)] tracking-wider">{label}</div>
+                        <div className="font-display font-800 text-xl tabular">{Number(n || 0).toLocaleString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      onClick={close}
+                      className="bg-[#0055FF] hover:bg-[#3377FF] text-white"
+                      data-testid="reset-done-btn"
+                    >
+                      Done
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+    </Card>
   );
 }
 
