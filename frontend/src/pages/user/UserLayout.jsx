@@ -1,13 +1,14 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Home, Store, Users, User, TrendingUp, Shield } from "lucide-react";
+import { Home, Store, Users, User, TrendingUp, Shield, LineChart } from "lucide-react";
 
 const NAV = [
-  { to: "/dashboard", label: "Home", icon: Home, testid: "botnav-home" },
-  { to: "/marketplace", label: "Invest", icon: Store, testid: "botnav-invest" },
-  { to: "/referrals", label: "Referrals", icon: Users, testid: "botnav-referrals" },
-  { to: "/profile", label: "Profile", icon: User, testid: "botnav-profile" },
+  { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
+  { to: "/marketplace", label: "Invest",      icon: Store,     testid: "botnav-invest" },
+  { to: "/investments", label: "Portfolio",   icon: LineChart, testid: "botnav-portfolio" },
+  { to: "/referrals",   label: "Referrals",   icon: Users,     testid: "botnav-referrals" },
+  { to: "/profile",     label: "Profile",     icon: User,      testid: "botnav-profile" },
 ];
 
 export default function UserLayout() {
@@ -48,7 +49,7 @@ export default function UserLayout() {
         data-testid="bottom-nav"
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1A2B44] bg-[#0B1524]/95 backdrop-blur-xl"
       >
-        <div className="max-w-3xl mx-auto grid grid-cols-4">
+        <div className="max-w-3xl mx-auto grid grid-cols-5">
           {NAV.map((n) => (
             <NavLink
               key={n.to}

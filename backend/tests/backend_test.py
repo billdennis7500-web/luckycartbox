@@ -681,3 +681,163 @@ class TestPaynowVerifyAccount:
                           timeout=15)
         assert r.status_code == 401
 
+
+# ---------------------------------------------------------------------------
+# Iteration 5 - /me/bank-account CRUD + withdrawal-with-bound-account
+# ---------------------------------------------------------------------------
+class TestMyBankAccount:
+    def _fresh_user(self) -> dict:
+        phone = _rand_phone()
+        r = requests.post(f"{BASE_URL}/api/auth/register",
+                          json={"phone": phone, "password": "pass1234", "name": "TEST_Bind"},
+                          timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        return {"phone": phone, "token": d["access_token"], "user": d["user"]}
+
+    def test_get_bank_account_null_when_none(self):
+        u = self._fresh_user()
+        # Ensure clean slate
+        requests.delete(f"{BASE_URL}/api/me/bank-account",
+                        headers=_auth_headers(u["token"]), timeout=15)
+        r = requests.get(f"{BASE_URL}/api/me/bank-account",
+                         headers=_auth_headers(u["token"]), timeout=15)
+        assert r.status_code == 200
+        assert r.json() is None
+
+    def test_post_bank_account_short_number_400(self):
+        u = self._fresh_user()
+        r = requests.post(f"{BASE_URL}/api/me/bank-account",
+                          json={"bank_code": "NG0009", "bank_name": "ACCESS BANK PLC",
+                                "account_number": "12345", "account_name": "T"},
+                          headers=_auth_headers(u["token"]), timeout=15)
+        assert r.status_code == 400
+        assert "9-12" in r.json()["detail"]
+
+    def test_post_bank_account_long_number_400(self):
+        u = self._fresh_user()
+        r = requests.post(f"{BASE_URL}/api/me/bank-account",
+                          json={"bank_code": "NG0009", "bank_name": "ACCESS BANK PLC",
+                                "account_number": "1234567890123", "account_name": "T"},
+                          headers=_auth_headers(u["token"]), timeout=15)
+        assert r.status_code == 400
+
+    def test_post_bank_account_empty_name_400(self):
+        u = self._fresh_user()
+        r = requests.post(f"{BASE_URL}/api/me/bank-account",
+                          json={"bank_code": "NG0009", "bank_name": "ACCESS BANK PLC",
+                                "account_number": "0123456789", "account_name": "   "},
+                          headers=_auth_headers(u["token"]), timeout=15)
+        assert r.status_code == 400
+
+    def test_post_bank_account_empty_bank_400(self):
+        u = self._fresh_user()
+        r = requests.post(f"{BASE_URL}/api/me/bank-account",
+                          json={"bank_code": "NG0009", "bank_name": "  ",
+                                "account_number": "0123456789", "account_name": "T"},
+                          headers=_auth_headers(u["token"]), timeout=15)
+        assert r.status_code == 400
+
+    def test_post_and_get_bank_account_roundtrip(self):
+        u = self._fresh_user()
+        brand = {"initials": "AB", "bg": "#111", "fg": "#fff"}
+        payload = {"bank_code": "NG0009", "bank_name": "ACCESS BANK PLC",
+                   "account_number": "0123456789", "account_name": "Test User",
+                   "brand": brand}
+        r = requests.post(f"{BASE_URL}/api/me/bank-account", json=payload,
+                          headers=_auth_headers(u["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        saved = r.json()
+        assert saved["bank_code"] == "NG0009"
+        assert saved["bank_name"] == "ACCESS BANK PLC"
+        assert saved["account_number"] == "0123456789"
+        assert saved["account_name"] == "Test User"
+        assert saved["brand"] == brand
+
+        g = requests.get(f"{BASE_URL}/api/me/bank-account",
+                         headers=_auth_headers(u["token"]), timeout=15)
+        assert g.status_code == 200
+        data = g.json()
+        assert data["bank_code"] == "NG0009"
+        assert data["bank_name"] == "ACCESS BANK PLC"
+        assert data["account_number"] == "0123456789"
+        assert data["account_name"] == "Test User"
+        assert data["brand"] == brand
+
+    def test_delete_bank_account_then_get_null(self):
+        u = self._fresh_user()
+        requests.post(f"{BASE_URL}/api/me/bank-account",
+                      json={"bank_code": "NG0009", "bank_name": "ACCESS BANK PLC",
+                            "account_number": "0123456789", "account_name": "T"},
+                      headers=_auth_headers(u["token"]), timeout=15)
+        d = requests.delete(f"{BASE_URL}/api/me/bank-account",
+                            headers=_auth_headers(u["token"]), timeout=15)
+        assert d.status_code == 200
+        assert d.json().get("ok") is True
+        g = requests.get(f"{BASE_URL}/api/me/bank-account",
+                         headers=_auth_headers(u["token"]), timeout=15)
+        assert g.status_code == 200
+        assert g.json() is None
+
+
+class TestWithdrawalWithBoundAccount:
+    def test_withdraw_amount_only_uses_bound_account(self, admin_headers, user_b):
+        # Bind an account for user_b
+        payload = {"bank_code": "NG0009", "bank_name": "ACCESS BANK PLC",
+                   "account_number": "0123456789", "account_name": "Bound User",
+                   "brand": {"initials": "AB", "bg": "#111", "fg": "#fff"}}
+        rb = requests.post(f"{BASE_URL}/api/me/bank-account", json=payload,
+                           headers=_auth_headers(user_b["token"]), timeout=15)
+        assert rb.status_code == 200
+        # Ensure balance
+        requests.post(f"{BASE_URL}/api/admin/users/{user_b['user']['id']}/add-balance",
+                      json={"amount": 5000.0}, headers=admin_headers, timeout=15)
+        # Amount-only withdrawal
+        r = requests.post(f"{BASE_URL}/api/withdrawals", json={"amount": 1200.0},
+                          headers=_auth_headers(user_b["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["bank_name"] == "ACCESS BANK PLC"
+        assert d["account_number"] == "0123456789"
+        assert d["account_name"] == "Bound User"
+        assert d["bank_code"] == "NG0009"
+        assert d["status"] == "pending"
+
+    def test_withdraw_amount_only_no_bound_returns_400(self, admin_headers):
+        # Fresh user, invest, then attempt amount-only withdraw without bound account
+        phone = _rand_phone()
+        rr = requests.post(f"{BASE_URL}/api/auth/register",
+                           json={"phone": phone, "password": "pass1234", "name": "TEST_NoBind"},
+                           timeout=15)
+        tok = rr.json()["access_token"]
+        uid = rr.json()["user"]["id"]
+        prods = requests.get(f"{BASE_URL}/api/products",
+                             headers=_auth_headers(tok), timeout=15).json()
+        cheapest = min(prods, key=lambda p: p["price"])
+        requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                      json={"amount": cheapest["price"] + 5000.0}, headers=admin_headers, timeout=15)
+        inv = requests.post(f"{BASE_URL}/api/invest", json={"product_id": cheapest["id"]},
+                            headers=_auth_headers(tok), timeout=15)
+        assert inv.status_code == 200
+        # Ensure no bound account
+        requests.delete(f"{BASE_URL}/api/me/bank-account",
+                        headers=_auth_headers(tok), timeout=15)
+        r = requests.post(f"{BASE_URL}/api/withdrawals", json={"amount": 1500.0},
+                          headers=_auth_headers(tok), timeout=15)
+        assert r.status_code == 400
+        assert "bind" in r.json()["detail"].lower()
+
+    def test_withdraw_explicit_bank_still_works(self, admin_headers, user_b):
+        # Backwards compatible - explicit payload overrides bound account
+        requests.post(f"{BASE_URL}/api/admin/users/{user_b['user']['id']}/add-balance",
+                      json={"amount": 5000.0}, headers=admin_headers, timeout=15)
+        r = requests.post(f"{BASE_URL}/api/withdrawals",
+                          json={"amount": 1300.0, "bank_name": "GTB",
+                                "account_number": "1112223334", "account_name": "Explicit"},
+                          headers=_auth_headers(user_b["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["bank_name"] == "GTB"
+        assert d["account_number"] == "1112223334"
+        assert d["account_name"] == "Explicit"
+

@@ -443,10 +443,19 @@ class DepositCreateIn(BaseModel):
 
 class WithdrawCreateIn(BaseModel):
     amount: float
+    # Bank fields optional — if omitted, we use the user's bound bank_account
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    bank_code: Optional[str] = None
+
+
+class BankAccountIn(BaseModel):
+    bank_code: str
     bank_name: str
     account_number: str
     account_name: str
-    bank_code: Optional[str] = None
+    brand: Optional[dict] = None
 
 
 class ApprovalIn(BaseModel):
@@ -854,6 +863,21 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
         raise HTTPException(400, f"Minimum withdrawal is ₦{settings['min_withdrawal']:.0f}")
     if payload.amount > user["wallet_balance"]:
         raise HTTPException(400, "Insufficient balance")
+
+    # Resolve bank details: prefer explicit payload, else fall back to the user's bound account
+    bank_code = (payload.bank_code or "").strip()
+    bank_name = (payload.bank_name or "").strip()
+    account_number = (payload.account_number or "").strip()
+    account_name = (payload.account_name or "").strip()
+    if not (bank_name and account_number and account_name):
+        bound = user.get("bank_account") or {}
+        bank_code = bank_code or (bound.get("bank_code") or "")
+        bank_name = bank_name or (bound.get("bank_name") or "")
+        account_number = account_number or (bound.get("account_number") or "")
+        account_name = account_name or (bound.get("account_name") or "")
+    if not (bank_name and account_number and account_name):
+        raise HTTPException(400, "Please bind a bank account before withdrawing")
+
     # Hold the funds
     await db.users.update_one({"_id": user["_id"]}, {"$inc": {"wallet_balance": -payload.amount}})
     doc = {
@@ -861,10 +885,10 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
         "user_name": user["name"],
         "user_phone": user["phone"],
         "amount": float(payload.amount),
-        "bank_name": payload.bank_name,
-        "account_number": payload.account_number,
-        "account_name": payload.account_name,
-        "bank_code": payload.bank_code or "",
+        "bank_name": bank_name,
+        "account_number": account_number,
+        "account_name": account_name,
+        "bank_code": bank_code,
         "status": "pending",
         "created_at": now_utc().isoformat(),
     }
@@ -872,6 +896,38 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
     await add_transaction(user["_id"], "withdrawal_hold", -payload.amount,
                           "Withdrawal requested (pending)", {"withdrawal_id": str(res.inserted_id)})
     return clean(await db.withdrawals.find_one({"_id": res.inserted_id}))
+
+
+@api.get("/me/bank-account")
+async def get_my_bank_account(user: dict = Depends(get_current_user)):
+    return user.get("bank_account") or None
+
+
+@api.post("/me/bank-account")
+async def save_my_bank_account(payload: BankAccountIn, user: dict = Depends(get_current_user)):
+    acc = (payload.account_number or "").strip()
+    if not acc.isdigit() or not (9 <= len(acc) <= 12):
+        raise HTTPException(400, "Account number must be 9-12 digits")
+    if not (payload.account_name or "").strip():
+        raise HTTPException(400, "Account name is required")
+    if not (payload.bank_name or "").strip():
+        raise HTTPException(400, "Bank is required")
+    bank_account = {
+        "bank_code": (payload.bank_code or "").strip(),
+        "bank_name": payload.bank_name.strip(),
+        "account_number": acc,
+        "account_name": payload.account_name.strip(),
+        "brand": payload.brand or None,
+        "updated_at": now_utc().isoformat(),
+    }
+    await db.users.update_one({"_id": user["_id"]}, {"$set": {"bank_account": bank_account}})
+    return bank_account
+
+
+@api.delete("/me/bank-account")
+async def delete_my_bank_account(user: dict = Depends(get_current_user)):
+    await db.users.update_one({"_id": user["_id"]}, {"$unset": {"bank_account": ""}})
+    return {"ok": True}
 
 
 @api.get("/withdrawals")

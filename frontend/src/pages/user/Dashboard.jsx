@@ -12,17 +12,13 @@ import { toast } from "sonner";
 
 export default function Dashboard() {
   const { user, refresh } = useAuth();
-  const [invs, setInvs] = useState([]);
   const [tx, setTx] = useState([]);
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     refresh();
-    api.get("/investments").then((r) => setInvs(r.data));
     api.get("/transactions").then((r) => setTx(r.data.slice(0, 5)));
   }, []); // eslint-disable-line
-
-  const active = invs.filter((i) => i.status === "active");
 
   const copyCode = () => {
     if (!user?.referral_code) return;
@@ -174,49 +170,6 @@ export default function Dashboard() {
           </div>
         </div>
       </Card>
-
-      {/* Active investments */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-lg font-600">Active investments</h2>
-          <Link to="/marketplace" className="text-xs text-[#0055FF] hover:underline">Browse plans</Link>
-        </div>
-        {active.length === 0 ? (
-          <div
-            className="rounded-xl border border-dashed border-[#1A2B44] p-8 text-center text-sm text-[#94A3B8]"
-            data-testid="no-active-investments"
-          >
-            No active investments. Pick a plan to start earning.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {active.map((i) => {
-              const progress = Math.min(100, Math.round((i.drops_done / i.duration_days) * 100));
-              return (
-                <Card
-                  key={i.id}
-                  className="bg-[#0B1524] border-[#1A2B44] p-4 rounded-xl"
-                  data-testid={`active-inv-${i.id}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="font-display font-600">{i.product_name}</div>
-                    <div className="text-xs px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
-                      {i.daily_profit_pct}% / day
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-[#94A3B8]">
-                    <span>Earned <span className="text-[#10B981] tabular">{formatNaira(i.total_earned)}</span></span>
-                    <span className="tabular">{i.drops_done} / {i.duration_days} days</span>
-                  </div>
-                  <div className="mt-3 h-1.5 rounded-full bg-[#1A2B44] overflow-hidden">
-                    <div className="h-full bg-[#0055FF]" style={{ width: `${progress}%` }} />
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       {/* Recent activity */}
       <section>

@@ -19,6 +19,8 @@ import Referrals from "@/pages/user/Referrals";
 import Coupon from "@/pages/user/Coupon";
 import Transactions from "@/pages/user/Transactions";
 import Profile from "@/pages/user/Profile";
+import BindAccount from "@/pages/user/BindAccount";
+import Investments from "@/pages/user/Investments";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminOverview from "@/pages/admin/AdminOverview";
@@ -59,8 +61,10 @@ function App() {
           >
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="marketplace" element={<Marketplace />} />
+            <Route path="investments" element={<Investments />} />
             <Route path="deposit" element={<Deposit />} />
             <Route path="withdraw" element={<Withdraw />} />
+            <Route path="bank-account" element={<BindAccount />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="coupon" element={<Coupon />} />
             <Route path="transactions" element={<Transactions />} />
