@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
 import {
   LayoutDashboard, Users, PackageOpen, ArrowDownToLine, ArrowUpFromLine,
-  Percent, Ticket, Landmark, Settings, LogOut, Shield, Menu, X, ExternalLink, Sun, Moon,
+  Percent, Ticket, Landmark, Settings, LogOut, Shield, Menu, X, ExternalLink,
 } from "lucide-react";
 
 const NAV = [
@@ -22,7 +21,6 @@ const NAV = [
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
-  const { mode, toggle } = useTheme();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [stats, setStats] = useState({});
@@ -106,15 +104,6 @@ export default function AdminLayout() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={toggle}
-                data-testid="admin-theme-toggle-btn"
-                aria-label={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-                title={mode === "dark" ? "Light mode" : "Dark mode"}
-                className="w-9 h-9 rounded-md border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-[var(--nb-text)] hover:border-[#0055FF]/40 transition-colors"
-              >
-                {mode === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
               <div className="text-right">
                 <div className="text-sm font-medium">{user?.name}</div>
                 <div className="text-xs text-[var(--nb-muted)]">{user?.phone}</div>

@@ -5,15 +5,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
 
 /* ---------------------------------------------------------------------------
-   Theme surface tokens
+   Theme surface tokens (dark-only)
    ---------------------------------------------------------------------------
    Every hardcoded hex used across the app (bg-[#0B1524], text-[#94A3B8], etc.)
-   has been rewritten to bg-[var(--nb-card)] / text-[var(--nb-muted)]. Toggling
-   the `.theme-light` class on <html> swaps the entire palette in one shot
-   without touching any component code.
+   has been rewritten to bg-[var(--nb-card)] / text-[var(--nb-muted)] so future
+   theming is one place. Light mode was rolled back per user feedback.
    -------------------------------------------------------------------------- */
 :root {
-    /* Dark (default) */
     --nb-page:   #020813;
     --nb-card:   #0B1524;
     --nb-card2:  #121E30;
@@ -24,19 +22,6 @@
     --nb-scroll-thumb: #1A2B44;
     --nb-scroll-thumb-hover: #26406a;
     color-scheme: dark;
-}
-
-html.theme-light {
-    --nb-page:   #F5F7FB;
-    --nb-card:   #FFFFFF;
-    --nb-card2:  #F1F5F9;
-    --nb-border: #E2E8F0;
-    --nb-text:   #0F172A;
-    --nb-muted:  #64748B;
-    --nb-scroll-track: #F1F5F9;
-    --nb-scroll-thumb: #CBD5E1;
-    --nb-scroll-thumb-hover: #94A3B8;
-    color-scheme: light;
 }
 
 @layer base {
@@ -64,23 +49,6 @@ html.theme-light {
 
         --success: 160 84% 39%;
         --warning: 38 92% 50%;
-    }
-
-    html.theme-light {
-        --background: 210 40% 98%;
-        --foreground: 222 47% 11%;
-        --card: 0 0% 100%;
-        --card-foreground: 222 47% 11%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 222 47% 11%;
-        --secondary: 210 40% 96%;
-        --secondary-foreground: 222 47% 11%;
-        --muted: 210 40% 96%;
-        --muted-foreground: 215 16% 47%;
-        --accent: 210 40% 96%;
-        --accent-foreground: 222 47% 11%;
-        --border: 214 32% 91%;
-        --input: 214 32% 91%;
     }
 }
 
@@ -153,65 +121,3 @@ h1, h2, h3, h4, h5, h6 {
     transform: translateY(-2px);
     border-color: #0055FF;
 }
-
-/* ---------------------------------------------------------------------------
-   Light-mode text-white repair
-   ---------------------------------------------------------------------------
-   Most of the app was designed dark-first with `text-white` used liberally as
-   "primary content color". In light mode this becomes invisible on cards,
-   inputs, outlined buttons, etc. Rather than manually re-classing ~150 call
-   sites, we globally re-target `.text-white` in light mode to the semantic
-   `--nb-text` token, then restore `#FFFFFF` for elements that live on top of
-   a solid colored button/badge background (blue / green / red / amber / violet
-   variants used across the app). Both self-referential (`button.text-white`)
-   and descendant (`button > .text-white`) shapes are covered.
-   -------------------------------------------------------------------------- */
-html.theme-light .text-white { color: var(--nb-text); }
-html.theme-light .hover\:text-white:hover { color: var(--nb-text); }
-
-/* Elements that ARE themselves the coloured button/badge */
-html.theme-light .bg-\[\#0055FF\].text-white,
-html.theme-light .bg-\[\#3377FF\].text-white,
-html.theme-light .bg-\[\#10B981\].text-white,
-html.theme-light .bg-\[\#0EA97A\].text-white,
-html.theme-light .bg-\[\#0ea770\].text-white,
-html.theme-light .bg-\[\#EF4444\].text-white,
-html.theme-light .bg-\[\#dc2626\].text-white,
-html.theme-light .bg-\[\#F59E0B\].text-white,
-html.theme-light .bg-\[\#8B5CF6\].text-white,
-html.theme-light .bg-\[\#EB1C24\].text-white,
-/* Icons or spans NESTED inside a coloured button/badge */
-html.theme-light .bg-\[\#0055FF\] .text-white,
-html.theme-light .bg-\[\#3377FF\] .text-white,
-html.theme-light .bg-\[\#10B981\] .text-white,
-html.theme-light .bg-\[\#0EA97A\] .text-white,
-html.theme-light .bg-\[\#0ea770\] .text-white,
-html.theme-light .bg-\[\#EF4444\] .text-white,
-html.theme-light .bg-\[\#dc2626\] .text-white,
-html.theme-light .bg-\[\#F59E0B\] .text-white,
-html.theme-light .bg-\[\#8B5CF6\] .text-white,
-html.theme-light .bg-\[\#EB1C24\] .text-white {
-  color: #FFFFFF;
-}
-
-/* Inputs / textareas that have Tailwind's text-white on a light-card background
-   need explicit dark text so users can see what they type. Covers the
-   Deposit amount, Withdraw amount, Bind Account fields, Coupon code etc. */
-html.theme-light input.text-white,
-html.theme-light textarea.text-white,
-html.theme-light select.text-white {
-  color: var(--nb-text);
-}
-
-/* Placeholder color for consistent legibility in light mode */
-html.theme-light input::placeholder,
-html.theme-light textarea::placeholder {
-  color: var(--nb-muted);
-  opacity: 0.75;
-}
-
-/* Some elements use `bg-white` (opaque white) explicitly (e.g. the deposit
-   iframe container waiting for PayNow). In light mode the surrounding is now
-   white too, so add a subtle border for definition (only if not already
-   bordered). Handled via CSS variable at those specific sites — nothing to do
-   here globally, kept as a comment for future maintainers. */

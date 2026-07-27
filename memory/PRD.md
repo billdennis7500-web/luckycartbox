@@ -269,12 +269,18 @@ During testing the pod's outbound IP shifted from 34.170.12.145 → 104.198.214.
 - Product logo icon upload.
 - Auto-reconciliation cron for stuck deposits >30 min.
 
-## 2026-07-27 · Light-mode text repair (contrast fix)
+## 2026-07-27 · Light-mode text repair (contrast fix) — ROLLED BACK
 
-### Delivered
-- **Fixed white-text-on-white-background across the entire app in light mode.** The app was designed dark-first, so ~150 call-sites used Tailwind's `text-white` as the "primary content color". In light mode these became invisible on cards, inputs, outline buttons, and the welcome popup. Added a global CSS override in `index.css`: `html.theme-light .text-white` → `color: var(--nb-text)` (dark) with attribute-selector exemptions that restore pure white ONLY when the element sits on (or inside) a solid coloured button/badge (`bg-[#0055FF]`, `#3377FF`, `#10B981`, `#0EA97A`, `#0ea770`, `#EF4444`, `#dc2626`, `#F59E0B`, `#8B5CF6`, `#EB1C24`). Also targets `hover:text-white`, inputs / textareas / selects specifically, and light-mode placeholder color.
-- Verified in light mode across Dashboard (Welcome popup, wallet balance, referral code, quick actions), Referrals (copy link + Gen 1/2/3 pills), Withdraw (amount input, Request withdrawal button, bind-bank CTA card), Deposit (Instant Pay tile, quick amount chips 500/1k/2k/5k/10k/20k, Pay Instantly button), Bind Account (bank picker, account name/number inputs, Save button), Withdrawal history (row labels, masked account), Deposit history (row labels).
-- Dark mode is bit-for-bit unchanged.
+### Rolled back
+Light-mode toggle was introduced earlier this session; user asked for it to be
+removed because they preferred the original dark-only aesthetic and disliked
+the dark-text-on-white outcome. Reverted cleanly:
+- Deleted `context/ThemeContext.jsx` and removed `ThemeProvider` from `App.js`.
+- Removed `Sun`/`Moon` toggle button + `useTheme` usage from `UserLayout.jsx` and `AdminLayout.jsx`.
+- Removed `html.theme-light` CSS variable overrides + the `.text-white` repair block from `index.css`.
+- Kept the CSS custom properties (`--nb-page`, `--nb-card`, `--nb-card2`, `--nb-border`, `--nb-text`, `--nb-muted`) — dark-only, semantic tokens still in place. The ~650 hex→var replacements from earlier remain (they don't hurt, and make a future opt-in theming straightforward).
+
+Verified: pure dark theme restored across Dashboard / Deposit / Withdraw / Referrals / History pages; no leftover theme-light class; toggle buttons gone; `yarn build` compiles clean.
 
 ### Deferred (unchanged)
 - SMS OTP for phone verification.

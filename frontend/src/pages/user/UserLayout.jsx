@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
-import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft, X, Sun, Moon } from "lucide-react";
+import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft, X } from "lucide-react";
 import { toast } from "sonner";
 import { isImpersonatingTab } from "@/lib/api";
 
@@ -82,7 +81,6 @@ function ImpersonationPill() {
 
 export default function UserLayout() {
   const { user } = useAuth();
-  const { mode, toggle } = useTheme();
 
   return (
     <div className="min-h-screen bg-[var(--nb-page)] text-[var(--nb-text)] flex flex-col">
@@ -97,15 +95,6 @@ export default function UserLayout() {
             <span className="font-display font-bold text-lg">NaijaInvest</span>
           </Link>
           <div className="flex items-center gap-3">
-            <button
-              onClick={toggle}
-              data-testid="theme-toggle-btn"
-              aria-label={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              title={mode === "dark" ? "Light mode" : "Dark mode"}
-              className="w-9 h-9 rounded-md border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-[var(--nb-text)] hover:border-[#0055FF]/40 transition-colors"
-            >
-              {mode === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
             {user?.role === "admin" && (
               <Link to="/admin" data-testid="user-admin-link"
                     className="hidden sm:inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md border border-[#0055FF]/40 text-[#0055FF] hover:bg-[#0055FF]/10">
