@@ -801,11 +801,26 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
     # If Paynow auto-flow is enabled AND user chose it (method starts with "paynow"),
     # create the payin at PayNow and store the checkout URL.
     if paynow.enabled() and (payload.method or "").startswith("paynow"):
-        # Fast-fail if we've already detected the pod IP is blocked at PayNow — no point
-        # sending an outbound request we know will fail, and we want the user to get
-        # a clean 400 (Cloudflare rewrites 5xx into its own error page).
+        # If the server IP is currently not whitelisted at PayNow, we can't produce
+        # a real checkout link. Rather than throw, return a well-formed deposit that
+        # tells the UI to show a friendly inline "gateway unavailable" state inside
+        # the checkout drawer (with a bank-transfer fallback CTA). This keeps the
+        # Instant Pay tile visible to users and stops the "why is it missing?" bug.
         if paynow.ip_blocked():
-            raise HTTPException(400, "Instant Pay is temporarily unavailable. Please pick a bank transfer option below.")
+            doc.update({
+                "status": "failed",
+                "gateway": "paynow",
+                "gateway_error": paynow.ip_block_note() or "Gateway IP not whitelisted",
+            })
+            res = await db.deposits.insert_one(doc)
+            d = await db.deposits.find_one({"_id": res.inserted_id})
+            return clean(d) | {
+                "user_id": str(d["user_id"]),
+                "gateway": "paynow",
+                "checkout_url": None,
+                "gateway_ready": False,
+                "gateway_message": "Instant Pay is temporarily unavailable while our payment gateway completes access checks. Please choose a bank transfer option below, or try again in a few minutes.",
+            }
 
         res = await db.deposits.insert_one(doc)
         merchant_order_no = f"D{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
@@ -1509,15 +1524,34 @@ async def admin_paynow_banks(admin: dict = Depends(get_admin_user)):
 # User: bank code list (for auto withdrawal)
 @api.get("/paynow/banks")
 async def user_paynow_banks(user: dict = Depends(get_current_user), all: bool = False):
-    if not paynow.enabled() or paynow.ip_blocked():
-        return {"enabled": False, "reason": ("gateway_ip_blocked" if paynow.ip_blocked() else "disabled"), "data": []}
+    # Report "enabled" purely based on env configuration. Runtime health (IP block,
+    # rate limits) is exposed via `gateway_ready` so the UI can keep the Instant
+    # Pay tile visible and still warn users transparently. Hiding the tile on
+    # transient errors confuses users (they think the feature was removed).
+    if not paynow.enabled():
+        return {"enabled": False, "reason": "disabled", "gateway_ready": False, "data": []}
+    if paynow.ip_blocked():
+        return {
+            "enabled": True,
+            "gateway_ready": False,
+            "reason": "gateway_ip_blocked",
+            "note": paynow.ip_block_note() or "Payment gateway is verifying server access.",
+            "data": [],
+        }
     resp = await paynow.list_banks_cached()
     if paynow.ip_blocked():
         # The call we just made may have flipped the block state
-        return {"enabled": False, "reason": "gateway_ip_blocked", "data": []}
+        return {
+            "enabled": True,
+            "gateway_ready": False,
+            "reason": "gateway_ip_blocked",
+            "note": paynow.ip_block_note() or "Payment gateway is verifying server access.",
+            "data": [],
+        }
     data = resp.get("data") or []
     filtered = data if all else filter_popular(data)
-    return {"enabled": True, "code": resp.get("code"), "data": filtered, "msg": resp.get("msg"), "total": len(data)}
+    return {"enabled": True, "gateway_ready": True, "code": resp.get("code"),
+            "data": filtered, "msg": resp.get("msg"), "total": len(data)}
 
 
 class VerifyAccountIn(BaseModel):

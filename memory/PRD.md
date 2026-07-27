@@ -223,3 +223,17 @@ During testing the pod's outbound IP shifted from 34.170.12.145 → 104.198.214.
 - `server.py` router split (1527 lines now — router files exist under `/backend/routers/*` but not yet mounted).
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.
+
+## 2026-07-27 · PayNow tile always visible + in-app graceful fallback
+
+### Delivered
+- **Instant Pay tile is now always visible** on `/deposit` when PayNow is env-configured. Previously the tile was completely hidden whenever the pod's outbound IP wasn't whitelisted at PayNow — leaving users confused ("Why is my Pay Now option not popping up?"). Backend `/api/paynow/banks` now returns `{enabled:true, gateway_ready:false, reason:"gateway_ip_blocked"}` in that case instead of `{enabled:false}`.
+- **In-app iframe drawer is preserved** — the Vaul bottom drawer opens on submit, containing an `<iframe sandbox>` for the checkout URL. No `window.open`, no visible gateway domain. Confirmed via Playwright smoke test.
+- **Graceful "gateway warming up" state** — when the IP is blocked, `POST /api/deposits` no longer 400s; it returns a well-formed deposit with `gateway_ready:false` and a `gateway_message`. The drawer opens with a clean inline "Instant Pay is temporarily unavailable" card + a **one-click "Use bank transfer instead"** CTA that closes the drawer and pre-selects the first active manual account.
+- **Subtle "Slow" badge** on the Instant Pay tile itself when `gateway_ready=false`, so users see the state before they even click.
+- No new tabs, no PayNow branding — every user-visible string uses "Instant Pay" / "our payment gateway".
+
+### Deferred (unchanged)
+- SMS OTP for phone verification.
+- PayNow `query_payee` 429 retry/backoff hardening.
+- Auto-reconciliation cron for stuck deposits >30 min.

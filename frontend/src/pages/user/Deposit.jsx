@@ -119,6 +119,7 @@ export default function Deposit() {
   const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
   const [instantEnabled, setInstantEnabled] = useState(false);
+  const [gatewayReady, setGatewayReady] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
   const [quickAmounts, setQuickAmounts] = useState([500, 1000, 2000, 5000, 10000, 20000]);
 
@@ -129,7 +130,10 @@ export default function Deposit() {
 
   const load = () => {
     api.get("/payment-accounts").then((r) => setAccounts(r.data)).finally(() => setInitialLoad(false));
-    api.get("/paynow/banks").then((r) => setInstantEnabled(!!r.data?.enabled)).catch(() => setInstantEnabled(false));
+    api.get("/paynow/banks").then((r) => {
+      setInstantEnabled(!!r.data?.enabled);
+      setGatewayReady(r.data?.gateway_ready !== false);
+    }).catch(() => { setInstantEnabled(false); setGatewayReady(false); });
     api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
@@ -173,11 +177,11 @@ export default function Deposit() {
     try {
       const backendMethod = isInstant ? "paynow-auto" : method;
       const { data } = await api.post("/deposits", { amount: Number(amount), method: backendMethod, reference });
-      if (data.gateway === "paynow" && data.checkout_url) {
+      if (data.gateway === "paynow") {
+        // Always open the in-app drawer for PayNow — either shows the iframe (happy path)
+        // or a clean inline "gateway unavailable" message (blocked path).
         setWaitDep(data);
-        setWaitState("waiting");
-        // Note: we no longer window.open() the checkout URL. It's loaded inside
-        // the waiting drawer as an iframe so the user never sees the gateway domain.
+        setWaitState(data.gateway_ready === false ? "unavailable" : "waiting");
       } else {
         toast.success("Deposit submitted. Admin will approve shortly.");
       }
@@ -232,15 +236,25 @@ export default function Deposit() {
           </h2>
           <div className="grid grid-cols-3 gap-3" data-testid="deposit-methods-grid">
             {instantEnabled && (
-              <MethodBlock
-                selected={isInstant}
-                onClick={() => setMethod("instant-pay")}
-                tone={{ bg: "#0055FF", fg: "#FFFFFF" }}
-                icon={<Zap className="w-5 h-5" />}
-                label="Instant Pay"
-                sub="Auto credit"
-                testid="deposit-method-instant"
-              />
+              <div className="relative">
+                <MethodBlock
+                  selected={isInstant}
+                  onClick={() => setMethod("instant-pay")}
+                  tone={{ bg: "#0055FF", fg: "#FFFFFF" }}
+                  icon={<Zap className="w-5 h-5" />}
+                  label="Instant Pay"
+                  sub={gatewayReady ? "Auto credit" : "Temporarily slow"}
+                  testid="deposit-method-instant"
+                />
+                {!gatewayReady && (
+                  <span
+                    className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#F59E0B] text-black shadow"
+                    data-testid="deposit-instant-slow-badge"
+                  >
+                    Slow
+                  </span>
+                )}
+              </div>
             )}
             {accounts.map((a) => {
               const brand = bankTint(a.bank_name);
@@ -365,6 +379,8 @@ export default function Deposit() {
                 <><CheckCircle2 className="w-5 h-5 text-[#10B981]" /> Payment received</>
               ) : waitState === "rejected" ? (
                 <><X className="w-5 h-5 text-[#EF4444]" /> Payment failed</>
+              ) : waitState === "unavailable" ? (
+                <><Clock className="w-5 h-5 text-[#F59E0B]" /> Instant Pay is warming up</>
               ) : (
                 <><Clock className="w-5 h-5 text-[#F59E0B]" /> Complete your payment</>
               )}
@@ -374,12 +390,51 @@ export default function Deposit() {
                 ? "Your wallet has been credited."
                 : waitState === "rejected"
                 ? "This payment was reported as failed or expired."
+                : waitState === "unavailable"
+                ? "Our gateway needs a moment to verify server access. Please choose a bank transfer option below, or retry in a few minutes."
                 : `Amount ${formatNaira(waitDep?.amount || 0)} — this window will auto-update once received.`}
             </DrawerDescription>
           </DrawerHeader>
 
           {waitDep && (
             <div className="px-4 pb-3 space-y-3 overflow-y-auto" style={{ maxHeight: "calc(95vh - 180px)" }}>
+              {/* Gateway unavailable state — clean inline explainer, no PayNow branding */}
+              {waitState === "unavailable" && (
+                <div
+                  className="rounded-xl border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-5 text-center"
+                  data-testid="deposit-gateway-unavailable"
+                >
+                  <div className="w-12 h-12 mx-auto rounded-xl grid place-items-center bg-[#F59E0B]/20">
+                    <Clock className="w-6 h-6 text-[#F59E0B]" />
+                  </div>
+                  <div className="mt-3 font-display font-700 text-white">
+                    Instant Pay is temporarily unavailable
+                  </div>
+                  <div className="text-xs text-[#94A3B8] mt-1.5 leading-relaxed max-w-md mx-auto">
+                    {waitDep.gateway_message || "Our payment gateway is finalising server access checks. This usually clears in a few minutes."}
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {accounts.length > 0 && (
+                      <Button
+                        onClick={() => { closeWait(); setMethod(accounts[0].id); }}
+                        data-testid="deposit-fallback-bank"
+                        className="w-full h-11 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl"
+                      >
+                        Use bank transfer instead
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={closeWait}
+                      data-testid="deposit-unavailable-close"
+                      className="w-full h-11 border-[#1A2B44] bg-transparent text-white rounded-xl"
+                    >
+                      Try again later
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Embedded checkout — no window.open, no visible URL bar */}
               {waitState === "waiting" && waitDep.checkout_url && (
                 <div
