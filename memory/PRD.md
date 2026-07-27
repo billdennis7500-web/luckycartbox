@@ -83,6 +83,21 @@ See `/app/memory/test_credentials.md`.
 - SMS OTP for phone verification (needs provider selection — Termii recommended).
 - Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
 
+## 2026-07-27 · Deposit UX simplification + rebrand + history page
+
+### Delivered
+- **Deposit page 3-in-1 block grid** — all payment methods now render as equal-sized aspect-square blocks (`grid-cols-3`): one "Instant Pay" block (only shown when the auto-gateway is enabled) plus one block per active `payment_account`. No more giant featured banner.
+- **Zero PayNow branding in the user UI** — every user-facing occurrence of "PayNow" is gone (deposit, bind-account, profile). Rebranded as "Instant Pay" for the gateway path.
+- **Zero-manual empty state** — when the admin has 0 active `payment_accounts`, the deposit page shows nothing referencing "manual"/"Or transfer to one of our banks" (only the Instant tile appears — or a neutral empty state if the gateway is also disabled).
+- **Dedicated `/deposit-history` page** — moved off the deposit page. 4 status tabs with counts, free-text search, empty state, load-more pattern (step=10) with "Showing X of Y" counter. Verified end-to-end with a 15-deposit user.
+- **Pure frontend refactor** — no backend changes, backend regression pytest still 59/59.
+
+### Deferred (unchanged)
+- `server.py` router split (1552 lines).
+- SMS OTP.
+- PayNow `query_payee` 429 retry/backoff.
+- Auto-reconciliation cron for deposits stuck > 30 min.
+
 ## 2026-07-27 · Multi-account deposit + admin view-as-user + Portfolio polish
 
 ### Delivered

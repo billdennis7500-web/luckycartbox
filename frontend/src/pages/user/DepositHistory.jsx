@@ -25,7 +25,7 @@ function MethodLabel({ d }) {
   return (
     <span className="inline-flex items-center gap-1 text-[#94A3B8]">
       <Landmark className="w-3 h-3" />
-      {d.payment_account_bank || d.reference || "Manual"}
+      {d.payment_account_bank || "Manual"}
     </span>
   );
 }
