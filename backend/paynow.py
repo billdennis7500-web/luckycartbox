@@ -141,6 +141,21 @@ async def list_banks() -> Dict[str, Any]:
     return await _post("/open/v1/merchant/bank", {"channelCode": cfg["payout_channel"]})
 
 
+# In-memory TTL cache for the bank list (upstream is slow ~1-3s per call)
+_BANK_CACHE: Dict[str, Any] = {"data": None, "expires_at": 0.0}
+
+
+async def list_banks_cached(ttl_seconds: int = 300) -> Dict[str, Any]:
+    now = time.time()
+    if _BANK_CACHE["data"] and _BANK_CACHE["expires_at"] > now:
+        return _BANK_CACHE["data"]
+    fresh = await list_banks()
+    if fresh.get("code") == 0 and fresh.get("data"):
+        _BANK_CACHE["data"] = fresh
+        _BANK_CACHE["expires_at"] = now + ttl_seconds
+    return fresh
+
+
 async def query_payee(bank_code: str, account_number: str) -> Dict[str, Any]:
     """GET /open/v1/merchant/payee/query?currencyCode=NGN&payee=<accountNumber>
     Returns {code, data:{exist, closeRchrgTime}, msg}."""

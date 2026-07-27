@@ -1201,7 +1201,7 @@ async def admin_paynow_balance(admin: dict = Depends(get_admin_user)):
 async def admin_paynow_banks(admin: dict = Depends(get_admin_user)):
     if not paynow.enabled():
         raise HTTPException(400, "PayNow is not configured")
-    return await paynow.list_banks()
+    return await paynow.list_banks_cached()
 
 
 # User: bank code list (for auto withdrawal)
@@ -1209,7 +1209,7 @@ async def admin_paynow_banks(admin: dict = Depends(get_admin_user)):
 async def user_paynow_banks(user: dict = Depends(get_current_user), all: bool = False):
     if not paynow.enabled():
         return {"enabled": False, "data": []}
-    resp = await paynow.list_banks()
+    resp = await paynow.list_banks_cached()
     data = resp.get("data") or []
     filtered = data if all else filter_popular(data)
     return {"enabled": True, "code": resp.get("code"), "data": filtered, "msg": resp.get("msg"), "total": len(data)}

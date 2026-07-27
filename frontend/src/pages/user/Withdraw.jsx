@@ -37,14 +37,22 @@ export default function Withdraw() {
   const [bankOpen, setBankOpen] = useState(false);
   const [visible, setVisible] = useState(5);
   const [verify, setVerify] = useState({ status: "idle", exists: null });
+  const [banksLoading, setBanksLoading] = useState(true);
 
   const load = () => {
     api.get("/withdrawals").then((r) => setHistory(r.data));
-    api.get("/paynow/banks").then((r) => {
-      setPaynowEnabled(!!r.data?.enabled);
-      setBanks(r.data?.data || []);
-    }).catch(() => {});
+    setBanksLoading(true);
+    api.get("/paynow/banks")
+      .then((r) => {
+        setPaynowEnabled(!!r.data?.enabled);
+        setBanks(r.data?.data || []);
+      })
+      .catch((e) => {
+        toast.error("Couldn't load bank list — using manual entry. Tap Retry.");
+      })
+      .finally(() => setBanksLoading(false));
   };
+  const retryBanks = () => load();
   useEffect(() => { load(); }, []);
 
   const filteredBanks = useMemo(() => {
@@ -175,9 +183,17 @@ export default function Withdraw() {
                 )}
               </button>
             </div>
+          ) : banksLoading ? (
+            <div data-testid="banks-loading" className="rounded-md border border-[#1A2B44] bg-[#121E30] h-12 mt-2 flex items-center gap-2 px-3 text-sm text-[#94A3B8]">
+              <Loader2 className="w-4 h-4 animate-spin text-[#0055FF]" /> Loading Nigerian banks…
+            </div>
           ) : (
             <div>
-              <Label>Bank name</Label>
+              <div className="flex items-center justify-between">
+                <Label>Bank name</Label>
+                <button type="button" onClick={retryBanks} data-testid="retry-banks"
+                        className="text-xs text-[#0055FF] hover:underline">Retry bank picker</button>
+              </div>
               <Input value={form.bank_name} onChange={set("bank_name")} required disabled={!canWithdraw}
                      data-testid="withdraw-bank-input"
                      className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12" />
