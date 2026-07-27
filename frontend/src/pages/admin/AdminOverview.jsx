@@ -4,12 +4,21 @@ import { api, formatNaira } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Users, TrendingUp, ArrowDownToLine, ArrowUpFromLine, Wallet, Coins, Clock, PackageOpen,
+  Users, TrendingUp, ArrowDownToLine, ArrowUpFromLine, Wallet, Coins, Clock, PackageOpen, Zap,
 } from "lucide-react";
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
-  useEffect(() => { api.get("/admin/stats").then((r) => setStats(r.data)); }, []);
+  const [pn, setPn] = useState(null);
+  const [pnBalance, setPnBalance] = useState(null);
+
+  useEffect(() => {
+    api.get("/admin/stats").then((r) => setStats(r.data));
+    api.get("/admin/paynow/status").then((r) => {
+      setPn(r.data);
+      if (r.data?.enabled) api.get("/admin/paynow/balance").then((rb) => setPnBalance(rb.data?.data));
+    }).catch(() => {});
+  }, []);
 
   const cards = stats ? [
     { label: "Total users", value: stats.total_users, icon: Users, testid: "stat-total-users" },
@@ -40,6 +49,38 @@ export default function AdminOverview() {
           </Card>
         ))}
       </div>
+
+      <section>
+        <h2 className="font-display text-xl font-600 mb-3">Payment gateway</h2>
+        <Card className="bg-[#0B1524] border border-[#1A2B44] rounded-xl p-5" data-testid="paynow-card">
+          {pn?.enabled ? (
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-md bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
+                  <Zap className="w-5 h-5 text-[#0055FF]" />
+                </div>
+                <div>
+                  <div className="font-display font-600 flex items-center gap-2">
+                    PayNow · Merchant {pn.merchant_no}
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">Live</span>
+                  </div>
+                  <div className="text-xs text-[#94A3B8] mt-1">
+                    Payins: {pn.payin_channel} · Payouts: {pn.payout_channel} · Currency: {pn.currency}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Gateway balance</div>
+                <div className="font-display font-800 text-xl tabular" data-testid="paynow-balance">
+                  {pnBalance ? formatNaira(Number(pnBalance.amount || 0)) : "—"}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-[#94A3B8]">PayNow gateway is not configured. Set PAYNOW_* environment variables to enable auto deposits and payouts.</div>
+          )}
+        </Card>
+      </section>
 
       <section>
         <h2 className="font-display text-xl font-600 mb-3">Quick actions</h2>

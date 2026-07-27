@@ -5,11 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Copy } from "lucide-react";
 
 export default function AdminSettings() {
   const [s, setS] = useState(null);
+  const [pn, setPn] = useState(null);
 
-  useEffect(() => { api.get("/admin/settings").then((r) => setS(r.data)); }, []);
+  useEffect(() => {
+    api.get("/admin/settings").then((r) => setS(r.data));
+    api.get("/admin/paynow/status").then((r) => setPn(r.data)).catch(() => {});
+  }, []);
 
   const save = async () => {
     try {
@@ -23,13 +28,18 @@ export default function AdminSettings() {
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail) || "Failed"); }
   };
 
+  const copy = (v) => { navigator.clipboard.writeText(v); toast.success("Copied"); };
+  const base = process.env.REACT_APP_BACKEND_URL || "";
+  const payinHook = `${base}/api/webhooks/paynow/payin`;
+  const payoutHook = `${base}/api/webhooks/paynow/payout`;
+
   if (!s) return <div className="text-[#94A3B8]">Loading…</div>;
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="admin-settings-heading">Platform settings</h1>
-        <p className="text-[#94A3B8] mt-2">Welcome bonus, limits, branding.</p>
+        <p className="text-[#94A3B8] mt-2">Welcome bonus, limits, branding, gateway webhook URLs.</p>
       </div>
       <Card className="bg-[#0B1524] border-[#1A2B44] p-6 rounded-xl space-y-4">
         <div>
@@ -60,6 +70,34 @@ export default function AdminSettings() {
         </div>
         <Button onClick={save} data-testid="setting-save-btn" className="bg-[#0055FF] hover:bg-[#3377FF]">Save</Button>
       </Card>
+
+      {pn?.enabled && (
+        <Card className="bg-[#0B1524] border-[#1A2B44] p-6 rounded-xl space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-600">PayNow webhook URLs</h2>
+            <p className="text-xs text-[#94A3B8] mt-1">Paste these in your PayNow merchant dashboard to enable auto-crediting and payout callbacks.</p>
+          </div>
+          {[
+            ["Payin (deposit) callback URL", payinHook, "payin-webhook"],
+            ["Payout (withdrawal) callback URL", payoutHook, "payout-webhook"],
+          ].map(([label, url, tid]) => (
+            <div key={label}>
+              <Label>{label}</Label>
+              <div className="mt-2 flex items-center gap-2">
+                <Input readOnly value={url} data-testid={tid}
+                       className="bg-[#121E30] border-[#1A2B44] text-white h-11" />
+                <Button variant="outline" onClick={() => copy(url)} className="border-[#1A2B44] bg-transparent text-white">
+                  <Copy className="w-3 h-3 mr-1" /> Copy
+                </Button>
+              </div>
+            </div>
+          ))}
+          <div className="text-xs text-[#94A3B8] pt-2 border-t border-[#1A2B44]">
+            Configure a server IP whitelist in the PayNow dashboard for the payout, statement and balance endpoints (required by PayNow).
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
+

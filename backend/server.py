@@ -6,6 +6,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 import os
 import re
+import asyncio
 import logging
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -18,6 +19,8 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Respons
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
+
+import paynow
 
 # ---------------------------------------------------------------------------
 # Config
@@ -253,6 +256,28 @@ async def startup():
         ]
         await db.products.insert_many(starter)
 
+    # Kick off background profit-drop cron
+    asyncio.create_task(_profit_drop_cron())
+
+
+async def _profit_drop_cron():
+    """Every 15 minutes, iterate all users with active investments and settle due profit drops."""
+    await asyncio.sleep(30)  # let app fully start
+    while True:
+        try:
+            user_ids = await db.investments.distinct("user_id", {"status": "active"})
+            for uid in user_ids:
+                u = await db.users.find_one({"_id": uid})
+                if u:
+                    try:
+                        await process_profit_drops(u)
+                    except Exception:
+                        logger.exception("profit drop cron: user %s failed", uid)
+            logger.info("profit_drop_cron cycle done (%d active users)", len(user_ids))
+        except Exception:
+            logger.exception("profit_drop_cron cycle error")
+        await asyncio.sleep(15 * 60)
+
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -298,6 +323,7 @@ class WithdrawCreateIn(BaseModel):
     bank_name: str
     account_number: str
     account_name: str
+    bank_code: Optional[str] = None
 
 
 class ApprovalIn(BaseModel):
@@ -591,6 +617,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
     settings = await get_settings()
     if payload.amount < settings["min_deposit"]:
         raise HTTPException(400, f"Minimum deposit is ₦{settings['min_deposit']:.0f}")
+
     doc = {
         "user_id": user["_id"],
         "user_name": user["name"],
@@ -599,8 +626,49 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         "method": payload.method,
         "reference": payload.reference or "",
         "status": "pending",
+        "gateway": "manual",
         "created_at": now_utc().isoformat(),
     }
+
+    # If Paynow auto-flow is enabled AND user chose it (method starts with "paynow"),
+    # create the payin at PayNow and store the checkout URL.
+    if paynow.enabled() and (payload.method or "").startswith("paynow"):
+        res = await db.deposits.insert_one(doc)
+        merchant_order_no = f"D{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
+        name_parts = (user.get("name") or "").split()
+        first = name_parts[0] if name_parts else "User"
+        last = " ".join(name_parts[1:]) or first
+        try:
+            pn = await paynow.create_payin(
+                merchant_order_no, float(payload.amount),
+                payer_key=user["phone"], first_name=first, last_name=last,
+            )
+        except Exception as e:
+            logger.exception("PayNow create_payin failed")
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
+            raise HTTPException(502, f"Payment gateway error: {e}")
+
+        pn_data = pn.get("data") or {}
+        checkout_url = pn_data.get("link")
+        platform_order_no = pn_data.get("orderNo")
+        if pn.get("code") != 0 or not checkout_url:
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed",
+                                                   "gateway_error": pn.get("msg") or "no checkout link",
+                                                   "gateway_response": pn}})
+            raise HTTPException(502, f"Payment gateway declined: {pn.get('msg') or 'unknown error'}")
+
+        await db.deposits.update_one(
+            {"_id": res.inserted_id},
+            {"$set": {"gateway": "paynow", "merchant_order_no": merchant_order_no,
+                      "platform_order_no": platform_order_no, "checkout_url": checkout_url,
+                      "gateway_response": pn}},
+        )
+        d = await db.deposits.find_one({"_id": res.inserted_id})
+        return clean(d) | {"user_id": str(d["user_id"])}
+
+    # Manual flow (existing behavior)
     res = await db.deposits.insert_one(doc)
     return clean(await db.deposits.find_one({"_id": res.inserted_id}))
 
@@ -633,6 +701,7 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
         "bank_name": payload.bank_name,
         "account_number": payload.account_number,
         "account_name": payload.account_name,
+        "bank_code": payload.bank_code or "",
         "status": "pending",
         "created_at": now_utc().isoformat(),
     }
@@ -898,12 +967,159 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
         raise HTTPException(404, "Withdrawal not found")
     if w["status"] != "pending":
         raise HTTPException(400, f"Already {w['status']}")
+
+    # PayNow automatic payout if enabled AND withdrawal has bank_code
+    if paynow.enabled() and w.get("bank_code"):
+        merchant_order_no = f"W{str(w['_id'])[-16:]}{int(datetime.now().timestamp())}"
+        try:
+            pn = await paynow.create_payout(
+                merchant_order_no=merchant_order_no,
+                amount=float(w["amount"]),
+                bank_code=w["bank_code"],
+                account_name=w["account_name"],
+                account_no=w["account_number"],
+                remarks=payload.note or "Withdrawal",
+            )
+        except Exception as e:
+            logger.exception("PayNow payout failed")
+            raise HTTPException(502, f"Payment gateway error: {e}")
+        if pn.get("code") != 0:
+            raise HTTPException(400, f"Gateway declined: {pn.get('msg') or 'unknown'}")
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "processing", "processed_at": now_utc().isoformat(),
+                      "admin_note": payload.note or "", "gateway": "paynow",
+                      "merchant_order_no": merchant_order_no,
+                      "gateway_response": pn}},
+        )
+        return {"ok": True, "gateway": "paynow", "status": "processing"}
+
+    # Manual flow
     await db.withdrawals.update_one({"_id": w["_id"]},
                                     {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                                               "admin_note": payload.note or ""}})
     await add_transaction(w["user_id"], "withdrawal", -w["amount"], "Withdrawal approved",
                           {"withdrawal_id": str(w["_id"])})
     return {"ok": True}
+
+
+# Admin: PayNow utilities
+@api.get("/admin/paynow/status")
+async def admin_paynow_status(admin: dict = Depends(get_admin_user)):
+    return {
+        "enabled": paynow.enabled(),
+        "merchant_no": os.environ.get("PAYNOW_MERCHANT_NO", ""),
+        "base_url": os.environ.get("PAYNOW_BASE_URL", ""),
+        "payin_channel": os.environ.get("PAYNOW_PAYIN_CHANNEL", ""),
+        "payout_channel": os.environ.get("PAYNOW_PAYOUT_CHANNEL", ""),
+        "currency": os.environ.get("PAYNOW_CURRENCY", "NGN"),
+    }
+
+
+@api.get("/admin/paynow/balance")
+async def admin_paynow_balance(admin: dict = Depends(get_admin_user)):
+    if not paynow.enabled():
+        raise HTTPException(400, "PayNow is not configured")
+    return await paynow.get_balance()
+
+
+@api.get("/admin/paynow/banks")
+async def admin_paynow_banks(admin: dict = Depends(get_admin_user)):
+    if not paynow.enabled():
+        raise HTTPException(400, "PayNow is not configured")
+    return await paynow.list_banks()
+
+
+# User: bank code list (for auto withdrawal)
+@api.get("/paynow/banks")
+async def user_paynow_banks(user: dict = Depends(get_current_user)):
+    if not paynow.enabled():
+        return {"enabled": False, "data": []}
+    resp = await paynow.list_banks()
+    return {"enabled": True, "code": resp.get("code"), "data": resp.get("data") or [], "msg": resp.get("msg")}
+
+
+# ---------------------------------------------------------------------------
+# PayNow webhooks (public, sign-verified)
+# ---------------------------------------------------------------------------
+@api.post("/webhooks/paynow/payin")
+async def webhook_payin(request: Request):
+    body = await request.json()
+    logger.info("PayNow PAYIN callback: %s", body)
+    if not paynow.verify_callback(body):
+        logger.warning("PayNow payin callback signature invalid")
+        raise HTTPException(400, "Invalid signature")
+    merchant_order_no = body.get("merchantOrderNo")
+    status_code = int(body.get("status", 0))
+    if not merchant_order_no:
+        raise HTTPException(400, "Missing merchantOrderNo")
+    dep = await db.deposits.find_one({"merchant_order_no": merchant_order_no})
+    if not dep:
+        logger.warning("Deposit not found for %s", merchant_order_no)
+        return "SUCCESS"
+    if dep["status"] == "approved":
+        return "SUCCESS"  # idempotent
+
+    if status_code == 2:  # success
+        amount = float(body.get("payAmount") or body.get("amount") or dep["amount"])
+        await db.deposits.update_one(
+            {"_id": dep["_id"]},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body, "credited_amount": amount}},
+        )
+        await db.users.update_one({"_id": dep["user_id"]}, {"$inc": {"wallet_balance": amount}})
+        await add_transaction(dep["user_id"], "deposit", amount, "Deposit approved (auto)",
+                              {"deposit_id": str(dep["_id"]), "gateway": "paynow"})
+    else:
+        await db.deposits.update_one(
+            {"_id": dep["_id"]},
+            {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body,
+                      "admin_note": body.get("msg") or "gateway failure"}},
+        )
+    return "SUCCESS"
+
+
+@api.post("/webhooks/paynow/payout")
+async def webhook_payout(request: Request):
+    body = await request.json()
+    logger.info("PayNow PAYOUT callback: %s", body)
+    if not paynow.verify_callback(body):
+        logger.warning("PayNow payout callback signature invalid")
+        raise HTTPException(400, "Invalid signature")
+    merchant_order_no = body.get("merchantOrderNo")
+    status_code = int(body.get("status", 0))
+    reversal = int(body.get("reversal", 0))
+    if not merchant_order_no:
+        raise HTTPException(400, "Missing merchantOrderNo")
+    w = await db.withdrawals.find_one({"merchant_order_no": merchant_order_no})
+    if not w:
+        return "SUCCESS"
+    if w["status"] in ("approved", "rejected"):
+        return "SUCCESS"
+
+    if status_code == 2 and not reversal:
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body}},
+        )
+        await add_transaction(w["user_id"], "withdrawal", -w["amount"],
+                              "Withdrawal paid out (auto)",
+                              {"withdrawal_id": str(w["_id"]), "gateway": "paynow"})
+    else:
+        # Refund held amount
+        await db.users.update_one({"_id": w["user_id"]}, {"$inc": {"wallet_balance": w["amount"]}})
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body,
+                      "admin_note": body.get("msg") or "gateway failure/reversal"}},
+        )
+        await add_transaction(w["user_id"], "withdrawal_refund", w["amount"],
+                              "Withdrawal failed - refunded",
+                              {"withdrawal_id": str(w["_id"]), "gateway": "paynow"})
+    return "SUCCESS"
 
 
 @api.post("/admin/withdrawals/{wid}/reject")

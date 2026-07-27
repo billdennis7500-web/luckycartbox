@@ -57,3 +57,28 @@ See `/app/memory/test_credentials.md`.
 - Backend on 8001 (`/api` prefix). Frontend on 3000. Both supervised.
 - `backend/.env` holds `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `ADMIN_PHONE`, `ADMIN_PASSWORD`, `FRONTEND_URL`.
 - `frontend/.env` holds `REACT_APP_BACKEND_URL`.
+
+## 2026-02-01 · PayNow integration + server-side cron
+
+### Delivered
+- PayNow SDK (`backend/paynow.py`): sign-payload / verify-callback per MD5 spec (`merchantNo + sortedJSON + signType + timestamp + key`).
+- Auto deposits: user chooses "PayNow (instant)" → backend calls `/open/v1/payins/create` → returns checkout URL → user pays → PayNow POSTs to `/api/webhooks/paynow/payin` → wallet auto-credited (verified: ₦0 → ₦500).
+- Auto payouts: admin approve on a withdrawal that carries `bank_code` triggers `/open/v2/payouts/create`. Callback at `/api/webhooks/paynow/payout` marks approved or refunds the held funds.
+- Admin overview shows LIVE badge + real gateway balance (queried from `/open/v1/merchant/balance`).
+- User withdrawal form: searchable Nigerian bank list fetched from PayNow.
+- Admin settings exposes the two callback URLs (copy-to-clipboard) for merchant-dashboard configuration.
+- Server-side cron: `_profit_drop_cron` runs every 15 min against all users with active investments (in addition to lazy-on-read).
+
+### Verified live
+- `GET /admin/paynow/balance` → `{code:0, data:{amount:"0", currencyCode:"NGN"}}`
+- `GET /admin/paynow/banks` → returned full NG bank list
+- `POST /deposits` with `paynow-auto` → real order created at PayNow with checkout URL
+- Simulated PayNow callback with correct MD5 sign → deposit approved, user wallet credited, response body = `"SUCCESS"`
+
+### Configuration required by user
+1. Log into `https://merchant.paynow.money` and set the two webhook URLs shown in admin/settings.
+2. Whitelist our server's egress IP in PayNow dashboard for payout, statement and balance endpoints.
+
+### Deferred
+- SMS OTP for phone verification (needs provider selection — Termii recommended).
+- Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
