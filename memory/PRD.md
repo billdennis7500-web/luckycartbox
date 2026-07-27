@@ -282,6 +282,16 @@ the dark-text-on-white outcome. Reverted cleanly:
 
 Verified: pure dark theme restored across Dashboard / Deposit / Withdraw / Referrals / History pages; no leftover theme-light class; toggle buttons gone; `yarn build` compiles clean.
 
+## 2026-07-27 · Bigger in-app PayNow iframe
+
+### Delivered
+- **PayNow checkout iframe now occupies ~83% of the viewport** (was ~50% before due to `calc(100vh - 260px)` height cap + `px-4 py-4` body padding + a redundant info banner + an inline verify button eating space). Users see the account number, expiry timer, "I have made this bank transfer" CTA, and payment guide without scrolling.
+- **Body layout is now state-aware**: `overflow-hidden` + no padding during PayNow "waiting" (iframe fills edge-to-edge, no rounded border since the modal already frames it); returns to standard `px-4 py-4 space-y-3` for the unavailable / verifying / approved / rejected panels.
+- **Manual verify moved into the footer** as a primary green CTA next to a smaller Close button, so the iframe is uninterrupted while the primary action is always thumb-reachable.
+- Removed the redundant "Complete the transfer above" info banner (its message is already in the modal subtitle: *"Amount ₦X — auto-updates on receipt."*).
+
+Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.9% of a 900px viewport.
+
 ### Deferred (unchanged)
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.

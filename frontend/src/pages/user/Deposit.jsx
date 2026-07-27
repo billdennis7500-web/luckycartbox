@@ -441,8 +441,14 @@ export default function Deposit() {
             )}
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {/* Body — during PayNow "waiting" state we hand almost the entire viewport
+              to the iframe (no padding, no separator noise) so users get a real
+              full-screen checkout experience. Other states keep normal padding. */}
+          <div className={
+            waitState === "waiting"
+              ? "flex-1 overflow-hidden"
+              : "flex-1 overflow-y-auto px-4 py-4 space-y-3"
+          }>
               {/* Gateway unavailable state — clean inline explainer, no PayNow branding */}
               {waitState === "unavailable" && (
                 <div
@@ -504,12 +510,9 @@ export default function Deposit() {
                 </div>
               )}
 
-              {/* Embedded checkout — full-height iframe, no URL bar visible */}
+              {/* Embedded checkout — fills the whole body (edge to edge) */}
               {waitState === "waiting" && waitDep.checkout_url && (
-                <div
-                  className="relative rounded-xl border border-[var(--nb-border)] bg-white overflow-hidden"
-                  style={{ height: "calc(100vh - 260px)", minHeight: "360px" }}
-                >
+                <div className="relative bg-white h-full w-full">
                   <div className="absolute inset-0 grid place-items-center bg-[var(--nb-card)] text-[var(--nb-muted)] text-xs pointer-events-none z-0">
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin text-[#0055FF]" />
@@ -522,33 +525,10 @@ export default function Deposit() {
                     title="Secure payment"
                     referrerPolicy="no-referrer"
                     sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
-                    className="relative z-10 w-full h-full border-0"
+                    className="relative z-10 w-full h-full border-0 block"
                     data-testid="deposit-checkout-iframe"
                   />
                 </div>
-              )}
-
-              {waitState === "waiting" && (
-                <>
-                  <div className="rounded-lg border border-[#0055FF]/40 bg-[#0055FF]/10 p-3 text-[11px] text-[var(--nb-muted)] flex items-start gap-2">
-                    <Loader2 className="w-3.5 h-3.5 text-[#0055FF] animate-spin mt-0.5 shrink-0" />
-                    <div>
-                      Complete the transfer above. We'll auto-credit your wallet within a few seconds of receipt.
-                      If it takes longer, tap the verify button below.
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    onClick={manualVerify}
-                    disabled={waitState === "verifying"}
-                    data-testid="manual-verify-btn"
-                    className="w-full h-11 border-[var(--nb-border)] bg-transparent text-white rounded-xl"
-                  >
-                    {waitState === "verifying" ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Zap className="w-4 h-4 mr-2"/>}
-                    I've paid — check now
-                  </Button>
-                </>
               )}
 
               {waitState === "verifying" && (
@@ -584,15 +564,35 @@ export default function Deposit() {
 
           {/* Footer (fixed on bottom) */}
           <div className="shrink-0 border-t border-[var(--nb-border)] bg-[var(--nb-card)] px-4 py-3">
-            <Button
-              variant="outline"
-              onClick={closeWait}
-              disabled={waitState === "verifying"}
-              className="w-full border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
-              data-testid="waiting-close"
-            >
-              {waitState === "approved" ? "Done" : "Close"}
-            </Button>
+            {waitState === "waiting" ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={manualVerify}
+                  data-testid="manual-verify-btn"
+                  className="flex-1 h-11 bg-[#10B981] hover:bg-[#0EA97A] rounded-xl"
+                >
+                  <Zap className="w-4 h-4 mr-2" /> I've paid — check now
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={closeWait}
+                  className="w-24 border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
+                  data-testid="waiting-close"
+                >
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={closeWait}
+                disabled={waitState === "verifying"}
+                className="w-full border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
+                data-testid="waiting-close"
+              >
+                {waitState === "approved" ? "Done" : "Close"}
+              </Button>
+            )}
           </div>
         </div>
       )}
