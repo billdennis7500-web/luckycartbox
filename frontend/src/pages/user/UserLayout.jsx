@@ -22,10 +22,12 @@ function ImpersonationPill() {
     try {
       await stopImpersonation();
       toast.success("Back to admin");
-      nav("/admin");
+      // Force a hard reload so cookies + AuthContext resynchronize before AdminLayout mounts.
+      window.location.assign("/admin");
     } catch {
       toast.error("Couldn't switch back — try logging in again");
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
   };
   return (
     <div

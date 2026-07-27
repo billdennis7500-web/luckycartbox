@@ -83,6 +83,39 @@ See `/app/memory/test_credentials.md`.
 - SMS OTP for phone verification (needs provider selection — Termii recommended).
 - Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
 
+## 2026-07-27 · Admin control panel expansion + impersonation + fee engine
+
+### Delivered
+- **Backend settings** extended: `withdrawal_fee_pct` (default **15**), `auto_payout_enabled` (default **false** = manual approval), `deposit_quick_amounts` (admin-editable presets), `batch_approve_limit` (default 50). `/api/settings/public` now exposes the non-sensitive ones so the user UI can react.
+- **Withdrawal fee engine**: `POST /api/withdrawals` computes `fee = amount * fee_pct / 100` and `payout_amount = amount - fee`. When `auto_payout_enabled=true` AND `paynow.enabled()` AND the withdrawal has a `bank_code`, the payout is fired immediately (helper `_paynow_payout_withdrawal`) — failures are logged, not raised, so the withdrawal stays pending for manual retry.
+- **Bulk approve**: `POST /api/admin/withdrawals/bulk-approve` — accepts an `ids` array, enforces `batch_approve_limit`, returns `{approved, processing, skipped, errors[]}`.
+- **Admin impersonation**: `POST /api/admin/users/{uid}/impersonate` swaps auth cookies to the target user, refuses on admin targets. `POST /api/admin/impersonate/stop?admin_id=X` restores admin cookies. Admin's own id is stored in `localStorage.impersonation_admin_id` so the frontend knows when to render the pill.
+- **Extended `admin_get_user`**: now returns `total_deposited` (sum of approved deposits), `inviter` (or null), and `gen1_referrals` list.
+- **Admin add-balance** now increments `user.total_admin_credited` / `user.total_admin_debited` and stores the admin's email + name in the transaction meta — enabling the "Admin-funded" chip on the users list + audit trail on the user detail page.
+- **Frontend Dashboard**: welcome modal is inset from phone edges (`w-[calc(100vw-2rem)]`); quick actions reordered → **Deposit / Withdraw / Redeem / Invest**.
+- **Frontend Deposit**: quick-amount chips now driven by `settings.deposit_quick_amounts` (admin-editable in Settings).
+- **Frontend Withdraw**: fee preview panel (You send / Platform fee (X%) / You receive) — appears only when `fee_pct > 0`. Instant banner copy adapts based on `auto_payout_enabled`.
+- **Frontend AdminSettings**: added Withdrawals section (fee %, batch limit, auto-payout checkbox) + Deposit-page section (quick-amount presets comma-list).
+- **Frontend AdminUsers**: "Funded by admin" chip on rows + filter toggle + "Funded" count stat.
+- **Frontend AdminUserDetail**: new stat chips (total deposited, admin credited), inviter card that links back to that admin user detail, Gen-1 referrals list with drill-in links, and a "Log in as user" impersonate button with confirm.
+- **Frontend AdminWithdrawals**: bulk-approve mode — checkbox column when tab=pending, "Approve N selected" button, summary chips (pending value, fees collected, batch limit), dynamic Auto-payout/Manual chip.
+- **Frontend UserLayout**: floating orange **"Viewing as X · Return"** pill at top-center whenever admin is impersonating; return does a hard reload to `/admin` to avoid cookie/context race.
+- **Frontend AdminLayout**: pending-count badges on Deposits + Withdrawals nav items (refreshed every 30s via `/api/admin/stats`).
+- **74/76 pytest** (1 real bug found + fixed; 1 environmental network flake on paynow verify).
+
+### Bugs fixed this iteration
+- `admin_get_user` inviter lookup was querying `{"referral_code": u["referred_by"]}` but `referred_by` is stored as `ObjectId` at register time — always no match. Root cause + fix now use `{"_id": u["referred_by"]}`. Same bug pattern on Gen-1 lookup: `{"referred_by": u.get("referral_code")}` fixed to `{"referred_by": u["_id"]}`.
+- Welcome dialog was flush against right edge on 428px viewport (Radix `left-1/2 -translate-x-1/2` combined with `w-[calc(100%-2rem)] mx-4` mis-computed width). Simplified to `w-[calc(100vw-2rem)]` — now symmetric.
+- Impersonation "Return to admin" pill sometimes didn't tear down because soft nav happened before setUser propagated. Switched to `window.location.assign('/admin')` for a hard reload.
+
+### Deferred (unchanged)
+- `server.py` router split (~1745 lines).
+- SMS OTP for phone verification.
+- PayNow `query_payee` 429 retry/backoff.
+- Auto-reconciliation cron for deposits stuck > 30 min.
+- Consider background queue for bulk-approve at large batches (currently synchronous — max 50 default).
+- Second-factor confirmation on toggling auto_payout to ON (safety guard).
+
 ## 2026-07-27 · Welcome pop-up + Telegram + polished redeem/history
 
 ### Delivered

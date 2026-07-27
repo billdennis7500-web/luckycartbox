@@ -186,7 +186,7 @@ export default function Dashboard() {
       <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
         <DialogContent
           data-testid="welcome-dialog"
-          className="bg-[#0B1524] border-[#1A2B44] text-white max-w-md w-[calc(100%-2rem)] mx-4 rounded-2xl overflow-hidden"
+          className="bg-[#0B1524] border-[#1A2B44] text-white max-w-md w-[calc(100vw-2rem)] rounded-2xl overflow-hidden"
         >
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-[#0055FF]/30 blur-3xl" />

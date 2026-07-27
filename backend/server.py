@@ -1204,10 +1204,13 @@ async def admin_get_user(uid: str, admin: dict = Depends(get_admin_user)):
     ]):
         total_deposited = float(r["s"])
 
-    # Inviter (whoever's referral_code == u.referred_by)
+    # Inviter (whoever ObjectId matches u.referred_by — this is stored as ObjectId at register)
     inviter = None
     if u.get("referred_by"):
-        inv = await db.users.find_one({"referral_code": u["referred_by"]})
+        try:
+            inv = await db.users.find_one({"_id": oid(u["referred_by"])} if isinstance(u["referred_by"], str) else {"_id": u["referred_by"]})
+        except Exception:
+            inv = None
         if inv:
             inviter = {
                 "id": str(inv["_id"]),
@@ -1216,10 +1219,10 @@ async def admin_get_user(uid: str, admin: dict = Depends(get_admin_user)):
                 "referral_code": inv.get("referral_code"),
             }
 
-    # Gen-1 referrals (people who signed up under this user's code)
+    # Gen-1 referrals (people whose referred_by ObjectId == this user's _id)
     gen1_docs = await db.users.find(
-        {"referred_by": u.get("referral_code")}
-    ).sort("created_at", -1).to_list(200) if u.get("referral_code") else []
+        {"referred_by": u["_id"]}
+    ).sort("created_at", -1).to_list(200)
 
     def shape_ref(x: dict) -> dict:
         return {
