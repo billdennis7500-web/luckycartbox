@@ -6,9 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose,
-} from "@/components/ui/drawer";
-import {
   Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -388,38 +385,64 @@ export default function Deposit() {
         </Card>
       )}
 
-      {/* Waiting drawer (no PayNow branding) */}
-      <Drawer open={!!waitDep} onOpenChange={(o) => !o && closeWait()}>
-        <DrawerContent
+      {/* Full-screen checkout — no swipe-down, no gesture dismiss.
+          Only closes via the explicit Close/Done button. No PayNow branding. */}
+      {waitDep && (
+        <div
+          className="fixed inset-0 z-[60] bg-[#0B1524] text-white flex flex-col overflow-hidden"
           data-testid="waiting-drawer"
-          className="bg-[#0B1524] border-t border-[#1A2B44] text-white max-w-xl mx-auto rounded-t-2xl max-h-[95vh]"
+          role="dialog"
+          aria-modal="true"
         >
-          <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-[#1A2B44]" />
-          <DrawerHeader className="pb-2">
-            <DrawerTitle className="font-display flex items-center gap-2">
+          {/* Header (fixed on top) */}
+          <div className="shrink-0 border-b border-[#1A2B44] bg-[#0B1524] px-4 py-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[#0055FF]/15 grid place-items-center shrink-0">
               {waitState === "approved" ? (
-                <><CheckCircle2 className="w-5 h-5 text-[#10B981]" /> Payment received</>
+                <CheckCircle2 className="w-5 h-5 text-[#10B981]" />
               ) : waitState === "rejected" ? (
-                <><X className="w-5 h-5 text-[#EF4444]" /> Payment failed</>
+                <X className="w-5 h-5 text-[#EF4444]" />
               ) : waitState === "unavailable" ? (
-                <><Clock className="w-5 h-5 text-[#F59E0B]" /> Instant Pay is warming up</>
+                <Clock className="w-5 h-5 text-[#F59E0B]" />
               ) : (
-                <><Clock className="w-5 h-5 text-[#F59E0B]" /> Complete your payment</>
+                <Clock className="w-5 h-5 text-[#F59E0B]" />
               )}
-            </DrawerTitle>
-            <DrawerDescription className="text-[#94A3B8] text-xs">
-              {waitState === "approved"
-                ? "Your wallet has been credited."
-                : waitState === "rejected"
-                ? "This payment was reported as failed or expired."
-                : waitState === "unavailable"
-                ? "Our gateway needs a moment to verify server access. Please choose a bank transfer option below, or retry in a few minutes."
-                : `Amount ${formatNaira(waitDep?.amount || 0)} — this window will auto-update once received.`}
-            </DrawerDescription>
-          </DrawerHeader>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-700 leading-tight truncate" data-testid="waiting-title">
+                {waitState === "approved"
+                  ? "Payment received"
+                  : waitState === "rejected"
+                  ? "Payment failed"
+                  : waitState === "unavailable"
+                  ? "Instant Pay is warming up"
+                  : "Complete your payment"}
+              </div>
+              <div className="text-[11px] text-[#94A3B8] leading-tight truncate">
+                {waitState === "approved"
+                  ? "Your wallet has been credited."
+                  : waitState === "rejected"
+                  ? "This payment was reported as failed or expired."
+                  : waitState === "unavailable"
+                  ? "Choose a bank transfer below or tap Retry."
+                  : `Amount ${formatNaira(waitDep?.amount || 0)} — auto-updates on receipt.`}
+              </div>
+            </div>
+            {/* Only allow explicit dismissal AFTER the final states — never mid-flight */}
+            {(waitState === "approved" || waitState === "rejected" || waitState === "unavailable") && (
+              <button
+                type="button"
+                onClick={closeWait}
+                data-testid="waiting-header-close"
+                className="w-9 h-9 rounded-lg grid place-items-center border border-[#1A2B44] text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 shrink-0"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
-          {waitDep && (
-            <div className="px-4 pb-3 space-y-3 overflow-y-auto" style={{ maxHeight: "calc(95vh - 180px)" }}>
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
               {/* Gateway unavailable state — clean inline explainer, no PayNow branding */}
               {waitState === "unavailable" && (
                 <div
@@ -481,11 +504,11 @@ export default function Deposit() {
                 </div>
               )}
 
-              {/* Embedded checkout — no window.open, no visible URL bar */}
+              {/* Embedded checkout — full-height iframe, no URL bar visible */}
               {waitState === "waiting" && waitDep.checkout_url && (
                 <div
                   className="relative rounded-xl border border-[#1A2B44] bg-white overflow-hidden"
-                  style={{ height: "min(62vh, 560px)" }}
+                  style={{ height: "calc(100vh - 260px)", minHeight: "360px" }}
                 >
                   <div className="absolute inset-0 grid place-items-center bg-[#0B1524] text-[#94A3B8] text-xs pointer-events-none z-0">
                     <div className="flex items-center gap-2">
@@ -557,18 +580,22 @@ export default function Deposit() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+          </div>
 
-          <DrawerFooter className="pt-2">
-            <DrawerClose asChild>
-              <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white h-11 rounded-xl" data-testid="waiting-close">
-                {waitState === "approved" ? "Done" : "Close"}
-              </Button>
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          {/* Footer (fixed on bottom) */}
+          <div className="shrink-0 border-t border-[#1A2B44] bg-[#0B1524] px-4 py-3">
+            <Button
+              variant="outline"
+              onClick={closeWait}
+              disabled={waitState === "verifying"}
+              className="w-full border-[#1A2B44] bg-transparent text-white h-11 rounded-xl"
+              data-testid="waiting-close"
+            >
+              {waitState === "approved" ? "Done" : "Close"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
