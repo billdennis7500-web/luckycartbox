@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft } from "lucide-react";
+import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft, X } from "lucide-react";
 import { toast } from "sonner";
+import { isImpersonatingTab } from "@/lib/api";
 
 const NAV = [
   { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
@@ -14,15 +15,41 @@ const NAV = [
 
 function ImpersonationPill() {
   const { user, stopImpersonation, isImpersonating } = useAuth();
-  const nav = useNavigate();
   const [loading, setLoading] = useState(false);
-  if (!isImpersonating()) return null;
+  const inTabImp = isImpersonatingTab();
+  const inCookieImp = isImpersonating();
+  if (!inTabImp && !inCookieImp) return null;
+
+  // New tab-scoped impersonation: closing this tab returns admin cleanly. No cookie mutation.
+  if (inTabImp) {
+    return (
+      <div
+        data-testid="impersonation-pill"
+        className="fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-1.5rem)]"
+      >
+        <div className="flex items-center gap-2 rounded-full border border-[#F59E0B]/40 bg-[#F59E0B]/15 text-[#F59E0B] backdrop-blur px-3 py-1.5 shadow-lg">
+          <LogIn className="w-3 h-3" />
+          <span className="text-[11px] font-medium truncate">
+            Admin view: <b>{user?.name}</b>
+          </span>
+          <button
+            onClick={() => window.close()}
+            data-testid="impersonation-close-tab"
+            className="text-[11px] font-medium underline underline-offset-2 hover:no-underline inline-flex items-center gap-1"
+          >
+            <X className="w-3 h-3" /> Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy cookie-swap flow (kept for backwards compatibility with any older admin sessions).
   const returnToAdmin = async () => {
     setLoading(true);
     try {
       await stopImpersonation();
       toast.success("Back to admin");
-      // Force a hard reload so cookies + AuthContext resynchronize before AdminLayout mounts.
       window.location.assign("/admin");
     } catch {
       toast.error("Couldn't switch back — try logging in again");

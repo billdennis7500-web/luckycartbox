@@ -22,6 +22,7 @@ import Transactions from "@/pages/user/Transactions";
 import Profile from "@/pages/user/Profile";
 import BindAccount from "@/pages/user/BindAccount";
 import Investments from "@/pages/user/Investments";
+import ImpersonateBootstrap from "@/pages/ImpersonateBootstrap";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminOverview from "@/pages/admin/AdminOverview";
@@ -58,6 +59,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/impersonate" element={<ImpersonateBootstrap />} />
 
           <Route
             path="/"

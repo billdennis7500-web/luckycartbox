@@ -237,3 +237,20 @@ During testing the pod's outbound IP shifted from 34.170.12.145 → 104.198.214.
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.
 - Auto-reconciliation cron for stuck deposits >30 min.
+
+## 2026-07-27 · Full-screen checkout + admin QoL bundle
+
+### Delivered
+- **Deposit checkout is now a full-screen modal** (was a swipeable bottom drawer). `fixed inset-0 z-[60]` overlay with a sticky header ("Complete your payment", ₦ amount) and sticky footer with a "Close" button. **No swipe-down gesture** — user can only dismiss via the explicit Close/Done button (or after a terminal approved/rejected/unavailable state).
+- **Instant Pay tile always shows "FAST" (green badge, "Fast · Recommended")** — previously flipped between "Slow" and "Fast" based on runtime health. Now consistent branding regardless of gateway state.
+- **Withdrawal duplicate row bug fixed** — the transaction feed used to show *both* a `withdrawal_hold` (-₦X) and a `withdrawal` (-₦X) row for the same withdrawal, making users think they were debited twice. Backend now consolidates: on approval (manual, bulk, PayNow webhook, PayNow reconcile) the existing `withdrawal_hold` transaction is **updated in-place** to `withdrawal` via a new `settle_withdrawal_hold()` helper. On rejection the flow is unchanged (hold + refund pair still shows the reversal trail). Migrated 33 pre-existing duplicate rows out of the DB.
+- **Investment countdown ticks with seconds** — `Next payout` now displays `Xh Ym Zs` (padded) and re-renders every 1s via a `useState` tick on `/investments`. Verified end-to-end: `15h 47m 38s → 15h 47m 35s` over 3s.
+- **Admin "Log in as user" now opens in a new browser tab** with a per-tab impersonation token stored in `sessionStorage` (not shared across tabs). Admin's own cookies remain intact in the original tab. New backend endpoint `POST /admin/users/{uid}/impersonate-token` mints the token without touching cookies. New frontend route `/impersonate#token=…` bootstraps the impersonated session and clears the fragment. Axios interceptor sends `Authorization: Bearer <token>` (with `withCredentials: false`) for that tab only. The impersonation tab shows an amber pill "Admin view: {name} · Close" (close = `window.close()`).
+- **Admin add-balance toast** now shows the new balance + a "View user" action that scrolls to the user's transactions section for immediate audit.
+- **AdminUserDetail** already displays "Referred by" (inviter card, linked) and "People they referred (Gen 1)" (list with invested totals + linked cards) — verified in this iteration.
+
+### Deferred (unchanged)
+- SMS OTP for phone verification.
+- PayNow `query_payee` 429 retry/backoff hardening.
+- Product logo icon upload (next iteration).
+- Auto-reconciliation cron for stuck deposits >30 min.

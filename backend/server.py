@@ -370,9 +370,10 @@ async def reconcile_pending_paynow_withdrawals() -> int:
                 {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                           "gateway_query": order, "reconciled": True}},
             )
-            await add_transaction(w["user_id"], "withdrawal", -w["amount"],
-                                  "Withdrawal paid out (reconciled)",
-                                  {"withdrawal_id": str(w["_id"]), "gateway": "paynow"})
+            # Convert the original "withdrawal_hold" row into the final "withdrawal"
+            # row (in-place, no duplicate debit line in the user's transaction feed).
+            await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                          "Withdrawal paid out")
             settled += 1
         elif status_code in (3, 4, 6):
             # Refund and mark rejected
@@ -526,6 +527,23 @@ async def add_transaction(user_id: ObjectId, tx_type: str, amount: float, note: 
         "created_at": now_utc().isoformat(),
     }
     await db.transactions.insert_one(doc)
+
+
+async def settle_withdrawal_hold(user_id: ObjectId, withdrawal_id: str, new_type: str, new_note: str) -> None:
+    """Convert the existing ``withdrawal_hold`` transaction for a withdrawal into its
+    terminal state (``withdrawal`` on approval). Prevents a second identical-amount
+    debit row appearing in the user's transaction history alongside the original hold.
+
+    Falls back to appending a fresh transaction only if the hold row is missing
+    (defensive — shouldn't happen but guarantees an audit trail either way).
+    """
+    result = await db.transactions.update_one(
+        {"user_id": user_id, "type": "withdrawal_hold", "meta.withdrawal_id": withdrawal_id},
+        {"$set": {"type": new_type, "note": new_note, "settled_at": now_utc().isoformat()}},
+    )
+    if result.matched_count == 0:
+        # Hold row missing — append a normal transaction so the user still has a receipt.
+        await add_transaction(user_id, new_type, 0.0, new_note, {"withdrawal_id": withdrawal_id, "orphaned": True})
 
 
 # ---------------------------------------------------------------------------
@@ -1300,6 +1318,24 @@ async def admin_impersonate(uid: str, response: Response, admin: dict = Depends(
     return {"ok": True, "access_token": access, "user": clean(u)}
 
 
+@api.post("/admin/users/{uid}/impersonate-token")
+async def admin_impersonate_token(uid: str, admin: dict = Depends(get_admin_user)):
+    """Issue an access token for the target user WITHOUT mutating admin's cookies.
+
+    Used by the frontend to open the impersonated dashboard in a fresh browser tab that
+    authenticates via `Authorization: Bearer <token>` (kept in that tab's sessionStorage).
+    The admin's own session in the original tab is preserved untouched.
+    """
+    u = await db.users.find_one({"_id": oid(uid)})
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.get("role") == "admin":
+        raise HTTPException(400, "Cannot impersonate another admin")
+    access = create_access_token(str(u["_id"]), u.get("role") or "user")
+    logger.info(f"Admin {admin.get('email') or admin['_id']} minted impersonation token for user {u['_id']}")
+    return {"ok": True, "access_token": access, "user": clean(u)}
+
+
 @api.post("/admin/impersonate/stop")
 async def admin_impersonate_stop(response: Response, admin_id: str = Query(...)):
     """Restore admin cookies. `admin_id` is the admin's own user_id, provided by the frontend
@@ -1458,8 +1494,7 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
     await db.withdrawals.update_one({"_id": w["_id"]},
                                     {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                                               "admin_note": payload.note or ""}})
-    await add_transaction(w["user_id"], "withdrawal", -w["amount"], "Withdrawal approved",
-                          {"withdrawal_id": str(w["_id"])})
+    await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal", "Withdrawal approved")
     return {"ok": True}
 
 
@@ -1499,8 +1534,7 @@ async def bulk_approve_withdrawals(payload: BulkApprovalIn, admin: dict = Depend
                 {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                           "admin_note": payload.note or "Bulk approved"}},
             )
-            await add_transaction(w["user_id"], "withdrawal", -w["amount"], "Withdrawal approved (bulk)",
-                                  {"withdrawal_id": str(w["_id"])})
+            await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal", "Withdrawal approved (bulk)")
             results["approved"] += 1
 
     return {"ok": True, **results}
@@ -1673,9 +1707,8 @@ async def webhook_payout(request: Request):
             {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                       "gateway_callback": body}},
         )
-        await add_transaction(w["user_id"], "withdrawal", -w["amount"],
-                              "Withdrawal paid out (auto)",
-                              {"withdrawal_id": str(w["_id"]), "gateway": "paynow"})
+        await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                      "Withdrawal paid out")
     else:
         # Refund held amount
         await db.users.update_one({"_id": w["user_id"]}, {"$inc": {"wallet_balance": w["amount"]}})

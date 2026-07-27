@@ -37,7 +37,7 @@ async function copyText(v) {
 export default function AdminUserDetail() {
   const { uid } = useParams();
   const nav = useNavigate();
-  const { impersonate } = useAuth();
+  const { user: adminUser } = useAuth();
   const [data, setData] = useState(null);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -54,11 +54,22 @@ export default function AdminUserDetail() {
     const signed = op === "credit" ? raw : -raw;
     setSaving(true);
     try {
-      await api.post(`/admin/users/${uid}/add-balance`, {
+      const { data: resp } = await api.post(`/admin/users/${uid}/add-balance`, {
         amount: signed,
         note: note || (op === "credit" ? "Admin credit" : "Admin debit"),
       });
-      toast.success(`${op === "credit" ? "Credited" : "Debited"} ₦${raw.toLocaleString()}`);
+      const verb = op === "credit" ? "Credited" : "Debited";
+      const newBal = Number(resp?.wallet_balance ?? resp?.user?.wallet_balance ?? 0);
+      toast.success(`${verb} ₦${raw.toLocaleString()} — new balance ₦${newBal.toLocaleString()}`, {
+        description: `${user.name} · ${user.phone}`,
+        action: {
+          label: "View user",
+          onClick: () => {
+            const el = document.getElementById("user-transactions-anchor");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          },
+        },
+      });
       setAmount(""); setNote("");
       await load();
     } catch (e) {
@@ -67,12 +78,22 @@ export default function AdminUserDetail() {
   };
 
   const loginAs = async () => {
-    if (!window.confirm(`Log in as ${user.name}?\nA "Return to admin" pill will appear so you can switch back.`)) return;
+    if (!window.confirm(`Open ${user.name}'s dashboard in a new tab?\nYour admin session in this tab is preserved.`)) return;
     setImperLoading(true);
     try {
-      await impersonate(uid);
-      toast.success("Now viewing as user");
-      nav("/dashboard");
+      const { data } = await api.post(`/admin/users/${uid}/impersonate-token`);
+      const params = new URLSearchParams({
+        token: data.access_token,
+        admin_id: adminUser?.id || "",
+        user: data.user?.name || "",
+      });
+      const url = `${window.location.origin}/impersonate#${params.toString()}`;
+      const w = window.open(url, "_blank", "noopener");
+      if (!w) {
+        toast.error("Popup blocked — allow popups for this site and retry.");
+      } else {
+        toast.success(`Opened ${data.user?.name || "user"}'s dashboard in a new tab`);
+      }
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Impersonation failed");
     } finally { setImperLoading(false); }
@@ -379,7 +400,7 @@ export default function AdminUserDetail() {
       </section>
 
       {/* Transactions */}
-      <section>
+      <section id="user-transactions-anchor">
         <h2 className="font-display text-lg font-600 mb-3 flex items-center gap-2">
           <Gift className="w-4 h-4 text-[#0055FF]" /> Recent transactions
         </h2>

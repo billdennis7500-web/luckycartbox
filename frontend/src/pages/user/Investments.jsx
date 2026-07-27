@@ -13,7 +13,11 @@ function nextPayoutText(inv) {
   if (diff <= 0) return "Any moment now";
   const h = Math.floor(diff / 3.6e6);
   const m = Math.floor((diff % 3.6e6) / 60000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const s = Math.floor((diff % 60000) / 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  if (h > 0) return `${h}h ${pad(m)}m ${pad(s)}s`;
+  if (m > 0) return `${m}m ${pad(s)}s`;
+  return `${s}s`;
 }
 function tint(name = "") {
   const palette = [
@@ -160,12 +164,20 @@ export default function Investments() {
   const [invs, setInvs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("active");
+  const [, setNowTick] = useState(0);
 
   const load = () => {
     setLoading(true);
     api.get("/investments").then((r) => setInvs(r.data)).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
+
+  // Ticker: force a re-render every second so the countdown seconds tick live
+  // without extra API calls.
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const active = invs.filter((i) => i.status === "active");
   const completed = invs.filter((i) => i.status === "completed");
