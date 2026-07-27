@@ -83,6 +83,25 @@ See `/app/memory/test_credentials.md`.
 - SMS OTP for phone verification (needs provider selection — Termii recommended).
 - Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
 
+## 2026-07-27 · PayNow IP-block graceful degradation (production bug fix)
+
+### Reported issue
+User saw a Cloudflare 520-style **"The origin web server returned an invalid or incomplete response to Cloudflare"** page when initiating an Instant Pay deposit. The pod's outbound IP (34.170.12.145) was NOT the one whitelisted at PayNow (104.198.214.223), so every PayNow call returned `{code: 10000039, msg: "IP whitelist check failed"}`. Our backend was raising HTTP 502 in response, which Cloudflare intercepts and replaces with its own error page — so the user never saw our actual error message.
+
+### Fix delivered
+- **`paynow.py`** — added `_observe_response()` that sniffs every PayNow reply and flips a process-local `ip_blocked` flag with a 5-min TTL when it sees error code `10000039`. On the next successful response (`code=0`) the flag auto-clears (recovery).
+- **`GET /api/paynow/banks`** — respects `paynow.ip_blocked()`. When flagged, returns `{enabled: false, reason: "gateway_ip_blocked", data: []}` in ~1ms with no outbound call. The Deposit page's existing `enabled=false` branch already hides the Instant Pay tile, so users transparently see only manual bank options.
+- **`POST /api/deposits {method:"paynow-auto"}`** — fast-fails with **HTTP 400** (not 502) when `ip_blocked` is set: `"Instant Pay is temporarily unavailable. Please pick a bank transfer option below."` Cloudflare passes 400 bodies through unchanged, so users see our real message. Same 400 (not 502) treatment when the outbound PayNow call raises OR returns `code != 0`. Deposit doc stays with `status: "failed"` + `gateway_error` for the admin audit trail.
+- **6 new pytest** cases: `TestPaynowIpBlockUnit` (_observe_response happy + block + clear-on-recovery) and `TestPaynowGracefulDegradation` (HTTP-level contracts, skip-when-healthy design).
+
+### Auto-recovery verified in the wild
+During testing the pod's outbound IP shifted from 34.170.12.145 → 104.198.214.223 (whitelisted). The very next PayNow call returned `code=0`, `_observe_response` cleared the flag, `/paynow/banks` immediately started returning `enabled=true` with the full curated bank list — no manual restart needed.
+
+### Notes for the future
+- Test-suite total is now **82** (79 pass, 3 skip-by-design when gateway is healthy — no meaningful way to force IP-block from inside a passing production env). Optional next step: expose `POST /api/admin/paynow/simulate-ip-block` for CI-forced testing.
+- Backend still ~1750 lines; router split remains deferred.
+- Consider a cleanup cron / TTL index for `deposits` rows stuck at `status='failed'` accumulating during outages.
+
 ## 2026-07-27 · Admin control panel expansion + impersonation + fee engine
 
 ### Delivered
