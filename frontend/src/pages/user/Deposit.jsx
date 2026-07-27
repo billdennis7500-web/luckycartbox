@@ -123,6 +123,13 @@ export default function Deposit() {
   // waiting drawer state
   const [waitDep, setWaitDep] = useState(null);
   const [waitState, setWaitState] = useState("waiting");
+  // The `verifyRevealed` gate prevents users from confusing our "I've paid — check
+  // now" CTA with PayNow's own in-iframe "I have made this bank transfer" button
+  // (which submits the sender's name and finalises the checkout on PayNow's side).
+  // Since the iframe is cross-origin we can't detect that click; instead we keep
+  // our verify CTA hidden behind a small confirmation chip that the user must tap
+  // AFTER completing the PayNow flow. Reset on every fresh checkout.
+  const [verifyRevealed, setVerifyRevealed] = useState(false);
   const pollRef = useRef(null);
 
   const load = () => {
@@ -179,6 +186,7 @@ export default function Deposit() {
         // or a clean inline "gateway unavailable" message (blocked path).
         setWaitDep(data);
         setWaitState(data.gateway_ready === false ? "unavailable" : "waiting");
+        setVerifyRevealed(false);
       } else {
         toast.success("Deposit submitted. Admin will approve shortly.");
       }
@@ -202,7 +210,7 @@ export default function Deposit() {
     }
   };
 
-  const closeWait = () => { setWaitDep(null); setWaitState("waiting"); };
+  const closeWait = () => { setWaitDep(null); setWaitState("waiting"); setVerifyRevealed(false); };
 
   const [retryBusy, setRetryBusy] = useState(false);
   const retryGateway = async () => {
@@ -565,23 +573,44 @@ export default function Deposit() {
           {/* Footer (fixed on bottom) */}
           <div className="shrink-0 border-t border-[var(--nb-border)] bg-[var(--nb-card)] px-4 py-3">
             {waitState === "waiting" ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={manualVerify}
-                  data-testid="manual-verify-btn"
-                  className="flex-1 h-11 bg-[#10B981] hover:bg-[#0EA97A] rounded-xl"
-                >
-                  <Zap className="w-4 h-4 mr-2" /> I've paid — check now
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={closeWait}
-                  className="w-24 border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
-                  data-testid="waiting-close"
-                >
-                  Close
-                </Button>
-              </div>
+              verifyRevealed ? (
+                <div className="flex items-center gap-2" data-testid="footer-verify-revealed">
+                  <Button
+                    onClick={manualVerify}
+                    data-testid="manual-verify-btn"
+                    className="flex-1 h-11 bg-[#10B981] hover:bg-[#0EA97A] rounded-xl"
+                  >
+                    <Zap className="w-4 h-4 mr-2" /> I've paid — check now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={closeWait}
+                    className="w-24 border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
+                    data-testid="waiting-close"
+                  >
+                    Close
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2" data-testid="footer-verify-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setVerifyRevealed(true)}
+                    data-testid="reveal-verify-btn"
+                    className="w-full text-[11px] text-[var(--nb-muted)] hover:text-[#0055FF] py-1 underline underline-offset-2 transition-colors"
+                  >
+                    Already submitted your name on the form? Verify manually
+                  </button>
+                  <Button
+                    variant="outline"
+                    onClick={closeWait}
+                    className="w-full border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl"
+                    data-testid="waiting-close"
+                  >
+                    Close
+                  </Button>
+                </div>
+              )
             ) : (
               <Button
                 variant="outline"

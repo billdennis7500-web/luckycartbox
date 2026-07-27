@@ -292,6 +292,14 @@ Verified: pure dark theme restored across Dashboard / Deposit / Withdraw / Refer
 
 Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.9% of a 900px viewport.
 
+## 2026-07-27 · Progressive-disclosure verify button
+
+### Delivered
+- **"I've paid — check now" is no longer visible on initial iframe open.** Users were mistakenly tapping our footer CTA instead of PayNow's own **"I have made this bank transfer"** button inside the iframe, causing the verify to fire before the sender name was submitted. Since the iframe is cross-origin we can't listen for that click, so we gate the CTA behind a small text confirmation.
+- **Initial state (waiting):** footer shows a subtle underlined text link *"Already submitted your name on the form? Verify manually"* + a wide **Close** button. That's it — nothing that competes visually with PayNow's own submit CTA inside the iframe.
+- **After user taps the reveal link:** footer transforms to the green **"I've paid — check now"** primary + a smaller Close secondary. `verifyRevealed` state resets on close and on every fresh checkout.
+- No changes to iframe size (still ~83% of viewport).
+
 ### Deferred (unchanged)
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.
