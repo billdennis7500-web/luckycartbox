@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Annotated
 
 import bcrypt
+import httpx
 import jwt
 from bson import ObjectId
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
@@ -807,6 +808,16 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         # the checkout drawer (with a bank-transfer fallback CTA). This keeps the
         # Instant Pay tile visible to users and stops the "why is it missing?" bug.
         if paynow.ip_blocked():
+            # Try to grab the outbound IP so the UI can tell the merchant exactly
+            # which IP to whitelist. Best-effort — do not fail the deposit path
+            # if the ipify probe is slow.
+            outbound_ip = "unknown"
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as _c:
+                    r = await _c.get("https://api.ipify.org")
+                    outbound_ip = r.text.strip() or "unknown"
+            except Exception:
+                pass
             doc.update({
                 "status": "failed",
                 "gateway": "paynow",
@@ -819,7 +830,8 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                 "gateway": "paynow",
                 "checkout_url": None,
                 "gateway_ready": False,
-                "gateway_message": "Instant Pay is temporarily unavailable while our payment gateway completes access checks. Please choose a bank transfer option below, or try again in a few minutes.",
+                "outbound_ip": outbound_ip,
+                "gateway_message": f"Our payment gateway is rejecting requests from this server (IP {outbound_ip}). Whitelist this IP in your PayNow merchant dashboard and tap Retry — Instant Pay will start working immediately.",
             }
 
         res = await db.deposits.insert_one(doc)
@@ -1519,6 +1531,32 @@ async def admin_paynow_banks(admin: dict = Depends(get_admin_user)):
     if not paynow.enabled():
         raise HTTPException(400, "PayNow is not configured")
     return await paynow.list_banks_cached()
+
+
+@api.post("/paynow/retry")
+async def paynow_retry(user: dict = Depends(get_current_user)):
+    """Force-clear the cached IP-block flag and probe PayNow live. Returns the
+    current outbound IP so admins can see exactly which address to whitelist.
+    Called by the deposit "Retry now" button after the merchant whitelists us."""
+    outbound_ip = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as _c:
+            r = await _c.get("https://api.ipify.org")
+            outbound_ip = r.text.strip() or "unknown"
+    except Exception:
+        pass
+    if not paynow.enabled():
+        return {"gateway_ready": False, "reason": "disabled", "outbound_ip": outbound_ip}
+    paynow._clear_ip_blocked()
+    resp = await paynow.list_banks()
+    ok = resp.get("code") == 0 and not paynow.ip_blocked()
+    return {
+        "gateway_ready": ok,
+        "code": resp.get("code"),
+        "msg": resp.get("msg"),
+        "outbound_ip": outbound_ip,
+        "reason": None if ok else "gateway_ip_blocked",
+    }
 
 
 # User: bank code list (for auto withdrawal)

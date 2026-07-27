@@ -9,7 +9,7 @@ import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose,
 } from "@/components/ui/drawer";
 import {
-  Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt,
+  Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -207,6 +207,30 @@ export default function Deposit() {
 
   const closeWait = () => { setWaitDep(null); setWaitState("waiting"); };
 
+  const [retryBusy, setRetryBusy] = useState(false);
+  const retryGateway = async () => {
+    setRetryBusy(true);
+    try {
+      const { data } = await api.post("/paynow/retry");
+      if (data.gateway_ready) {
+        toast.success("Gateway is back online — try Instant Pay now!");
+        setGatewayReady(true);
+        closeWait();
+        // Refresh the deposit form so submit will create a real checkout
+        setMethod("instant-pay");
+      } else {
+        // Update the drawer copy with the outbound IP so admin knows what to whitelist
+        setWaitDep((w) => w ? { ...w, gateway_message:
+          `Our payment gateway is still rejecting requests from this server (IP ${data.outbound_ip || "unknown"}). Add this IP to your PayNow merchant dashboard whitelist, then tap Retry.`,
+          outbound_ip: data.outbound_ip,
+        } : w);
+        toast.info("Still unavailable — whitelist our IP at PayNow first.");
+      }
+    } catch (err) {
+      toast.error(formatApiError(err.response?.data?.detail) || "Retry failed");
+    } finally { setRetryBusy(false); }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
@@ -243,17 +267,15 @@ export default function Deposit() {
                   tone={{ bg: "#0055FF", fg: "#FFFFFF" }}
                   icon={<Zap className="w-5 h-5" />}
                   label="Instant Pay"
-                  sub={gatewayReady ? "Auto credit" : "Temporarily slow"}
+                  sub="Fast · Recommended"
                   testid="deposit-method-instant"
                 />
-                {!gatewayReady && (
-                  <span
-                    className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#F59E0B] text-black shadow"
-                    data-testid="deposit-instant-slow-badge"
-                  >
-                    Slow
-                  </span>
-                )}
+                <span
+                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#10B981] text-white shadow"
+                  data-testid="deposit-instant-recommended-badge"
+                >
+                  Fast
+                </span>
               </div>
             )}
             {accounts.map((a) => {
@@ -408,12 +430,36 @@ export default function Deposit() {
                     <Clock className="w-6 h-6 text-[#F59E0B]" />
                   </div>
                   <div className="mt-3 font-display font-700 text-white">
-                    Instant Pay is temporarily unavailable
+                    Instant Pay is warming up
                   </div>
                   <div className="text-xs text-[#94A3B8] mt-1.5 leading-relaxed max-w-md mx-auto">
                     {waitDep.gateway_message || "Our payment gateway is finalising server access checks. This usually clears in a few minutes."}
                   </div>
+                  {waitDep.outbound_ip && (
+                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0B1524] border border-[#1A2B44] text-xs tabular text-white">
+                      <span className="text-[#94A3B8]">Server IP:</span>
+                      <span className="font-display font-700">{waitDep.outbound_ip}</span>
+                      <button
+                        type="button"
+                        onClick={() => copy(waitDep.outbound_ip)}
+                        className="text-[#0055FF] hover:text-[#3377FF]"
+                        data-testid="copy-outbound-ip"
+                        aria-label="Copy server IP"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                   <div className="mt-4 flex flex-col gap-2">
+                    <Button
+                      onClick={retryGateway}
+                      disabled={retryBusy}
+                      data-testid="deposit-retry-gateway"
+                      className="w-full h-11 bg-[#10B981] hover:bg-[#0EA97A] rounded-xl"
+                    >
+                      {retryBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                      Retry now
+                    </Button>
                     {accounts.length > 0 && (
                       <Button
                         onClick={() => { closeWait(); setMethod(accounts[0].id); }}
