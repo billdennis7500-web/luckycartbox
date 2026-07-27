@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react";
 import { api, formatNaira, formatApiError } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { TrendingUp, Zap } from "lucide-react";
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose,
+} from "@/components/ui/drawer";
+import { TrendingUp, Zap, Coins, Timer, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import LoadMore from "@/components/LoadMore";
@@ -23,7 +25,7 @@ export default function Marketplace() {
     setLoading(true);
     try {
       await api.post("/invest", { product_id: selected.id });
-      toast.success(`Invested ₦${selected.price.toLocaleString()} in ${selected.name}`);
+      toast.success(`Invested ${formatNaira(selected.price)} in ${selected.name}`);
       setSelected(null);
       await refresh();
       load();
@@ -33,52 +35,77 @@ export default function Marketplace() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="marketplace-heading">
+        <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="marketplace-heading">
           Investment plans
         </h1>
-        <p className="text-[#94A3B8] mt-2">Pick a plan. Profits drop every 24 hours until it matures.</p>
+        <p className="text-sm text-[#94A3B8] mt-1">Pick a plan. Profits drop every 24 hours until it matures.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {products.slice(0, visible).map((p) => {
-          const totalReturn = p.price * (p.daily_profit_pct / 100) * p.duration_days;
+          const dailyEarn = p.price * (p.daily_profit_pct / 100);
+          const totalReturn = dailyEarn * p.duration_days;
           const affordable = (user?.wallet_balance || 0) >= p.price;
           return (
-            <Card key={p.id} className="bg-[#0B1524] border border-[#1A2B44] rounded-xl p-6 card-hover flex flex-col" data-testid={`product-card-${p.id}`}>
+            <Card
+              key={p.id}
+              className="bg-[#0B1524] border border-[#1A2B44] rounded-2xl p-5 card-hover flex flex-col"
+              data-testid={`product-card-${p.id}`}
+            >
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-md bg-[#0055FF]/15 border border-[#0055FF]/30 grid place-items-center">
                   <TrendingUp className="w-5 h-5 text-[#0055FF]" />
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">Live</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
+                  Live
+                </span>
               </div>
-              <h3 className="mt-4 font-display font-600 text-xl">{p.name}</h3>
-              <p className="text-sm text-[#94A3B8] mt-1 min-h-[40px]">{p.description}</p>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="border border-[#1A2B44] rounded-lg p-3">
-                  <div className="text-xs text-[#94A3B8]">Price</div>
-                  <div className="font-display font-800 tabular">{formatNaira(p.price)}</div>
+
+              <h3 className="mt-4 font-display font-600 text-lg">{p.name}</h3>
+              <p className="text-xs text-[#94A3B8] mt-1 min-h-[36px] line-clamp-2">{p.description}</p>
+
+              {/* Daily figure highlight */}
+              <div
+                data-testid={`product-daily-${p.id}`}
+                className="mt-4 rounded-xl border border-[#10B981]/30 bg-[#10B981]/10 p-4"
+              >
+                <div className="text-[10px] uppercase tracking-widest text-[#10B981]/80 flex items-center gap-1">
+                  <Coins className="w-3 h-3" /> Earn every 24 hours
                 </div>
-                <div className="border border-[#1A2B44] rounded-lg p-3">
-                  <div className="text-xs text-[#94A3B8]">Daily profit</div>
-                  <div className="font-display font-800 tabular">{p.daily_profit_pct}%</div>
+                <div className="mt-1.5 font-display font-800 text-2xl tabular text-[#10B981]">
+                  {formatNaira(dailyEarn)}
                 </div>
-                <div className="border border-[#1A2B44] rounded-lg p-3">
-                  <div className="text-xs text-[#94A3B8]">Duration</div>
-                  <div className="font-display font-800 tabular">{p.duration_days} days</div>
-                </div>
-                <div className="border border-[#0055FF]/40 bg-[#0055FF]/10 rounded-lg p-3">
-                  <div className="text-xs text-[#0055FF]">Total return</div>
-                  <div className="font-display font-800 tabular">{formatNaira(totalReturn)}</div>
+                <div className="mt-0.5 text-[10px] text-[#94A3B8] tabular">
+                  ≈ {p.daily_profit_pct}% of your investment · daily
                 </div>
               </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="border border-[#1A2B44] rounded-lg p-2.5">
+                  <div className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Stake</div>
+                  <div className="mt-0.5 font-display font-600 tabular">{formatNaira(p.price)}</div>
+                </div>
+                <div className="border border-[#1A2B44] rounded-lg p-2.5">
+                  <div className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Duration</div>
+                  <div className="mt-0.5 font-display font-600 tabular">{p.duration_days} days</div>
+                </div>
+                <div className="col-span-2 border border-[#0055FF]/40 bg-[#0055FF]/10 rounded-lg p-2.5">
+                  <div className="text-[10px] text-[#0055FF] uppercase tracking-wider">Total return</div>
+                  <div className="mt-0.5 font-display font-800 tabular text-[#0055FF]">
+                    {formatNaira(totalReturn)}
+                  </div>
+                </div>
+              </div>
+
               <Button
                 onClick={() => setSelected(p)}
                 data-testid={`product-invest-btn-${p.id}`}
-                className="mt-5 bg-[#0055FF] hover:bg-[#3377FF] rounded-md h-11"
+                className="mt-4 bg-[#0055FF] hover:bg-[#3377FF] rounded-md h-11"
               >
-                <Zap className="w-4 h-4 mr-1" /> {affordable ? "Invest now" : "Insufficient balance"}
+                <Zap className="w-4 h-4 mr-1" />
+                {affordable ? "Invest now" : "Insufficient wallet"}
               </Button>
             </Card>
           );
@@ -86,42 +113,81 @@ export default function Marketplace() {
       </div>
       <LoadMore shown={Math.min(visible, products.length)} total={products.length} onMore={setVisible} step={6} testid="load-more-products" />
 
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="bg-[#0B1524] border-[#1A2B44] text-white">
-          <DialogHeader>
-            <DialogTitle className="font-display">Confirm investment</DialogTitle>
-          </DialogHeader>
+      {/* Slide-up confirm drawer */}
+      <Drawer open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DrawerContent
+          data-testid="invest-drawer"
+          className="bg-[#0B1524] border-t border-[#1A2B44] text-white max-w-lg mx-auto rounded-t-2xl"
+        >
+          <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-[#1A2B44]" />
+          <DrawerHeader>
+            <DrawerTitle className="font-display text-xl">Confirm your investment</DrawerTitle>
+            <DrawerDescription className="text-[#94A3B8]">
+              We'll deduct the stake from your wallet and start dropping daily profits in 24 hours.
+            </DrawerDescription>
+          </DrawerHeader>
+
           {selected && (
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between"><span className="text-[#94A3B8]">Plan</span><span>{selected.name}</span></div>
-              <div className="flex justify-between"><span className="text-[#94A3B8]">Amount</span><span className="tabular">{formatNaira(selected.price)}</span></div>
-              <div className="flex justify-between"><span className="text-[#94A3B8]">Daily profit</span><span className="tabular">{selected.daily_profit_pct}%</span></div>
-              <div className="flex justify-between"><span className="text-[#94A3B8]">Duration</span><span className="tabular">{selected.duration_days} days</span></div>
-              <div className="flex justify-between pt-2 border-t border-[#1A2B44]">
-                <span className="text-[#94A3B8]">Total return</span>
-                <span className="text-[#10B981] tabular font-display font-600">
-                  {formatNaira(selected.price * (selected.daily_profit_pct / 100) * selected.duration_days)}
-                </span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8] pt-2">
-                <span>Your wallet</span>
-                <span className="tabular">{formatNaira(user?.wallet_balance)}</span>
+            <div className="px-4 pb-2 space-y-4">
+              <Card className="bg-[#020813] border-[#1A2B44] rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Plan</div>
+                    <div className="mt-1 font-display font-800 text-lg">{selected.name}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Stake</div>
+                    <div className="mt-1 font-display font-800 text-lg tabular">{formatNaira(selected.price)}</div>
+                  </div>
+                </div>
+              </Card>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border border-[#10B981]/30 bg-[#10B981]/10 p-3">
+                  <div className="text-[10px] uppercase tracking-widest text-[#10B981]/80 flex items-center gap-1">
+                    <Coins className="w-3 h-3" /> Daily earn
+                  </div>
+                  <div className="mt-1 font-display font-800 tabular text-[#10B981]">
+                    {formatNaira(selected.price * (selected.daily_profit_pct / 100))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-[#1A2B44] p-3">
+                  <div className="text-[10px] uppercase tracking-widest text-[#94A3B8] flex items-center gap-1">
+                    <Timer className="w-3 h-3" /> Runs for
+                  </div>
+                  <div className="mt-1 font-display font-800 tabular">{selected.duration_days} days</div>
+                </div>
+                <div className="col-span-2 rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-3">
+                  <div className="text-[10px] uppercase tracking-widest text-[#0055FF]">Total you'll get back</div>
+                  <div className="mt-1 font-display font-800 text-xl tabular text-[#0055FF]">
+                    {formatNaira(selected.price * (selected.daily_profit_pct / 100) * selected.duration_days)}
+                  </div>
+                </div>
+                <div className="col-span-2 flex items-center justify-between text-xs text-[#94A3B8] px-1">
+                  <span className="flex items-center gap-1"><Wallet className="w-3 h-3"/> Your wallet</span>
+                  <span className="tabular">{formatNaira(user?.wallet_balance)}</span>
+                </div>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white" onClick={() => setSelected(null)}>Cancel</Button>
+
+          <DrawerFooter className="pt-2">
             <Button
               onClick={invest}
               disabled={loading}
               data-testid="confirm-invest-button"
-              className="bg-[#0055FF] hover:bg-[#3377FF]"
+              className="bg-[#0055FF] hover:bg-[#3377FF] h-12 rounded-xl"
             >
-              {loading ? "Processing…" : "Confirm"}
+              {loading ? "Processing…" : "Confirm & invest"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DrawerClose asChild>
+              <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white h-11 rounded-xl">
+                Cancel
+              </Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

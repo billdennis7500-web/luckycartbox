@@ -21,6 +21,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 
 import paynow
+from nigerian_banks import filter_popular
 
 # ---------------------------------------------------------------------------
 # Config
@@ -1205,11 +1206,29 @@ async def admin_paynow_banks(admin: dict = Depends(get_admin_user)):
 
 # User: bank code list (for auto withdrawal)
 @api.get("/paynow/banks")
-async def user_paynow_banks(user: dict = Depends(get_current_user)):
+async def user_paynow_banks(user: dict = Depends(get_current_user), all: bool = False):
     if not paynow.enabled():
         return {"enabled": False, "data": []}
     resp = await paynow.list_banks()
-    return {"enabled": True, "code": resp.get("code"), "data": resp.get("data") or [], "msg": resp.get("msg")}
+    data = resp.get("data") or []
+    filtered = data if all else filter_popular(data)
+    return {"enabled": True, "code": resp.get("code"), "data": filtered, "msg": resp.get("msg"), "total": len(data)}
+
+
+class VerifyAccountIn(BaseModel):
+    bank_code: str
+    account_number: str
+
+
+@api.post("/paynow/verify-account")
+async def verify_account(payload: VerifyAccountIn, user: dict = Depends(get_current_user)):
+    """Ping PayNow's payee query to check whether this bank/account combo is reachable.
+    Returns exist=True if PayNow can process a payout to it."""
+    if not paynow.enabled():
+        raise HTTPException(400, "PayNow is not configured")
+    resp = await paynow.query_payee(payload.bank_code, payload.account_number)
+    data = resp.get("data") or {}
+    return {"ok": resp.get("code") == 0, "exists": bool(data.get("exist")), "raw": resp}
 
 
 # ---------------------------------------------------------------------------

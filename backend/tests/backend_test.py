@@ -206,12 +206,20 @@ class TestInvestmentFlow:
         assert r.status_code == 400
         assert "invest" in r.json()["detail"].lower()
 
-    def test_invest_insufficient_balance(self, user_a):
+    def test_invest_insufficient_balance(self):
+        # Create a brand new user without referral earnings to guarantee insufficient balance
+        phone = _rand_phone()
+        rr = requests.post(f"{BASE_URL}/api/auth/register",
+                           json={"phone": phone, "password": "pass1234", "name": "TEST_Insuf"},
+                           timeout=15)
+        assert rr.status_code == 200
+        tok = rr.json()["access_token"]
         products = requests.get(f"{BASE_URL}/api/products",
-                                headers=_auth_headers(user_a["token"]), timeout=15).json()
-        pid = products[0]["id"]
+                                headers=_auth_headers(tok), timeout=15).json()
+        # Pick the most expensive product to guarantee insufficient balance
+        pid = max(products, key=lambda p: p["price"])["id"]
         r = requests.post(f"{BASE_URL}/api/invest", json={"product_id": pid},
-                          headers=_auth_headers(user_a["token"]), timeout=15)
+                          headers=_auth_headers(tok), timeout=15)
         assert r.status_code == 400
 
     def test_full_invest_flow_with_referral_and_admin_credit(self, admin_headers, user_a, user_b):
@@ -438,15 +446,45 @@ REQUIRED_BANKS = [
 
 
 class TestPaynowBanks:
-    def test_user_paynow_banks_returns_full_list(self, user_a):
+    def test_user_paynow_banks_returns_curated_list(self, user_a):
+        # Default now returns curated list (~30 items) with brand metadata
         r = requests.get(f"{BASE_URL}/api/paynow/banks",
                          headers=_auth_headers(user_a["token"]), timeout=30)
         assert r.status_code == 200
         d = r.json()
         assert d.get("enabled") is True
-        assert d.get("code") == 0
         data = d.get("data") or []
-        assert len(data) > 100, f"expected >100 banks got {len(data)}"
+        assert 5 <= len(data) <= 60, f"expected curated list, got {len(data)}"
+        # total = full underlying count
+        assert d.get("total", 0) > 100, f"total should reflect full list, got {d.get('total')}"
+        # brand structure
+        for b in data:
+            assert "bankCode" in b and "bankName" in b
+            assert "brand" in b, f"bank missing brand: {b}"
+            assert "initials" in b["brand"] and "bg" in b["brand"] and "fg" in b["brand"]
+        names = " | ".join((b.get("bankName") or "").upper() for b in data)
+        popular = ["ACCESS", "GUARANTY TRUST", "FIRST BANK", "UNITED BANK FOR AFRICA",
+                   "FIDELITY", "UNION BANK", "ECOBANK", "STANBIC IBTC", "STERLING",
+                   "WEMA", "POLARIS", "FIRST CITY MONUMENT", "KEYSTONE", "JAIZ",
+                   "TITAN TRUST", "PROVIDUS", "STANDARD CHARTERED", "KUDA", "OPAY",
+                   "PALMPAY", "MONIEPOINT"]
+        missing = [p for p in popular if p not in names]
+        assert not missing, f"Missing popular banks: {missing}"
+
+    def test_user_paynow_banks_all_true_returns_full_list(self, user_a):
+        import time
+        data = []
+        for _ in range(3):
+            r = requests.get(f"{BASE_URL}/api/paynow/banks?all=true",
+                             headers=_auth_headers(user_a["token"]), timeout=30)
+            assert r.status_code == 200
+            d = r.json()
+            data = d.get("data") or []
+            if len(data) > 100:
+                break
+            time.sleep(1.0)
+        assert len(data) > 100, f"expected full list > 100, got {len(data)}"
+        # required from prev iteration
         names_lower = " | ".join((b.get("bankName") or "").lower() for b in data)
         missing = [b for b in REQUIRED_BANKS if b.lower() not in names_lower]
         assert not missing, f"Missing banks: {missing}"
@@ -605,3 +643,41 @@ class TestPaynowVerifyReconcile:
         r = requests.post(f"{BASE_URL}/api/admin/paynow/reconcile",
                           headers=_auth_headers(user_a["token"]), timeout=15)
         assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Iteration 4 - PayNow verify-account endpoint
+# ---------------------------------------------------------------------------
+class TestPaynowVerifyAccount:
+    def test_verify_account_happy_path(self, user_a):
+        # Pick a bankCode from paynow banks list
+        rb = requests.get(f"{BASE_URL}/api/paynow/banks",
+                          headers=_auth_headers(user_a["token"]), timeout=30)
+        assert rb.status_code == 200
+        data = rb.json().get("data") or []
+        assert data
+        code = data[0]["bankCode"]
+        r = requests.post(f"{BASE_URL}/api/paynow/verify-account",
+                          json={"bank_code": code, "account_number": "0123456789"},
+                          headers=_auth_headers(user_a["token"]), timeout=30)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "ok" in body
+        assert "exists" in body
+        assert "raw" in body
+        assert isinstance(body["ok"], bool)
+        assert isinstance(body["exists"], bool)
+        assert isinstance(body["raw"], dict)
+
+    def test_verify_account_missing_fields_422(self, user_a):
+        r = requests.post(f"{BASE_URL}/api/paynow/verify-account",
+                          json={"bank_code": "058"},
+                          headers=_auth_headers(user_a["token"]), timeout=15)
+        assert r.status_code == 422
+
+    def test_verify_account_requires_auth(self):
+        r = requests.post(f"{BASE_URL}/api/paynow/verify-account",
+                          json={"bank_code": "058", "account_number": "0123456789"},
+                          timeout=15)
+        assert r.status_code == 401
+

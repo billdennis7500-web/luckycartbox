@@ -141,6 +141,23 @@ async def list_banks() -> Dict[str, Any]:
     return await _post("/open/v1/merchant/bank", {"channelCode": cfg["payout_channel"]})
 
 
+async def query_payee(bank_code: str, account_number: str) -> Dict[str, Any]:
+    """GET /open/v1/merchant/payee/query?currencyCode=NGN&payee=<accountNumber>
+    Returns {code, data:{exist, closeRchrgTime}, msg}."""
+    cfg = _config()
+    ts = str(int(time.time() * 1000))
+    biz = {"currencyCode": cfg["currency"], "payee": account_number}
+    sign = build_signature(biz, cfg["merchant_no"], cfg["key"], ts, "MD5")
+    params = {**biz, "merchantNo": cfg["merchant_no"], "timestamp": ts, "signType": "MD5", "sign": sign}
+    url = cfg["base"] + "/open/v1/merchant/payee/query"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.get(url, params=params)
+    try:
+        return r.json()
+    except Exception:
+        return {"code": r.status_code, "msg": r.text, "data": None}
+
+
 async def get_balance() -> Dict[str, Any]:
     """GET /open/v1/merchant/balance?currencyCode=..."""
     cfg = _config()
