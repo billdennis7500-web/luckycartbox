@@ -351,3 +351,11 @@ Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.
 - Bank picker (drawer with 200+ Nigerian banks) is retained as convenience; fallback manual text input still available when picker is unavailable.
 
 Verified via Playwright: amber warning card renders, all three auto-verify testids absent from the DOM, `yarn build` compiles clean.
+
+## 2026-07-27 · Welcome bonus credits wallet_balance (bug fix)
+
+### Delivered
+- **Fixed:** at registration, the welcome bonus (default ₦500 from `settings.welcome_bonus`) now credits `wallet_balance` directly instead of the never-consumed `bonus_balance` field. Users can now actually invest their welcome bonus (purchases debit wallet_balance). Withdrawals remain gated on `has_invested == True`, so the anti-farm policy is preserved.
+- Also updated the transactions daily-summary loop to count `welcome_bonus` as a real wallet movement (previously skipped).
+- Migrated 1 legacy user with `bonus_balance > 0` — moved into `wallet_balance`.
+- **Verified by testing_agent** (iteration_12.json): 4/4 backend tests green — fresh registration returns wallet_balance == welcome_bonus, bonus_balance == 0, welcome_bonus_given == true, exactly one welcome_bonus transaction with meta.credits_wallet == true, and the withdrawal gate (`has_invested = false → 400 "must invest first"`) still triggers.
