@@ -242,7 +242,7 @@ export default function BindAccount() {
             ) : (
               <div className="mt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#94A3B8]">Manual entry (PayNow list unavailable)</span>
+                  <span className="text-xs text-[#94A3B8]">Manual entry (bank list unavailable)</span>
                   <button type="button" onClick={loadBanks}
                           data-testid="bind-retry-banks"
                           className="text-xs text-[#0055FF] hover:underline">
@@ -267,21 +267,21 @@ export default function BindAccount() {
             {verify.status === "loading" && (
               <div data-testid="bind-verify-loading"
                    className="mt-2 text-xs text-[#94A3B8] flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" /> Checking with PayNow…
+                <Loader2 className="w-3 h-3 animate-spin" /> Checking account…
               </div>
             )}
             {verify.status === "reachable" && (
               <div data-testid="bind-verify-reachable"
                    className="mt-2 text-xs px-3 py-2 rounded-md border bg-[#10B981]/10 border-[#10B981]/30 text-[#10B981] flex items-center gap-2">
                 <ShieldCheck className="w-3 h-3" />
-                PayNow can reach this account. Type the name exactly as it appears on your bank record.
+                We can reach this account. Type the name exactly as it appears on your bank record.
               </div>
             )}
             {verify.status === "unknown" && (
               <div data-testid="bind-verify-unknown"
                    className="mt-2 text-xs px-3 py-2 rounded-md border bg-[#0055FF]/10 border-[#0055FF]/30 text-[#94A3B8] flex items-center gap-2">
                 <Info className="w-3 h-3 text-[#0055FF]" />
-                We couldn't auto-check with PayNow. Double-check the number — payouts to a wrong account fail with a clear error.
+                We couldn't auto-check this account. Double-check the number — payouts to a wrong account fail with a clear error.
               </div>
             )}
           </div>
@@ -294,7 +294,7 @@ export default function BindAccount() {
                    placeholder="Full name as it appears on your bank record"
                    className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12" />
             <p className="text-xs text-[#94A3B8] mt-1">
-              PayNow doesn't expose the bank's stored name, so please type it carefully.
+              Your bank doesn't expose the stored name automatically, so please type it carefully.
             </p>
           </div>
 

@@ -9,23 +9,22 @@ import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose,
 } from "@/components/ui/drawer";
 import {
-  Copy, Zap, ExternalLink, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight,
+  Copy, Zap, ExternalLink, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import LoadMore from "@/components/LoadMore";
 
-// Small helper: pick a deterministic brand color per bank name
+/* -------------- helpers -------------- */
 function bankTint(name = "") {
   const palette = [
-    { bg: "#0055FF", fg: "#FFFFFF" }, // access blue
-    { bg: "#EB1C24", fg: "#FFFFFF" }, // gtco red
-    { bg: "#009F4D", fg: "#FFFFFF" }, // firstbank green
-    { bg: "#B91E4B", fg: "#FFFFFF" }, // zenith red
-    { bg: "#001F3F", fg: "#F4B21C" }, // uba
-    { bg: "#5E17EB", fg: "#FFFFFF" }, // opay
-    { bg: "#FF6600", fg: "#FFFFFF" }, // wema
-    { bg: "#0A6EBD", fg: "#FFFFFF" }, // ecobank
+    { bg: "#0055FF", fg: "#FFFFFF" },
+    { bg: "#EB1C24", fg: "#FFFFFF" },
+    { bg: "#009F4D", fg: "#FFFFFF" },
+    { bg: "#B91E4B", fg: "#FFFFFF" },
+    { bg: "#001F3F", fg: "#F4B21C" },
+    { bg: "#5E17EB", fg: "#FFFFFF" },
+    { bg: "#FF6600", fg: "#FFFFFF" },
+    { bg: "#0A6EBD", fg: "#FFFFFF" },
   ];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
@@ -35,82 +34,83 @@ function initials(s = "") {
   return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "BK";
 }
 
-function AccountCard({ acct, selected, onSelect, onCopy }) {
-  const brand = bankTint(acct.bank_name);
+/* -------------- payment method block -------------- */
+function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
   return (
     <button
       type="button"
-      onClick={() => onSelect(acct)}
-      data-testid={`deposit-acct-card-${acct.id}`}
-      className={`relative w-full text-left rounded-2xl p-4 border transition-all overflow-hidden ${
+      onClick={onClick}
+      data-testid={testid}
+      className={`relative aspect-square rounded-2xl p-3 sm:p-4 border transition-all overflow-hidden text-left flex flex-col justify-between ${
         selected
           ? "border-[#0055FF] ring-2 ring-[#0055FF]/40 bg-[#0B1524]"
           : "border-[#1A2B44] bg-[#0B1524] hover:border-[#0055FF]/50"
       }`}
     >
-      {/* Ambient tint */}
+      {/* ambient tint */}
       <div
         className="absolute -top-8 -right-8 w-28 h-28 rounded-full opacity-25 blur-2xl pointer-events-none"
-        style={{ background: brand.bg }}
+        style={{ background: tone.bg }}
       />
-      <div className="relative flex items-start gap-3">
+      <div className="relative flex items-start justify-between">
         <div
-          className="w-11 h-11 rounded-xl grid place-items-center font-display font-800 text-sm shrink-0"
-          style={{ background: brand.bg, color: brand.fg }}
+          className="w-10 h-10 rounded-xl grid place-items-center font-display font-800 text-xs shrink-0"
+          style={{ background: tone.bg, color: tone.fg }}
         >
-          {initials(acct.bank_name)}
+          {icon}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-display font-600 truncate">{acct.bank_name}</div>
-          <div className="text-xs text-[#94A3B8] truncate">{acct.account_name}</div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="font-display font-700 tabular tracking-wider text-lg text-white">
-              {acct.account_number}
-            </span>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onCopy(acct.account_number); }}
-              data-testid={`deposit-copy-acct-${acct.id}`}
-              className="w-7 h-7 rounded-md grid place-items-center border border-[#1A2B44] text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 shrink-0"
-              aria-label="Copy account number"
-            >
-              <Copy className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-        <div
-          className={`w-5 h-5 rounded-full border grid place-items-center shrink-0 ${
+        <span
+          className={`w-4 h-4 rounded-full border grid place-items-center shrink-0 ${
             selected ? "bg-[#0055FF] border-[#0055FF]" : "border-[#1A2B44]"
           }`}
           aria-hidden
         >
-          {selected && <CheckCircle2 className="w-4 h-4 text-white" />}
-        </div>
+          {selected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+        </span>
+      </div>
+      <div className="relative">
+        <div className="font-display font-700 text-sm truncate">{label}</div>
+        <div className="text-[10px] text-[#94A3B8] mt-0.5 truncate">{sub}</div>
       </div>
     </button>
   );
 }
 
+/* -------------- shared status pill (exported for use elsewhere) -------------- */
+export function StatusPill({ status }) {
+  const map = {
+    pending: "bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30",
+    processing: "bg-[#0055FF]/15 text-[#0055FF] border-[#0055FF]/30",
+    approved: "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30",
+    rejected: "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30",
+    failed: "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30",
+  };
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full border ${map[status] || "bg-[#1A2B44]"}`}>
+      {status}
+    </span>
+  );
+}
+
+/* ============= main ============= */
 export default function Deposit() {
   const { refresh } = useAuth();
   const [accounts, setAccounts] = useState([]);
-  const [history, setHistory] = useState([]);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState(""); // "paynow-auto" | payment_account_id
+  const [method, setMethod] = useState(""); // "instant-pay" | payment_account_id
   const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
-  const [paynowEnabled, setPaynowEnabled] = useState(false);
-  const [visible, setVisible] = useState(5);
+  const [instantEnabled, setInstantEnabled] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
-  // "Waiting for payment" state
+  // waiting drawer state
   const [waitDep, setWaitDep] = useState(null);
   const [waitState, setWaitState] = useState("waiting");
   const pollRef = useRef(null);
 
   const load = () => {
-    api.get("/payment-accounts").then((r) => setAccounts(r.data));
-    api.get("/deposits").then((r) => setHistory(r.data));
-    api.get("/paynow/banks").then((r) => setPaynowEnabled(!!r.data?.enabled)).catch(() => {});
+    api.get("/payment-accounts").then((r) => setAccounts(r.data)).finally(() => setInitialLoad(false));
+    api.get("/paynow/banks").then((r) => setInstantEnabled(!!r.data?.enabled)).catch(() => setInstantEnabled(false));
   };
   useEffect(() => { load(); }, []);
 
@@ -120,40 +120,29 @@ export default function Deposit() {
       try {
         const { data: deps } = await api.get("/deposits");
         const found = deps.find((d) => d.id === waitDep.id);
-        if (found && found.status === "approved") {
-          setWaitState("approved");
-          await refresh();
-          load();
-        } else if (found && found.status === "rejected") {
-          setWaitState("rejected");
-        }
+        if (found?.status === "approved") { setWaitState("approved"); await refresh(); load(); }
+        else if (found?.status === "rejected") { setWaitState("rejected"); }
       } catch {}
     }, 5000);
     return () => pollRef.current && clearInterval(pollRef.current);
   }, [waitDep, waitState, refresh]);
 
-  const isPaynow = method === "paynow-auto";
+  const isInstant = method === "instant-pay";
   const selectedAcct = accounts.find((a) => a.id === method);
+  const hasAnyMethod = instantEnabled || accounts.length > 0;
 
   const copy = async (val) => {
-    try {
-      await navigator.clipboard.writeText(String(val));
-      toast.success("Copied");
-    } catch {
-      toast.error("Clipboard blocked — copy manually");
-    }
+    try { await navigator.clipboard.writeText(String(val)); toast.success("Copied"); }
+    catch { toast.error("Clipboard blocked — copy manually"); }
   };
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!method) { toast.error("Choose a payment option"); return; }
+    if (!method) return toast.error("Choose a payment option");
     setLoading(true);
     try {
-      const { data } = await api.post("/deposits", {
-        amount: Number(amount),
-        method,
-        reference,
-      });
+      const backendMethod = isInstant ? "paynow-auto" : method;
+      const { data } = await api.post("/deposits", { amount: Number(amount), method: backendMethod, reference });
       if (data.gateway === "paynow" && data.checkout_url) {
         setWaitDep(data);
         setWaitState("waiting");
@@ -173,14 +162,8 @@ export default function Deposit() {
     setWaitState("verifying");
     try {
       const { data } = await api.post(`/deposits/${waitDep.id}/verify`);
-      if (data.status === "approved") {
-        setWaitState("approved");
-        await refresh();
-        load();
-      } else {
-        toast.info("Not yet — PayNow hasn't confirmed the payment. Try again in a moment.");
-        setWaitState("waiting");
-      }
+      if (data.status === "approved") { setWaitState("approved"); await refresh(); load(); }
+      else { toast.info("Not confirmed yet. Try again in a moment."); setWaitState("waiting"); }
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Verify failed");
       setWaitState("waiting");
@@ -191,175 +174,143 @@ export default function Deposit() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="deposit-heading">Deposit funds</h1>
-        <p className="text-sm text-[#94A3B8] mt-1">Pay instantly via PayNow — or pick a bank below to transfer manually.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="deposit-heading">Deposit funds</h1>
+          <p className="text-sm text-[#94A3B8] mt-1">Pick a payment option and add the amount you want to fund.</p>
+        </div>
+        <Link to="/deposit-history" data-testid="deposit-history-link"
+              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#1A2B44] bg-[#0B1524] text-xs text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 transition-colors">
+          <Receipt className="w-3.5 h-3.5" /> History
+        </Link>
       </div>
 
-      {/* PayNow instant tile */}
-      {paynowEnabled && (
-        <button
-          type="button"
-          onClick={() => setMethod("paynow-auto")}
-          data-testid="deposit-paynow-tile"
-          className={`w-full text-left rounded-2xl p-5 relative overflow-hidden transition-all ${
-            isPaynow
-              ? "ring-2 ring-[#0055FF]/60 border border-[#0055FF]"
-              : "border border-[#0055FF]/40 hover:border-[#0055FF]"
-          }`}
-          style={{
-            background: "linear-gradient(135deg,#0055FF 0%, #0A2A6C 100%)",
-          }}
-        >
-          <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 blur-3xl rounded-full pointer-events-none" />
-          <div className="relative flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-white/15 grid place-items-center shrink-0">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <div className="font-display font-800 text-white">Pay with PayNow</div>
-                <span className="text-[10px] uppercase tracking-widest text-white/80 bg-white/15 rounded-full px-2 py-0.5">
-                  Instant · Recommended
-                </span>
-              </div>
-              <div className="text-xs text-white/80 mt-1">
-                Redirect → pay → wallet auto-credits in seconds. No screenshots, no waiting.
-              </div>
-            </div>
-            <div
-              className={`w-5 h-5 rounded-full border grid place-items-center shrink-0 mt-1 ${
-                isPaynow ? "bg-white border-white" : "border-white/40"
-              }`}
-              aria-hidden
-            >
-              {isPaynow && <CheckCircle2 className="w-4 h-4 text-[#0055FF]" />}
-            </div>
+      {/* Payment options — small equal blocks */}
+      {initialLoad ? (
+        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-6 text-center text-sm text-[#94A3B8]" data-testid="deposit-loading">
+          Loading payment options…
+        </div>
+      ) : !hasAnyMethod ? (
+        <div className="rounded-2xl border border-dashed border-[#1A2B44] p-6 text-center text-sm text-[#94A3B8]" data-testid="deposit-none-available">
+          No deposit options are available right now. Please contact support.
+        </div>
+      ) : (
+        <section>
+          <h2 className="font-display text-xs font-600 uppercase tracking-widest text-[#94A3B8] mb-3">
+            Choose a payment option
+          </h2>
+          <div className="grid grid-cols-3 gap-3" data-testid="deposit-methods-grid">
+            {instantEnabled && (
+              <MethodBlock
+                selected={isInstant}
+                onClick={() => setMethod("instant-pay")}
+                tone={{ bg: "#0055FF", fg: "#FFFFFF" }}
+                icon={<Zap className="w-5 h-5" />}
+                label="Instant Pay"
+                sub="Auto credit"
+                testid="deposit-method-instant"
+              />
+            )}
+            {accounts.map((a) => {
+              const brand = bankTint(a.bank_name);
+              return (
+                <MethodBlock
+                  key={a.id}
+                  selected={method === a.id}
+                  onClick={() => setMethod(a.id)}
+                  tone={brand}
+                  icon={initials(a.bank_name)}
+                  label={a.bank_name}
+                  sub={a.account_number}
+                  testid={`deposit-method-${a.id}`}
+                />
+              );
+            })}
           </div>
-        </button>
+        </section>
       )}
 
-      {/* Manual bank accounts */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-sm font-600 uppercase tracking-widest text-[#94A3B8]">
-            Or transfer to one of our banks
-          </h2>
-          {accounts.length > 1 && (
-            <span className="text-[10px] text-[#94A3B8]" data-testid="deposit-accts-count">
-              {accounts.length} accounts
-            </span>
-          )}
-        </div>
-
-        {accounts.length === 0 ? (
-          <div
-            className="rounded-xl border border-dashed border-[#1A2B44] p-6 text-center text-sm text-[#94A3B8]"
-            data-testid="deposit-no-accts"
-          >
-            No manual bank accounts published right now. Use PayNow above for instant deposit.
-          </div>
-        ) : (
-          <div className="grid gap-3" data-testid="deposit-accts-grid">
-            {accounts.map((a) => (
-              <AccountCard
-                key={a.id}
-                acct={a}
-                selected={method === a.id}
-                onSelect={(x) => setMethod(x.id)}
-                onCopy={copy}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Amount + form */}
-      <Card className="bg-[#0B1524] border-[#1A2B44] p-5 rounded-2xl">
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <Label>Amount (₦)</Label>
-            <Input
-              type="number" min="1"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-              data-testid="deposit-amount-input"
-              className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12 tabular text-lg"
-            />
-          </div>
-
-          {selectedAcct && !isPaynow && (
-            <div className="rounded-xl border border-[#0055FF]/30 bg-[#0055FF]/5 p-3 text-xs text-[#94A3B8] flex items-start gap-2" data-testid="deposit-selected-note">
-              <Landmark className="w-4 h-4 text-[#0055FF] shrink-0 mt-0.5" />
-              <div>
-                Transfer <span className="text-white tabular">₦{Number(amount || 0).toLocaleString()}</span> to{" "}
-                <span className="text-white">{selectedAcct.bank_name}</span> · <span className="text-white tabular">{selectedAcct.account_number}</span>, then submit for admin approval.
+      {/* Selected manual account detail */}
+      {selectedAcct && !isInstant && (
+        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl p-4" data-testid="deposit-selected-panel">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-11 h-11 rounded-xl grid place-items-center font-display font-800 text-xs shrink-0"
+              style={{ background: bankTint(selectedAcct.bank_name).bg, color: bankTint(selectedAcct.bank_name).fg }}
+            >
+              {initials(selectedAcct.bank_name)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-widest text-[#94A3B8]">Transfer to</div>
+              <div className="font-display font-600 truncate">{selectedAcct.bank_name}</div>
+              <div className="text-xs text-[#94A3B8] truncate">{selectedAcct.account_name}</div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-display font-700 tabular tracking-wider text-lg text-white">
+                  {selectedAcct.account_number}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copy(selectedAcct.account_number)}
+                  data-testid="deposit-copy-selected"
+                  className="w-7 h-7 rounded-md grid place-items-center border border-[#1A2B44] text-[#94A3B8] hover:text-white hover:border-[#0055FF]/40 shrink-0"
+                  aria-label="Copy account number"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
               </div>
             </div>
-          )}
-
-          {!isPaynow && selectedAcct && (
-            <div>
-              <Label>Transaction reference <span className="text-[#94A3B8]">(optional)</span></Label>
-              <Input
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                data-testid="deposit-reference-input"
-                placeholder="Bank transfer ref / narration"
-                className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12"
-              />
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            disabled={loading || !method}
-            data-testid="deposit-submit-button"
-            className="w-full h-12 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl glow-primary"
-          >
-            {loading ? "Processing…" : (isPaynow ? "Pay with PayNow" : "Submit for approval")}
-          </Button>
-        </form>
-      </Card>
-
-      <section>
-        <h2 className="font-display text-lg font-600 mb-3">Deposit history</h2>
-        <Card className="bg-[#0B1524] border-[#1A2B44] rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase text-[#94A3B8] bg-[#121E30]">
-              <tr>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Amount</th>
-                <th className="px-4 py-3">Method</th>
-                <th className="px-4 py-3 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1A2B44]">
-              {history.length === 0 && (
-                <tr><td colSpan={4} className="text-center py-8 text-[#94A3B8]" data-testid="no-deposits">No deposits yet.</td></tr>
-              )}
-              {history.slice(0, visible).map((d) => (
-                <tr key={d.id} data-testid={`deposit-row-${d.id}`}>
-                  <td className="px-4 py-3 text-[#94A3B8]">{new Date(d.created_at).toLocaleString()}</td>
-                  <td className="px-4 py-3 tabular font-display font-600">{formatNaira(d.amount)}</td>
-                  <td className="px-4 py-3 text-[#94A3B8]">
-                    {d.gateway === "paynow" ? "⚡ PayNow" : (d.payment_account_bank || d.reference || "Manual")}
-                    {d.checkout_url && d.status === "pending" && (
-                      <> · <button onClick={() => { setWaitDep(d); setWaitState("waiting"); }}
-                                    className="text-[#0055FF] hover:underline" data-testid={`resume-${d.id}`}>Resume</button></>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right"><StatusPill status={d.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <LoadMore shown={Math.min(visible, history.length)} total={history.length} onMore={setVisible} testid="load-more-deposits" />
+          </div>
         </Card>
-      </section>
+      )}
 
-      {/* Waiting-for-payment drawer */}
+      {/* Amount + reference */}
+      {hasAnyMethod && (
+        <Card className="bg-[#0B1524] border-[#1A2B44] p-5 rounded-2xl">
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <Label>Amount (₦)</Label>
+              <Input
+                type="number" min="1"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                disabled={!method}
+                data-testid="deposit-amount-input"
+                className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12 tabular text-lg"
+              />
+              {!method && (
+                <p className="text-xs text-[#F59E0B] mt-1" data-testid="deposit-pick-method-hint">
+                  Pick a payment option above to continue.
+                </p>
+              )}
+            </div>
+
+            {!isInstant && selectedAcct && (
+              <div>
+                <Label>Transaction reference <span className="text-[#94A3B8]">(optional)</span></Label>
+                <Input
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  data-testid="deposit-reference-input"
+                  placeholder="Bank transfer ref / narration"
+                  className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12"
+                />
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={loading || !method}
+              data-testid="deposit-submit-button"
+              className="w-full h-12 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl glow-primary"
+            >
+              {loading ? "Processing…" : isInstant ? "Pay instantly" : "Submit for approval"}
+            </Button>
+          </form>
+        </Card>
+      )}
+
+      {/* Waiting drawer (no PayNow branding) */}
       <Drawer open={!!waitDep} onOpenChange={(o) => !o && closeWait()}>
         <DrawerContent
           data-testid="waiting-drawer"
@@ -380,8 +331,8 @@ export default function Deposit() {
               {waitState === "approved"
                 ? "Your wallet has been credited."
                 : waitState === "rejected"
-                ? "PayNow reported this payment as failed or expired."
-                : "This screen will update the moment PayNow confirms your transfer."}
+                ? "This payment was reported as failed or expired."
+                : "This screen updates the moment your bank confirms the transfer."}
             </DrawerDescription>
           </DrawerHeader>
 
@@ -403,20 +354,12 @@ export default function Deposit() {
                   <div className="rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-4 text-xs text-[#94A3B8] flex items-start gap-3">
                     <Loader2 className="w-4 h-4 text-[#0055FF] animate-spin mt-0.5" />
                     <div>
-                      Checking every 5s. As soon as PayNow confirms, your wallet updates and this drawer flips to success.
-                      If the checkout tab closed, tap <b className="text-white">Open PayNow</b> below.
+                      Checking every 5s. As soon as your payment lands, this drawer flips to success. If the checkout tab closed, tap <b className="text-white">Reopen checkout</b>.
                     </div>
                   </div>
-
-                  <a
-                    href={waitDep.checkout_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid="reopen-checkout"
-                    className="block"
-                  >
+                  <a href={waitDep.checkout_url} target="_blank" rel="noreferrer" data-testid="reopen-checkout" className="block">
                     <Button className="w-full h-12 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl">
-                      <ExternalLink className="w-4 h-4 mr-2" /> Open PayNow checkout
+                      <ExternalLink className="w-4 h-4 mr-2" /> Reopen checkout
                     </Button>
                   </a>
                   <Button
@@ -435,7 +378,7 @@ export default function Deposit() {
               {waitState === "verifying" && (
                 <div className="rounded-xl border border-[#1A2B44] bg-[#121E30] p-6 text-center">
                   <Loader2 className="w-6 h-6 text-[#0055FF] animate-spin mx-auto" />
-                  <div className="mt-2 text-sm text-[#94A3B8]">Asking PayNow…</div>
+                  <div className="mt-2 text-sm text-[#94A3B8]">Checking payment…</div>
                 </div>
               )}
 
@@ -466,11 +409,7 @@ export default function Deposit() {
 
           <DrawerFooter className="pt-3">
             <DrawerClose asChild>
-              <Button
-                variant="outline"
-                className="border-[#1A2B44] bg-transparent text-white h-11 rounded-xl"
-                data-testid="waiting-close"
-              >
+              <Button variant="outline" className="border-[#1A2B44] bg-transparent text-white h-11 rounded-xl" data-testid="waiting-close">
                 {waitState === "approved" ? "Done" : "Close"}
               </Button>
             </DrawerClose>
@@ -478,20 +417,5 @@ export default function Deposit() {
         </DrawerContent>
       </Drawer>
     </div>
-  );
-}
-
-export function StatusPill({ status }) {
-  const map = {
-    pending: "bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30",
-    processing: "bg-[#0055FF]/15 text-[#0055FF] border-[#0055FF]/30",
-    approved: "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30",
-    rejected: "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30",
-    failed: "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30",
-  };
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full border ${map[status] || "bg-[#1A2B44]"}`}>
-      {status}
-    </span>
   );
 }

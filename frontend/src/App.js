@@ -13,6 +13,7 @@ import UserLayout from "@/pages/user/UserLayout";
 import Dashboard from "@/pages/user/Dashboard";
 import Marketplace from "@/pages/user/Marketplace";
 import Deposit from "@/pages/user/Deposit";
+import DepositHistory from "@/pages/user/DepositHistory";
 import Withdraw from "@/pages/user/Withdraw";
 import Referrals from "@/pages/user/Referrals";
 import Coupon from "@/pages/user/Coupon";
@@ -69,6 +70,7 @@ function App() {
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="investments" element={<Investments />} />
             <Route path="deposit" element={<Deposit />} />
+            <Route path="deposit-history" element={<DepositHistory />} />
             <Route path="withdraw" element={<Withdraw />} />
             <Route path="bank-account" element={<BindAccount />} />
             <Route path="referrals" element={<Referrals />} />

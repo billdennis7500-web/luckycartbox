@@ -158,7 +158,7 @@ export default function Profile() {
                   <div className="min-w-0">
                     <div className="tabular font-display font-600">{formatNaira(d.amount)}</div>
                     <div className="text-xs text-[#94A3B8]">
-                      {new Date(d.created_at).toLocaleString()} · {d.gateway === "paynow" ? "PayNow" : "Manual"}
+                      {new Date(d.created_at).toLocaleString()} · {d.gateway === "paynow" ? "Instant Pay" : "Manual"}
                     </div>
                   </div>
                   <StatusPill status={d.status} />
