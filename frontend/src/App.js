@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import AdminLogin from "@/pages/AdminLogin";
 import Register from "@/pages/Register";
 
 import UserLayout from "@/pages/user/UserLayout";
@@ -45,6 +46,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="/register" element={<Register />} />
 
           <Route

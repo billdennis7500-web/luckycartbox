@@ -21,7 +21,8 @@ def _load_base_url() -> str:
 
 BASE_URL = _load_base_url()
 ADMIN_PHONE = "+2348000000000"
-ADMIN_PASSWORD = "Admin@12345"
+ADMIN_EMAIL = "billdennis750@gmail.com"
+ADMIN_PASSWORD = "djscan30"
 
 
 def _rand_phone() -> str:
@@ -464,3 +465,143 @@ class TestPaynowBanks:
                 break
             time.sleep(1.0)
         assert len(data) > 100, f"got {len(data)} banks"
+
+
+# ---------------------------------------------------------------------------
+# Iteration 3 - Admin email login & PayNow verify/reconcile endpoints
+# ---------------------------------------------------------------------------
+class TestAdminEmailLogin:
+    def test_login_with_email_admin(self):
+        r = requests.post(f"{BASE_URL}/api/auth/login",
+                          json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["user"]["role"] == "admin"
+        assert data["user"].get("email") == ADMIN_EMAIL.lower()
+        assert data["user"].get("phone") == ADMIN_PHONE
+        assert "access_token" in data
+
+    def test_login_email_case_insensitive(self):
+        r = requests.post(f"{BASE_URL}/api/auth/login",
+                          json={"email": ADMIN_EMAIL.upper(), "password": ADMIN_PASSWORD}, timeout=15)
+        assert r.status_code == 200
+        assert r.json()["user"]["role"] == "admin"
+
+    def test_login_phone_still_works_same_user(self):
+        r = requests.post(f"{BASE_URL}/api/auth/login",
+                          json={"phone": ADMIN_PHONE, "password": ADMIN_PASSWORD}, timeout=15)
+        assert r.status_code == 200
+        assert r.json()["user"]["role"] == "admin"
+        assert r.json()["user"].get("email") == ADMIN_EMAIL.lower()
+
+    def test_login_wrong_password_401(self):
+        r = requests.post(f"{BASE_URL}/api/auth/login",
+                          json={"email": ADMIN_EMAIL, "password": "wrongwrong"}, timeout=15)
+        assert r.status_code == 401
+        assert "invalid" in r.json().get("detail", "").lower()
+
+    def test_login_missing_identifier_400(self):
+        r = requests.post(f"{BASE_URL}/api/auth/login",
+                          json={"password": "x"}, timeout=15)
+        assert r.status_code in (400, 422)
+
+    def test_me_after_email_login_returns_admin(self):
+        r = requests.post(f"{BASE_URL}/api/auth/login",
+                          json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=15)
+        token = r.json()["access_token"]
+        me = requests.get(f"{BASE_URL}/api/auth/me", headers=_auth_headers(token), timeout=15)
+        assert me.status_code == 200
+        assert me.json()["role"] == "admin"
+
+
+class TestPaynowVerifyReconcile:
+    def _insert_fake_pending_paynow_deposit(self, user_id: str, merchant_order_no: str, amount: float = 500.0):
+        """Insert a fake pending paynow deposit directly via a helper - use admin add-balance? 
+        No direct DB insert; instead use the create deposit endpoint with paynow method.
+        Since paynow.enabled() is True, POST /deposits with method='paynow' will call
+        the real gateway. We instead reach into mongo using motor? tests are sync.
+        Fallback: use pymongo directly."""
+        from pymongo import MongoClient
+        mongo_url = None
+        db_name = None
+        for line in Path("/app/backend/.env").read_text().splitlines():
+            if line.startswith("MONGO_URL"):
+                mongo_url = line.split("=", 1)[1].strip().strip('"')
+            if line.startswith("DB_NAME"):
+                db_name = line.split("=", 1)[1].strip().strip('"')
+        client = MongoClient(mongo_url)
+        db = client[db_name]
+        from bson import ObjectId
+        doc = {
+            "user_id": ObjectId(user_id),
+            "amount": amount,
+            "method": "paynow",
+            "gateway": "paynow",
+            "merchant_order_no": merchant_order_no,
+            "status": "pending",
+            "created_at": "2026-01-15T00:00:00+00:00",
+        }
+        res = db.deposits.insert_one(doc)
+        return str(res.inserted_id)
+
+    def test_verify_non_paynow_returns_400(self, admin_headers, user_a):
+        # create a manual (non-paynow) pending deposit
+        r = requests.post(f"{BASE_URL}/api/deposits",
+                          json={"amount": 1000.0, "method": "Bank"},
+                          headers=_auth_headers(user_a["token"]), timeout=15)
+        did = r.json()["id"]
+        v = requests.post(f"{BASE_URL}/api/admin/deposits/{did}/verify",
+                          headers=admin_headers, timeout=30)
+        assert v.status_code == 400
+        assert "paynow" in v.json()["detail"].lower()
+
+    def test_verify_already_processed_returns_400(self, admin_headers, user_a):
+        # Use fake paynow deposit, approve, then verify → 400
+        fake_did = self._insert_fake_pending_paynow_deposit(user_a["user"]["id"],
+                                                            "TESTORDER_NOPE_1", 500.0)
+        # Approve directly via admin approve to force status change
+        ap = requests.post(f"{BASE_URL}/api/admin/deposits/{fake_did}/approve",
+                           json={"note": "manual"}, headers=admin_headers, timeout=15)
+        assert ap.status_code == 200
+        v = requests.post(f"{BASE_URL}/api/admin/deposits/{fake_did}/verify",
+                          headers=admin_headers, timeout=30)
+        assert v.status_code == 400
+
+    def test_verify_paynow_pending_returns_502_or_ok_false(self, admin_headers, user_a):
+        # Insert fake pending paynow deposit with bogus merchant order number
+        fake_did = self._insert_fake_pending_paynow_deposit(user_a["user"]["id"],
+                                                            "TESTORDER_BOGUS_XYZ", 500.0)
+        v = requests.post(f"{BASE_URL}/api/admin/deposits/{fake_did}/verify",
+                          headers=admin_headers, timeout=45)
+        # PayNow will either error (502), return not-found (404), or ok=false with non-2 status
+        assert v.status_code in (200, 404, 502), f"unexpected {v.status_code}: {v.text}"
+        if v.status_code == 200:
+            body = v.json()
+            assert body.get("ok") is False
+            assert body.get("paynow_status") != 2
+
+    def test_verify_nonexistent_deposit_404(self, admin_headers):
+        v = requests.post(f"{BASE_URL}/api/admin/deposits/507f1f77bcf86cd799439011/verify",
+                          headers=admin_headers, timeout=15)
+        assert v.status_code == 404
+
+    def test_verify_requires_admin(self, user_a):
+        v = requests.post(f"{BASE_URL}/api/admin/deposits/507f1f77bcf86cd799439011/verify",
+                          headers=_auth_headers(user_a["token"]), timeout=15)
+        assert v.status_code == 403
+
+    def test_reconcile_endpoint_admin_only(self, admin_headers):
+        r = requests.post(f"{BASE_URL}/api/admin/paynow/reconcile",
+                          headers=admin_headers, timeout=60)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("ok") is True
+        assert "deposits_credited" in data
+        assert "withdrawals_settled" in data
+        assert isinstance(data["deposits_credited"], int)
+        assert isinstance(data["withdrawals_settled"], int)
+
+    def test_reconcile_requires_admin(self, user_a):
+        r = requests.post(f"{BASE_URL}/api/admin/paynow/reconcile",
+                          headers=_auth_headers(user_a["token"]), timeout=15)
+        assert r.status_code == 403

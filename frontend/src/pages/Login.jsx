@@ -95,6 +95,11 @@ export default function Login() {
               Create one now
             </Link>
           </p>
+          <p className="text-xs text-[#94A3B8] mt-3 text-center">
+            <Link to="/admin-login" data-testid="login-to-admin-link" className="hover:text-white">
+              Are you an admin? Sign in here
+            </Link>
+          </p>
         </div>
       </div>
     </div>

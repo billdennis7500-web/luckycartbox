@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { StatusPill } from "@/pages/user/Deposit";
-import { Check, X } from "lucide-react";
+import { Check, X, RefreshCw, Zap } from "lucide-react";
 import LoadMore from "@/components/LoadMore";
 
 const TABS = ["pending", "approved", "rejected", "all"];
@@ -34,11 +34,45 @@ export default function AdminDeposits() {
     }
   };
 
+  const verify = async (d) => {
+    try {
+      const { data } = await api.post(`/admin/deposits/${d.id}/verify`);
+      if (data.ok) {
+        toast.success(`Verified & credited ₦${Number(data.amount).toLocaleString()}`);
+      } else {
+        toast.info(data.message || `PayNow status: ${data.paynow_status}`);
+      }
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Verify failed");
+    }
+  };
+
+  const reconcileAll = async () => {
+    try {
+      const { data } = await api.post("/admin/paynow/reconcile");
+      toast.success(`Reconciled: ${data.deposits_credited} deposit(s), ${data.withdrawals_settled} withdrawal(s)`);
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Reconcile failed");
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="admin-deposits-heading">Deposits</h1>
-        <p className="text-[#94A3B8] mt-2">Approve or reject user-submitted deposits.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="admin-deposits-heading">Deposits</h1>
+          <p className="text-[#94A3B8] mt-2">Approve or reject user-submitted deposits.</p>
+        </div>
+        <Button
+          onClick={reconcileAll}
+          data-testid="reconcile-paynow-btn"
+          variant="outline"
+          className="border-[#0055FF]/40 bg-transparent text-[#0055FF] hover:bg-[#0055FF]/10"
+        >
+          <RefreshCw className="w-3 h-3 mr-1" /> Reconcile PayNow
+        </Button>
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -82,7 +116,13 @@ export default function AdminDeposits() {
                 <td className="px-4 py-3"><StatusPill status={d.status} /></td>
                 <td className="px-4 py-3 text-right">
                   {d.status === "pending" ? (
-                    <div className="inline-flex gap-2">
+                    <div className="inline-flex gap-2 flex-wrap justify-end">
+                      {d.gateway === "paynow" && (
+                        <Button size="sm" variant="outline" onClick={() => verify(d)} data-testid={`verify-dep-${d.id}`}
+                                className="border-[#0055FF]/40 bg-transparent text-[#0055FF] hover:bg-[#0055FF]/10">
+                          <Zap className="w-3 h-3 mr-1"/>Verify
+                        </Button>
+                      )}
                       <Button size="sm" onClick={() => act(d, "approve")} data-testid={`approve-dep-${d.id}`}
                               className="bg-[#10B981] hover:bg-[#0ea770]"><Check className="w-3 h-3 mr-1"/>Approve</Button>
                       <Button size="sm" variant="outline" onClick={() => act(d, "reject")} data-testid={`reject-dep-${d.id}`}

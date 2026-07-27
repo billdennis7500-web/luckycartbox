@@ -204,7 +204,8 @@ async def get_settings() -> dict:
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
-    await db.users.create_index("phone", unique=True)
+    await db.users.create_index("phone", unique=True, sparse=True)
+    await db.users.create_index("email", unique=True, sparse=True)
     await db.users.create_index("referral_code", unique=True)
     await db.products.create_index("active")
     await db.investments.create_index("user_id")
@@ -214,32 +215,58 @@ async def startup():
     await db.coupons.create_index("code", unique=True)
     await get_settings()
 
-    admin_phone = normalize_phone(os.environ.get("ADMIN_PHONE", "+2348000000000"))
+    admin_email = (os.environ.get("ADMIN_EMAIL") or "").lower().strip()
+    admin_phone_raw = os.environ.get("ADMIN_PHONE") or ""
+    admin_phone = normalize_phone(admin_phone_raw) if admin_phone_raw else None
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@12345")
     admin_name = os.environ.get("ADMIN_NAME", "Platform Admin")
 
-    existing = await db.users.find_one({"phone": admin_phone})
+    # Prefer email as the primary admin identifier
+    existing = None
+    if admin_email:
+        existing = await db.users.find_one({"email": admin_email})
+    if not existing and admin_phone:
+        existing = await db.users.find_one({"phone": admin_phone})
+
+    admin_doc = {
+        "name": admin_name,
+        "password_hash": hash_password(admin_password),
+        "role": "admin",
+        "wallet_balance": 0.0,
+        "bonus_balance": 0.0,
+        "total_earned": 0.0,
+        "total_invested": 0.0,
+        "referral_code": "ADMIN001",
+        "referred_by": None,
+        "has_invested": False,
+        "welcome_bonus_given": True,
+        "created_at": now_utc().isoformat(),
+    }
+    if admin_email:
+        admin_doc["email"] = admin_email
+    if admin_phone:
+        admin_doc["phone"] = admin_phone
+
     if not existing:
-        await db.users.insert_one({
-            "phone": admin_phone,
-            "name": admin_name,
-            "password_hash": hash_password(admin_password),
-            "role": "admin",
-            "wallet_balance": 0.0,
-            "bonus_balance": 0.0,
-            "total_earned": 0.0,
-            "total_invested": 0.0,
-            "referral_code": "ADMIN001",
-            "referred_by": None,
-            "has_invested": False,
-            "welcome_bonus_given": True,
-            "created_at": now_utc().isoformat(),
-        })
-        logger.info("Seeded admin user %s", admin_phone)
-    elif not verify_password(admin_password, existing["password_hash"]):
-        await db.users.update_one({"_id": existing["_id"]},
-                                  {"$set": {"password_hash": hash_password(admin_password)}})
-        logger.info("Updated admin password")
+        try:
+            await db.users.insert_one(admin_doc)
+            logger.info("Seeded admin user email=%s phone=%s", admin_email or "-", admin_phone or "-")
+        except Exception:
+            logger.exception("Admin seed failed (dup?), attempting upsert")
+            if admin_email:
+                await db.users.update_one({"email": admin_email},
+                                          {"$set": admin_doc, "$setOnInsert": {}}, upsert=True)
+    else:
+        # Update password + ensure email/phone/role are correct
+        updates = {"password_hash": hash_password(admin_password), "role": "admin"}
+        if admin_email:
+            updates["email"] = admin_email
+        if admin_phone:
+            updates["phone"] = admin_phone
+        if admin_name:
+            updates["name"] = admin_name
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": updates})
+        logger.info("Updated admin user %s", existing["_id"])
 
     # Seed default products if none exist
     if await db.products.count_documents({}) == 0:
@@ -258,6 +285,100 @@ async def startup():
 
     # Kick off background profit-drop cron
     asyncio.create_task(_profit_drop_cron())
+    asyncio.create_task(_paynow_reconcile_cron())
+
+
+async def _paynow_reconcile_cron():
+    """Every 5 minutes, poll PayNow for pending payin/payout orders and settle them."""
+    await asyncio.sleep(45)
+    while True:
+        try:
+            if paynow.enabled():
+                await reconcile_pending_paynow_deposits()
+                await reconcile_pending_paynow_withdrawals()
+        except Exception:
+            logger.exception("paynow reconcile cron error")
+        await asyncio.sleep(5 * 60)
+
+
+async def reconcile_pending_paynow_deposits() -> int:
+    """Query PayNow for all pending PayNow deposits and update if resolved. Returns number credited."""
+    pending = await db.deposits.find({"gateway": "paynow", "status": "pending"}).to_list(200)
+    orders = [d.get("merchant_order_no") for d in pending if d.get("merchant_order_no")]
+    if not orders:
+        return 0
+    res = await paynow.query_payin(orders)
+    if res.get("code") != 0:
+        return 0
+    credited = 0
+    for order in (res.get("data") or []):
+        mon = order.get("merchantOrderNo")
+        status_code = int(order.get("status", 0) or 0)
+        dep = next((d for d in pending if d.get("merchant_order_no") == mon), None)
+        if not dep:
+            continue
+        if status_code == 2:  # success
+            amount = float(order.get("payAmount") or order.get("amount") or dep["amount"])
+            await db.deposits.update_one(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": order, "credited_amount": amount,
+                          "reconciled": True}},
+            )
+            await db.users.update_one({"_id": dep["user_id"]}, {"$inc": {"wallet_balance": amount}})
+            await add_transaction(dep["user_id"], "deposit", amount,
+                                  "Deposit approved (reconciled)",
+                                  {"deposit_id": str(dep["_id"]), "gateway": "paynow"})
+            credited += 1
+        elif status_code in (3, 4, 6):  # failed/expired states
+            await db.deposits.update_one(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": order,
+                          "admin_note": f"Auto-reject (PayNow status {status_code})"}},
+            )
+    return credited
+
+
+async def reconcile_pending_paynow_withdrawals() -> int:
+    """Query PayNow for withdrawals in processing state and settle them."""
+    processing = await db.withdrawals.find({"gateway": "paynow", "status": "processing"}).to_list(200)
+    orders = [w.get("merchant_order_no") for w in processing if w.get("merchant_order_no")]
+    if not orders:
+        return 0
+    res = await paynow.query_payout(orders)
+    if res.get("code") != 0:
+        return 0
+    settled = 0
+    for order in (res.get("data") or []):
+        mon = order.get("merchantOrderNo")
+        status_code = int(order.get("status", 0) or 0)
+        w = next((x for x in processing if x.get("merchant_order_no") == mon), None)
+        if not w:
+            continue
+        if status_code == 2:
+            await db.withdrawals.update_one(
+                {"_id": w["_id"], "status": "processing"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": order, "reconciled": True}},
+            )
+            await add_transaction(w["user_id"], "withdrawal", -w["amount"],
+                                  "Withdrawal paid out (reconciled)",
+                                  {"withdrawal_id": str(w["_id"]), "gateway": "paynow"})
+            settled += 1
+        elif status_code in (3, 4, 6):
+            # Refund and mark rejected
+            await db.users.update_one({"_id": w["user_id"]}, {"$inc": {"wallet_balance": w["amount"]}})
+            await db.withdrawals.update_one(
+                {"_id": w["_id"], "status": "processing"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": order,
+                          "admin_note": f"Auto-reject (PayNow status {status_code})"}},
+            )
+            await add_transaction(w["user_id"], "withdrawal_refund", w["amount"],
+                                  "Withdrawal failed - refunded (reconciled)",
+                                  {"withdrawal_id": str(w["_id"]), "gateway": "paynow"})
+    return settled
 
 
 async def _profit_drop_cron():
@@ -295,7 +416,8 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    phone: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
     password: str
 
 
@@ -477,10 +599,16 @@ async def register(payload: RegisterIn, response: Response):
 
 @api.post("/auth/login")
 async def login(payload: LoginIn, response: Response):
-    phone = normalize_phone(payload.phone)
-    user = await db.users.find_one({"phone": phone})
+    identifier = (payload.email or payload.phone or "").strip()
+    if not identifier or not payload.password:
+        raise HTTPException(400, "Email/phone and password required")
+    if "@" in identifier:
+        user = await db.users.find_one({"email": identifier.lower()})
+    else:
+        phone = normalize_phone(identifier)
+        user = await db.users.find_one({"phone": phone})
     if not user or not verify_password(payload.password, user["password_hash"]):
-        raise HTTPException(401, "Invalid phone or password")
+        raise HTTPException(401, "Invalid credentials")
     access = create_access_token(str(user["_id"]), user.get("role", "user"))
     refresh = create_refresh_token(str(user["_id"]))
     set_auth_cookies(response, access, refresh)
@@ -948,6 +1076,51 @@ async def reject_deposit(did: str, payload: ApprovalIn, admin: dict = Depends(ge
                                  {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
                                            "admin_note": payload.note or ""}})
     return {"ok": True}
+
+
+@api.post("/admin/deposits/{did}/verify")
+async def verify_deposit(did: str, admin: dict = Depends(get_admin_user)):
+    """Query PayNow for the deposit status and credit the wallet if the order is paid."""
+    dep = await db.deposits.find_one({"_id": oid(did)})
+    if not dep:
+        raise HTTPException(404, "Deposit not found")
+    if dep.get("gateway") != "paynow" or not dep.get("merchant_order_no"):
+        raise HTTPException(400, "Only PayNow deposits can be verified")
+    if dep["status"] != "pending":
+        raise HTTPException(400, f"Deposit is already {dep['status']}")
+
+    res = await paynow.query_payin([dep["merchant_order_no"]])
+    if res.get("code") != 0:
+        raise HTTPException(502, f"PayNow query failed: {res.get('msg') or 'unknown error'}")
+    orders = res.get("data") or []
+    order = next((o for o in orders if o.get("merchantOrderNo") == dep["merchant_order_no"]), None)
+    if not order:
+        raise HTTPException(404, "Order not found at PayNow")
+
+    status_code = int(order.get("status", 0) or 0)
+    if status_code == 2:
+        amount = float(order.get("payAmount") or order.get("amount") or dep["amount"])
+        await db.deposits.update_one(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_query": order, "credited_amount": amount, "reconciled": True}},
+        )
+        await db.users.update_one({"_id": dep["user_id"]}, {"$inc": {"wallet_balance": amount}})
+        await add_transaction(dep["user_id"], "deposit", amount,
+                              "Deposit approved (admin verify)",
+                              {"deposit_id": str(dep["_id"]), "gateway": "paynow"})
+        return {"ok": True, "status": "approved", "amount": amount, "order": order}
+    return {"ok": False, "status": dep["status"], "paynow_status": status_code, "order": order,
+            "message": f"PayNow reports status {status_code} — not paid yet."}
+
+
+@api.post("/admin/paynow/reconcile")
+async def admin_paynow_reconcile(admin: dict = Depends(get_admin_user)):
+    if not paynow.enabled():
+        raise HTTPException(400, "PayNow is not configured")
+    dep_credited = await reconcile_pending_paynow_deposits()
+    wd_settled = await reconcile_pending_paynow_withdrawals()
+    return {"ok": True, "deposits_credited": dep_credited, "withdrawals_settled": wd_settled}
 
 
 # Withdrawals admin
