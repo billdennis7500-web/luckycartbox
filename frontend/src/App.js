@@ -1,55 +1,92 @@
-import { useEffect } from "react";
+import React from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/context/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { Toaster } from "@/components/ui/sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+import UserLayout from "@/pages/user/UserLayout";
+import Dashboard from "@/pages/user/Dashboard";
+import Marketplace from "@/pages/user/Marketplace";
+import Deposit from "@/pages/user/Deposit";
+import Withdraw from "@/pages/user/Withdraw";
+import Referrals from "@/pages/user/Referrals";
+import Coupon from "@/pages/user/Coupon";
+import Transactions from "@/pages/user/Transactions";
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+import AdminLayout from "@/pages/admin/AdminLayout";
+import AdminOverview from "@/pages/admin/AdminOverview";
+import AdminUsers from "@/pages/admin/AdminUsers";
+import AdminUserDetail from "@/pages/admin/AdminUserDetail";
+import AdminProducts from "@/pages/admin/AdminProducts";
+import AdminDeposits from "@/pages/admin/AdminDeposits";
+import AdminWithdrawals from "@/pages/admin/AdminWithdrawals";
+import AdminReferrals from "@/pages/admin/AdminReferrals";
+import AdminCoupons from "@/pages/admin/AdminCoupons";
+import AdminAccounts from "@/pages/admin/AdminAccounts";
+import AdminSettings from "@/pages/admin/AdminSettings";
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
+        <Toaster
+          position="top-right"
+          theme="dark"
+          toastOptions={{
+            style: { background: "#0B1524", border: "1px solid #1A2B44", color: "#F8FAFC" },
+          }}
+        />
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <UserLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="marketplace" element={<Marketplace />} />
+            <Route path="deposit" element={<Deposit />} />
+            <Route path="withdraw" element={<Withdraw />} />
+            <Route path="referrals" element={<Referrals />} />
+            <Route path="coupon" element={<Coupon />} />
+            <Route path="transactions" element={<Transactions />} />
           </Route>
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute adminOnly>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminOverview />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="users/:uid" element={<AdminUserDetail />} />
+            <Route path="products" element={<AdminProducts />} />
+            <Route path="deposits" element={<AdminDeposits />} />
+            <Route path="withdrawals" element={<AdminWithdrawals />} />
+            <Route path="referrals" element={<AdminReferrals />} />
+            <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="accounts" element={<AdminAccounts />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 
