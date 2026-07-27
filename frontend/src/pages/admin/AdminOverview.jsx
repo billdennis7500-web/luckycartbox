@@ -11,12 +11,18 @@ export default function AdminOverview() {
   const [stats, setStats] = useState(null);
   const [pn, setPn] = useState(null);
   const [pnBalance, setPnBalance] = useState(null);
+  const [pnError, setPnError] = useState("");
 
   useEffect(() => {
     api.get("/admin/stats").then((r) => setStats(r.data));
     api.get("/admin/paynow/status").then((r) => {
       setPn(r.data);
-      if (r.data?.enabled) api.get("/admin/paynow/balance").then((rb) => setPnBalance(rb.data?.data));
+      if (r.data?.enabled) {
+        api.get("/admin/paynow/balance").then((rb) => {
+          if (rb.data?.code === 0) setPnBalance(rb.data?.data);
+          else setPnError(rb.data?.msg || `Error ${rb.data?.code}`);
+        }).catch((e) => setPnError(e.response?.data?.detail || "Balance check failed"));
+      }
     }).catch(() => {});
   }, []);
 
@@ -72,8 +78,13 @@ export default function AdminOverview() {
               <div className="text-right">
                 <div className="text-xs uppercase tracking-widest text-[#94A3B8]">Gateway balance</div>
                 <div className="font-display font-800 text-xl tabular" data-testid="paynow-balance">
-                  {pnBalance ? formatNaira(Number(pnBalance.amount || 0)) : "—"}
+                  {pnBalance ? formatNaira(Number(pnBalance.amount || 0)) : (pnError ? "—" : "…")}
                 </div>
+                {pnError && (
+                  <div className="mt-1 text-[10px] text-[#F59E0B] max-w-[220px]" data-testid="paynow-error">
+                    {pnError}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

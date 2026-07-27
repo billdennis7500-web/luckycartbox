@@ -1194,7 +1194,8 @@ async def admin_paynow_status(admin: dict = Depends(get_admin_user)):
 async def admin_paynow_balance(admin: dict = Depends(get_admin_user)):
     if not paynow.enabled():
         raise HTTPException(400, "PayNow is not configured")
-    return await paynow.get_balance()
+    resp = await paynow.get_balance()
+    return resp
 
 
 @api.get("/admin/paynow/banks")
