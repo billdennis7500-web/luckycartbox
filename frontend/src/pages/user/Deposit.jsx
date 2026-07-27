@@ -315,7 +315,7 @@ export default function Deposit() {
                   />
                 ))}
               </div>
-              {!method && (
+              {!method && !initialLoad && (
                 <p className="text-xs text-[#F59E0B] mt-2" data-testid="deposit-pick-method-hint">
                   Pick a payment option above to continue.
                 </p>

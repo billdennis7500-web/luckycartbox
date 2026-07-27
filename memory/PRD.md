@@ -83,6 +83,28 @@ See `/app/memory/test_credentials.md`.
 - SMS OTP for phone verification (needs provider selection — Termii recommended).
 - Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
 
+## 2026-07-27 · Welcome pop-up + Telegram + polished redeem/history
+
+### Delivered
+- **Welcome pop-up modal** on `/dashboard` — fires on every mount/hard-refresh (per user's explicit request "only when user taps on the homepage or refreshes the homepage, it pops up"). Shows greeting, admin-editable `welcome_message`, primary "Join our Telegram community" button (hidden when `telegram_url` empty), and Continue-to-dashboard button.
+- **Join Telegram chip** in the dashboard header (`dashboard-telegram-chip`) linking to `telegram_url` — hidden when empty.
+- **Backend**: `telegram_url` + `welcome_message` added to `DEFAULT_SETTINGS` + `SettingsIn`. New public `GET /api/settings/public` (no auth) returns `{site_name, telegram_url, welcome_message, welcome_bonus, min_deposit, min_withdrawal}`. `AdminSettings.jsx` PUT payload expanded accordingly (Telegram URL + Welcome message input added to `/admin/settings`).
+- **Dashboard**: 4-in-1 Quick Actions grid (Deposit / Redeem / Withdraw / Invest) with icon-in-ring tiles. "Recent activity" section removed.
+- **Deposit**: smaller compact method blocks (min-h-92px), **auto-selection** of the first available method on mount (Instant if enabled, else first payment account), and **quick-amount chips** (₦500/1K/2K/5K/10K/20K) in a 3-col grid.
+- **Deposit history**: fully redesigned modern cards with per-row deterministic accent bar, arrow-down icon in tinted circle, method chip, status badge with icon.
+- **Withdraw**: "Recent withdrawals" section removed; dedicated `/withdraw-history` page created (mirrors deposit-history design with an arrow-up icon).
+- **Profile**: History Tabs section (Transactions / Deposits / Withdrawals) removed. Menu links added for deposit-history / withdraw-history / bank-account.
+- **Coupon (Redeem)**: reworked as a ticket-styled card with left/right notches, orange hero, tabular tracking on the code input, and a green success chip after a successful redeem.
+- **Investments (Portfolio)**: each active plan card now shows a `Daily earnings +₦X / day` strip (green tint) computed as `price × daily_profit_pct / 100`.
+- **62/62 pytest** (61 pass + 1 pre-existing flaky-in-parallel `TestPaynowBanks`).
+
+### Deferred (unchanged)
+- `server.py` router split (~1570 lines now).
+- SMS OTP for phone verification.
+- PayNow `query_payee` 429 retry/backoff.
+- Auto-reconciliation cron for stuck deposits.
+- Extract shared HistoryRow into `/components/history/HistoryRow.jsx` (duplication between Deposit/Withdraw history).
+
 ## 2026-07-27 · Deposit UX simplification + rebrand + history page
 
 ### Delivered
