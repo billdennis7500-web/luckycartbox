@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { StatusPill } from "@/pages/user/Deposit";
+import LoadMore from "@/components/LoadMore";
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -19,6 +20,9 @@ export default function Profile() {
   const [deposits, setDeposits] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [tab, setTab] = useState("transactions");
+  const [visTx, setVisTx] = useState(10);
+  const [visDep, setVisDep] = useState(10);
+  const [visWd, setVisWd] = useState(10);
 
   useEffect(() => {
     api.get("/transactions").then((r) => setTx(r.data));
@@ -130,7 +134,7 @@ export default function Profile() {
             <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
               {tx.length === 0 ? (
                 <EmptyRow label="No transactions yet" testid="no-tx" />
-              ) : tx.map((t) => (
+              ) : tx.slice(0, visTx).map((t) => (
                 <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`profile-tx-${t.id}`}>
                   <div className="min-w-0">
                     <div className="capitalize truncate">{t.type.replace(/_/g, " ")}</div>
@@ -142,13 +146,14 @@ export default function Profile() {
                 </div>
               ))}
             </Card>
+            <LoadMore shown={Math.min(visTx, tx.length)} total={tx.length} onMore={setVisTx} testid="load-more-tx" />
           </TabsContent>
 
           <TabsContent value="deposits" className="mt-4">
             <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
               {deposits.length === 0 ? (
                 <EmptyRow label="No deposits yet" testid="no-deps" />
-              ) : deposits.map((d) => (
+              ) : deposits.slice(0, visDep).map((d) => (
                 <div key={d.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`profile-dep-${d.id}`}>
                   <div className="min-w-0">
                     <div className="tabular font-display font-600">{formatNaira(d.amount)}</div>
@@ -160,13 +165,14 @@ export default function Profile() {
                 </div>
               ))}
             </Card>
+            <LoadMore shown={Math.min(visDep, deposits.length)} total={deposits.length} onMore={setVisDep} testid="load-more-deps" />
           </TabsContent>
 
           <TabsContent value="withdrawals" className="mt-4">
             <Card className="rounded-xl border border-[#1A2B44] bg-[#0B1524] divide-y divide-[#1A2B44] overflow-hidden">
               {withdrawals.length === 0 ? (
                 <EmptyRow label="No withdrawals yet" testid="no-wds" />
-              ) : withdrawals.map((w) => (
+              ) : withdrawals.slice(0, visWd).map((w) => (
                 <div key={w.id} className="flex items-center justify-between px-4 py-3 text-sm" data-testid={`profile-wd-${w.id}`}>
                   <div className="min-w-0">
                     <div className="tabular font-display font-600">{formatNaira(w.amount)}</div>
@@ -179,6 +185,7 @@ export default function Profile() {
                 </div>
               ))}
             </Card>
+            <LoadMore shown={Math.min(visWd, withdrawals.length)} total={withdrawals.length} onMore={setVisWd} testid="load-more-wds" />
           </TabsContent>
         </Tabs>
       </div>

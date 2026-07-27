@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Search, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import LoadMore from "@/components/LoadMore";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -16,8 +17,9 @@ export default function AdminUsers() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [visible, setVisible] = useState(15);
 
-  const load = () => api.get("/admin/users", { params: q ? { q } : {} }).then((r) => setUsers(r.data));
+  const load = () => api.get("/admin/users", { params: q ? { q } : {} }).then((r) => { setUsers(r.data); setVisible(15); });
   useEffect(() => { load(); }, [q]); // eslint-disable-line
 
   const addBalance = async () => {
@@ -62,7 +64,7 @@ export default function AdminUsers() {
           </thead>
           <tbody className="divide-y divide-[#1A2B44]">
             {users.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-[#94A3B8]" data-testid="no-users">No users found.</td></tr>}
-            {users.map((u) => (
+            {users.slice(0, visible).map((u) => (
               <tr key={u.id} data-testid={`user-row-${u.id}`}>
                 <td className="px-4 py-3"><Link to={`/admin/users/${u.id}`} className="hover:text-[#0055FF]">{u.name}</Link></td>
                 <td className="px-4 py-3 text-[#94A3B8]">{u.phone}</td>
@@ -82,6 +84,7 @@ export default function AdminUsers() {
             ))}
           </tbody>
         </table>
+        <LoadMore shown={Math.min(visible, users.length)} total={users.length} onMore={setVisible} step={15} testid="load-more-users" />
       </Card>
 
       <Dialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>

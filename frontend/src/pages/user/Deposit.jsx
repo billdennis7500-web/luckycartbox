@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Copy, Banknote, Zap, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import LoadMore from "@/components/LoadMore";
 
 export default function Deposit() {
   const [accounts, setAccounts] = useState([]);
@@ -17,6 +18,7 @@ export default function Deposit() {
   const [loading, setLoading] = useState(false);
   const [paynowEnabled, setPaynowEnabled] = useState(false);
   const [lastPaynow, setLastPaynow] = useState(null);
+  const [visible, setVisible] = useState(5);
 
   const load = () => {
     api.get("/payment-accounts").then((r) => setAccounts(r.data));
@@ -160,7 +162,7 @@ export default function Deposit() {
               {history.length === 0 && (
                 <tr><td colSpan={4} className="text-center py-8 text-[#94A3B8]" data-testid="no-deposits">No deposits yet.</td></tr>
               )}
-              {history.map((d) => (
+              {history.slice(0, visible).map((d) => (
                 <tr key={d.id} data-testid={`deposit-row-${d.id}`}>
                   <td className="px-4 py-3 text-[#94A3B8]">{new Date(d.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3 tabular font-display font-600">{formatNaira(d.amount)}</td>
@@ -177,6 +179,7 @@ export default function Deposit() {
               ))}
             </tbody>
           </table>
+          <LoadMore shown={Math.min(visible, history.length)} total={history.length} onMore={setVisible} testid="load-more-deposits" />
         </Card>
       </section>
     </div>

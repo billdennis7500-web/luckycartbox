@@ -421,3 +421,46 @@ class TestSettingsReferralsStats:
         assert s["total_users"] >= 2
         assert s["invested_users"] >= 1
         assert s["total_invested"] > 0
+
+
+# ---------------------------------------------------------------------------
+# PayNow bank list (iteration 2)
+# ---------------------------------------------------------------------------
+REQUIRED_BANKS = [
+    "ACCESS BANK PLC", "GUARANTY TRUST BANK PLC", "FIDELITY BANK PLC",
+    "STANBIC IBTC BANK PLC", "Kuda Microfinance Bank", "OPay", "PalmPay",
+    "UNION BANK OF NIGERIA PLC", "ECOBANK NIGERIA PLC", "POLARIS BANK",
+    "WEMA BANK PLC", "STERLING BANK PLC", "UBA", "Providus Bank",
+    "KEYSTONE BANK PLC", "JAIZ BANK", "TITAN TRUST BANK", "Citibank Nigeria",
+    "STANDARD CHARTERED BANK PLC",
+]
+
+
+class TestPaynowBanks:
+    def test_user_paynow_banks_returns_full_list(self, user_a):
+        r = requests.get(f"{BASE_URL}/api/paynow/banks",
+                         headers=_auth_headers(user_a["token"]), timeout=30)
+        assert r.status_code == 200
+        d = r.json()
+        assert d.get("enabled") is True
+        assert d.get("code") == 0
+        data = d.get("data") or []
+        assert len(data) > 100, f"expected >100 banks got {len(data)}"
+        names_lower = " | ".join((b.get("bankName") or "").lower() for b in data)
+        missing = [b for b in REQUIRED_BANKS if b.lower() not in names_lower]
+        assert not missing, f"Missing banks: {missing}"
+
+    def test_admin_paynow_banks_matches(self, admin_headers):
+        # Retry once - PayNow upstream occasionally returns empty on
+        # burst requests when the same list is fetched from another worker.
+        import time
+        data = []
+        for _ in range(3):
+            r = requests.get(f"{BASE_URL}/api/admin/paynow/banks",
+                             headers=admin_headers, timeout=30)
+            assert r.status_code == 200
+            data = r.json().get("data") or []
+            if len(data) > 100:
+                break
+            time.sleep(1.0)
+        assert len(data) > 100, f"got {len(data)} banks"

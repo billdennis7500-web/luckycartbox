@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { StatusPill } from "@/pages/user/Deposit";
 import { Check, X } from "lucide-react";
+import LoadMore from "@/components/LoadMore";
 
 const TABS = ["pending", "approved", "rejected", "all"];
 
@@ -14,10 +15,11 @@ export default function AdminDeposits() {
   const initial = sp.get("status") || "pending";
   const [tab, setTab] = useState(initial);
   const [items, setItems] = useState([]);
+  const [visible, setVisible] = useState(15);
 
   const load = () => {
     const params = tab === "all" ? {} : { status: tab };
-    api.get("/admin/deposits", { params }).then((r) => setItems(r.data));
+    api.get("/admin/deposits", { params }).then((r) => { setItems(r.data); setVisible(15); });
   };
   useEffect(() => { load(); }, [tab]); // eslint-disable-line
   useEffect(() => { setSp(tab === "all" ? {} : { status: tab }); }, [tab]); // eslint-disable-line
@@ -94,6 +96,7 @@ export default function AdminDeposits() {
             ))}
           </tbody>
         </table>
+        <LoadMore shown={Math.min(visible, items.length)} total={items.length} onMore={setVisible} step={15} testid="load-more-admin-deposits" />
       </Card>
     </div>
   );

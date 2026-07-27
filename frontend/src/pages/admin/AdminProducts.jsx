@@ -9,14 +9,16 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import LoadMore from "@/components/LoadMore";
 
 const empty = { name: "", price: 5000, daily_profit_pct: 5, duration_days: 30, description: "", active: true };
 
 export default function AdminProducts() {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [visible, setVisible] = useState(9);
 
-  const load = () => api.get("/products").then((r) => setItems(r.data));
+  const load = () => api.get("/products").then((r) => { setItems(r.data); setVisible(9); });
   useEffect(() => { load(); }, []);
 
   const save = async () => {
@@ -48,7 +50,7 @@ export default function AdminProducts() {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((p) => (
+        {items.slice(0, visible).map((p) => (
           <Card key={p.id} className="bg-[#0B1524] border-[#1A2B44] p-5 rounded-xl" data-testid={`admin-product-${p.id}`}>
             <div className="flex items-start justify-between">
               <div>
@@ -82,6 +84,7 @@ export default function AdminProducts() {
           </Card>
         ))}
       </div>
+      <LoadMore shown={Math.min(visible, items.length)} total={items.length} onMore={setVisible} step={9} testid="load-more-admin-products" />
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="bg-[#0B1524] border-[#1A2B44] text-white max-w-lg">

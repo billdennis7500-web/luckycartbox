@@ -8,14 +8,16 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import LoadMore from "@/components/LoadMore";
 
 const empty = { code: "", amount: 500, max_uses: 1, active: true };
 
 export default function AdminCoupons() {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [visible, setVisible] = useState(15);
 
-  const load = () => api.get("/admin/coupons").then((r) => setItems(r.data));
+  const load = () => api.get("/admin/coupons").then((r) => { setItems(r.data); setVisible(15); });
   useEffect(() => { load(); }, []);
 
   const save = async () => {
@@ -50,7 +52,7 @@ export default function AdminCoupons() {
           </thead>
           <tbody className="divide-y divide-[#1A2B44]">
             {items.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-[#94A3B8]" data-testid="no-coupons">No coupons.</td></tr>}
-            {items.map((c) => (
+            {items.slice(0, visible).map((c) => (
               <tr key={c.id} data-testid={`coupon-row-${c.id}`}>
                 <td className="px-4 py-3"><code className="text-[#0055FF] font-display font-600">{c.code}</code></td>
                 <td className="px-4 py-3 tabular">{formatNaira(c.amount)}</td>
@@ -70,6 +72,7 @@ export default function AdminCoupons() {
             ))}
           </tbody>
         </table>
+        <LoadMore shown={Math.min(visible, items.length)} total={items.length} onMore={setVisible} step={15} testid="load-more-admin-coupons" />
       </Card>
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

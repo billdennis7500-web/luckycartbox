@@ -6,12 +6,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { TrendingUp, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import LoadMore from "@/components/LoadMore";
 
 export default function Marketplace() {
   const { user, refresh } = useAuth();
   const [products, setProducts] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(6);
 
   const load = () => api.get("/products").then((r) => setProducts(r.data));
   useEffect(() => { load(); }, []);
@@ -40,7 +42,7 @@ export default function Marketplace() {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {products.map((p) => {
+        {products.slice(0, visible).map((p) => {
           const totalReturn = p.price * (p.daily_profit_pct / 100) * p.duration_days;
           const affordable = (user?.wallet_balance || 0) >= p.price;
           return (
@@ -82,6 +84,7 @@ export default function Marketplace() {
           );
         })}
       </div>
+      <LoadMore shown={Math.min(visible, products.length)} total={products.length} onMore={setVisible} step={6} testid="load-more-products" />
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <DialogContent className="bg-[#0B1524] border-[#1A2B44] text-white">
