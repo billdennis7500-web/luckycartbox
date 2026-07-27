@@ -9,7 +9,7 @@ import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose,
 } from "@/components/ui/drawer";
 import {
-  Copy, Zap, ExternalLink, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt,
+  Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";

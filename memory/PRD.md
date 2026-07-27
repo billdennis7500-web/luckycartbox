@@ -83,6 +83,23 @@ See `/app/memory/test_credentials.md`.
 - SMS OTP for phone verification (needs provider selection — Termii recommended).
 - Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
 
+## 2026-07-27 · Iframe checkout (hide gateway) + Transaction history page
+
+### Delivered
+- **Iframe-embedded checkout** on `/deposit` — `submit()` no longer calls `window.open(checkout_url)`. The returned URL is loaded inside an `<iframe data-testid="deposit-checkout-iframe">` inside the existing waiting Drawer (spinner overlay while loading, `referrerPolicy="no-referrer"`, appropriate `sandbox` attrs). No new tab is opened. The "Reopen checkout" anchor was removed — only "I've paid — check now" + Close remain.
+- **PayNow gateway domain fully hidden from the URL bar** — the address bar never navigates away from our origin; the checkout renders inside our layout. (Determined users with DevTools can still see the iframe `src` — an intentional trade-off since fully proxying the gateway HTML would violate PayNow ToS.)
+- **Confirmed via test agent** — Playwright `context.on('page', …)` logged **zero** new pages during deposit submit; no `a[target="_blank"]` anchors remain on `/deposit`.
+- **Transaction history page** (`/transactions`) rewritten with the same modern accent-card design used by Deposit/Withdraw history: per-row deterministic accent bar, icon-in-tinted-circle per transaction type (Deposit/Withdrawal/Coupon/Referral/Admin credit/…), human-readable labels, credit/debit arrow + color, 3 tabs (All / Credits / Debits) with counts, search, load-more (step=10) with "Showing X of Y" counter, back arrow to `/profile`.
+- **Profile menu link** — added "Transaction history" between Referrals and Deposit.
+- Removed unused `ExternalLink` import; added `"investment"` alias in the transaction typeMeta map.
+
+### Deferred (unchanged)
+- `server.py` router split.
+- SMS OTP.
+- Second-factor confirmation on auto-payout toggle.
+- Optional `POST /api/admin/paynow/simulate-ip-block` for deterministic CI testing.
+- Cleanup cron for stuck `status='failed'` deposits.
+
 ## 2026-07-27 · PayNow IP-block graceful degradation (production bug fix)
 
 ### Reported issue

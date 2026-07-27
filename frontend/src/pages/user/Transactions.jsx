@@ -31,6 +31,7 @@ function typeMeta(t = "") {
     withdrawal_hold:      { icon: ArrowUpFromLine, label: "Withdrawal hold" },
     withdrawal_refund:    { icon: ArrowDownToLine, label: "Withdrawal refund" },
     invest:               { icon: TrendingUp,      label: "Investment" },
+    investment:           { icon: TrendingUp,      label: "Investment" },
     profit:               { icon: Sparkles,        label: "Daily profit" },
     daily_profit:         { icon: Sparkles,        label: "Daily profit" },
     referral_bonus:       { icon: Gift,            label: "Referral bonus" },
