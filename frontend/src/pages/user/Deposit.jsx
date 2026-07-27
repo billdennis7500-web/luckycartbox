@@ -135,7 +135,14 @@ export default function Deposit() {
   const isPaynow = method === "paynow-auto";
   const selectedAcct = accounts.find((a) => a.id === method);
 
-  const copy = (val) => { navigator.clipboard.writeText(String(val)); toast.success("Copied"); };
+  const copy = async (val) => {
+    try {
+      await navigator.clipboard.writeText(String(val));
+      toast.success("Copied");
+    } catch {
+      toast.error("Clipboard blocked — copy manually");
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();

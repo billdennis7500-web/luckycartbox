@@ -26,10 +26,14 @@ function StatChip({ label, value, tone = "default" }) {
   );
 }
 
-function copyText(v) {
+async function copyText(v) {
   if (!v) return;
-  navigator.clipboard.writeText(String(v));
-  toast.success("Copied");
+  try {
+    await navigator.clipboard.writeText(String(v));
+    toast.success("Copied");
+  } catch {
+    toast.error("Clipboard blocked — copy manually");
+  }
 }
 
 export default function AdminUserDetail() {
