@@ -21,6 +21,50 @@ logger = logging.getLogger("paynow")
 
 SIGN_KEYS_EXCLUDED = {"merchantNo", "timestamp", "signType", "sign", "key"}
 
+# PayNow error code 10000039 = "The IP address fails to pass the whitelist check".
+# When the pod's outbound IP is not whitelisted, EVERY PayNow call returns this.
+# Rather than fail every single request loudly, we detect it once, cache "blocked"
+# for a short TTL, and gracefully report `enabled=False` so the UI hides the Instant
+# tile and users transparently fall back to manual bank deposits.
+IP_BLOCK_ERROR_CODE = 10000039
+_IP_BLOCK_TTL_SECONDS = 300  # 5 min — long enough to prevent spamming, short enough to auto-recover
+_ip_block_state: Dict[str, Any] = {"blocked_until": 0.0, "last_seen_ip_note": ""}
+
+
+def _mark_ip_blocked(msg: str = "") -> None:
+    _ip_block_state["blocked_until"] = time.time() + _IP_BLOCK_TTL_SECONDS
+    _ip_block_state["last_seen_ip_note"] = msg or "IP whitelist check failed"
+    logger.warning("PayNow marked IP-blocked for %ss (%s)", _IP_BLOCK_TTL_SECONDS, msg)
+
+
+def _clear_ip_blocked() -> None:
+    if _ip_block_state["blocked_until"]:
+        logger.info("PayNow IP-block cleared — gateway responsive again.")
+    _ip_block_state["blocked_until"] = 0.0
+    _ip_block_state["last_seen_ip_note"] = ""
+
+
+def ip_blocked() -> bool:
+    return _ip_block_state["blocked_until"] > time.time()
+
+
+def ip_block_note() -> str:
+    return _ip_block_state["last_seen_ip_note"] if ip_blocked() else ""
+
+
+def _observe_response(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Sniff a PayNow response for the whitelist error code. Returns the response unchanged."""
+    try:
+        if int(data.get("code")) == IP_BLOCK_ERROR_CODE:
+            _mark_ip_blocked(str(data.get("msg") or "IP whitelist check failed"))
+        elif int(data.get("code")) == 0:
+            # A successful call means the pod IP IS being accepted — clear the flag.
+            if ip_blocked():
+                _clear_ip_blocked()
+    except Exception:
+        pass
+    return data
+
 
 def enabled() -> bool:
     return os.environ.get("PAYNOW_ENABLED", "false").lower() == "true" \
@@ -91,7 +135,7 @@ async def _post(path: str, biz: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         data = {"code": r.status_code, "msg": r.text, "data": None}
     logger.info("PayNow response %s", data)
-    return data
+    return _observe_response(data)
 
 
 async def create_payin(merchant_order_no: str, amount: float,
@@ -168,7 +212,7 @@ async def query_payee(bank_code: str, account_number: str) -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=15.0) as client:
         r = await client.get(url, params=params)
     try:
-        return r.json()
+        return _observe_response(r.json())
     except Exception:
         return {"code": r.status_code, "msg": r.text, "data": None}
 
@@ -184,7 +228,7 @@ async def get_balance() -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=20.0) as client:
         r = await client.get(url, params=params)
     try:
-        return r.json()
+        return _observe_response(r.json())
     except Exception:
         return {"code": r.status_code, "msg": r.text, "data": None}
 

@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 10 verified the PayNow IP-whitelist graceful-degradation fix. Added 6 new pytest cases (TestPaynowIpBlockUnit x2, TestPaynowGracefulDegradation x4) and made 2 pre-existing paynow-banks tests env-aware. Backend total: 82 tests, 79 passed, 3 skipped due to env state (gateway currently healthy — see note). Curl-verified all 4 required contracts pre-test-run while the pod IP was NOT whitelisted (see 'rca'). Between iteration start and pytest run, the pod outbound IP became 104.198.214.223 (the whitelisted one), so live PayNow calls now return code=0 and the auto-recovery path cleared the flag — proving Fix #4 works end-to-end. Frontend Deposit page renders Instant Pay tile correctly while gateway is healthy.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/paynow/banks", "issue": "Behaviour is env-dependent: when pod IP is whitelisted → enabled=true with curated bank list; when not → enabled=false, reason='gateway_ip_blocked'. Both paths curl-verified. Tests now skip curated-list assertions in the blocked env instead of failing."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "None blocking. The IP-block detection + 400 (not 502) response + auto-recovery all work as designed and were verified via curl against the live endpoints AND via unit tests on paynow._observe_response.",
+    "OBSERVATION: The pod's outbound IP flipped from 34.170.12.145 (blocked) to 104.198.214.223 (whitelisted) during testing — either the whitelist was updated by the merchant OR the pod was rescheduled. Fix #4 (auto-recovery) worked flawlessly: the ip_blocked flag cleared automatically on the first code=0 response, and /paynow/banks now returns enabled=true with the full curated list. No manual intervention needed.",
+    "LOW: If main agent wants deterministic test coverage of the blocked path even when gateway is healthy, consider exposing an admin-only debug endpoint like POST /api/admin/paynow/simulate-ip-block (or an env flag PAYNOW_FORCE_IP_BLOCK=1). Currently the 4 HTTP-level degradation tests skip when the server is healthy because in-process paynow.mark_ip_blocked() can't reach the FastAPI worker."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 803-846 correctly wraps ALL PayNow response codes with _observe_response, and both fast-fail (pre-insert) and post-call failure paths return HTTP 400 (not 502) — this is exactly what Cloudflare needs to pass the body through.",
+    "paynow.py _IP_BLOCK_TTL_SECONDS=300 (5 min) is a reasonable balance between auto-recovery and avoiding request spam. Confirmed clears immediately on code=0.",
+    "server.py still >1750 lines — split-into-routers recommendation from prior iterations still stands.",
+    "Deposit endpoint at line 810 inserts the deposit doc BEFORE calling PayNow. If the outbound call raises OR returns non-zero, the doc is marked status='failed' with gateway_error. This is correct for audit trail but means a growing table of 'failed' paynow docs during outages — recommend adding a monthly cleanup or ttl-index on status='failed' created_at."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — appended 2 new test classes (TestPaynowIpBlockUnit, TestPaynowGracefulDegradation, 6 tests total); made TestPaynowBanks::test_user_paynow_banks_returns_curated_list and test_user_paynow_banks_all_true_returns_full_list env-aware (skip when gateway_ip_blocked)."
+  ],
+  "success_rate": {
+    "backend": "100% of runnable tests (79 passed / 3 skipped by design when gateway healthy — total 82 tests defined)",
+    "frontend": "Deposit page renders correctly with Instant Pay tile visible while gateway is healthy. Blocked-path frontend behaviour verified indirectly via /paynow/banks curl (returns enabled=false → Deposit.jsx already hides tile per existing enabled=false branch in the code)."
+  },
+  "test_credentials": "Admin: billdennis750@gmail.com/djscan30. Test user: +2348047969299/pass1234.",
+  "seed_data_creation": "Created & deleted a temp payment account (TEST_IPBlk_Bank) inside test_manual_bank_deposit_still_works_regardless_of_paynow_state — cleanup happens in finally block. Various TEST_ users created by session fixtures (persistent).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Pod outbound IP is 104.198.214.223 (WHITELISTED). PayNow gateway is currently fully functional. If retesting IP-block path is desired: (a) unit tests in TestPaynowIpBlockUnit exercise _observe_response directly, (b) TestPaynowGracefulDegradation HTTP tests auto-skip when server is healthy — main agent could add a debug endpoint to force block for CI. All prior 76 tests continue to pass. Iteration 9's inviter fix (server.py admin_get_user) shipped — TestAdminGetUserShape::test_admin_get_user_includes_new_fields is now green.",
+  "rca of the issue": "Original bug RCA: Pod IP not in PayNow whitelist → every outbound PayNow call returned {code:10000039, msg:'The IP address fails to pass the whitelist check'} → server returned HTTP 502 → Cloudflare replaced 502 body with its own error page ('The origin web server returned an invalid or incomplete response'). Fix implemented across paynow.py (new _observe_response with 300s TTL cache) + server.py (return 400 not 502; graceful /paynow/banks response). Curl verification while pod IP was still blocked (IP=34.170.12.145): (1) GET /api/paynow/banks → 200 {enabled:false, reason:'gateway_ip_blocked', data:[]}. (2) POST /api/deposits {amount:500,method:'paynow-auto'} → 400 {detail:'Instant Pay is temporarily unavailable. Please pick a bank transfer option below.'}. Auto-recovery (Fix #4) verification: pod IP later shifted to 104.198.214.223 (whitelisted) → next PayNow call returned code=0 → _observe_response cleared the flag → /paynow/banks now returns enabled=true with full curated bank list. End-to-end contract validated."
+}

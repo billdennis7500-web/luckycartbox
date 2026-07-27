@@ -452,6 +452,11 @@ class TestPaynowBanks:
                          headers=_auth_headers(user_a["token"]), timeout=30)
         assert r.status_code == 200
         d = r.json()
+        # Skip curated-list assertions when the gateway is IP-blocked in this env —
+        # graceful degradation returns enabled=false with an empty data list. This
+        # is the intended behaviour (see TestPaynowGracefulDegradation).
+        if d.get("enabled") is False and d.get("reason") == "gateway_ip_blocked":
+            pytest.skip("PayNow gateway IP-blocked in this env; graceful degradation validated elsewhere.")
         assert d.get("enabled") is True
         data = d.get("data") or []
         assert 5 <= len(data) <= 60, f"expected curated list, got {len(data)}"
@@ -479,6 +484,8 @@ class TestPaynowBanks:
                              headers=_auth_headers(user_a["token"]), timeout=30)
             assert r.status_code == 200
             d = r.json()
+            if d.get("enabled") is False and d.get("reason") == "gateway_ip_blocked":
+                pytest.skip("PayNow gateway IP-blocked in this env.")
             data = d.get("data") or []
             if len(data) > 100:
                 break
@@ -1337,3 +1344,134 @@ class TestAdminAddBalanceTotalCredited:
         meta = cred_tx.get("meta") or {}
         assert "admin_email" in meta
         assert "admin_name" in meta
+
+
+# ---------------------------------------------------------------------------
+# Iteration 10 — PayNow IP whitelist block detection & graceful degradation.
+# The pod's outbound IP is not whitelisted at PayNow (error 10000039). Ensure:
+#   (a) paynow._observe_response flips ip_blocked flag and clears it.
+#   (b) GET /paynow/banks returns {enabled:false, reason:'gateway_ip_blocked'}.
+#   (c) POST /deposits paynow-auto fast-fails with HTTP 400 (not 5xx) while flagged,
+#       and does NOT insert a deposit doc.
+#   (d) When flag is cleared, a live PayNow call that returns whitelist code sets
+#       status='failed' on the deposit and returns HTTP 400 (post-insert).
+# ---------------------------------------------------------------------------
+class TestPaynowIpBlockUnit:
+    """Direct-import unit tests against paynow._observe_response."""
+
+    def test_observe_response_sets_and_clears_ip_blocked(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        import paynow as pn
+        pn._clear_ip_blocked()
+        assert pn.ip_blocked() is False
+
+        pn._observe_response({"code": 10000039, "msg": "The IP address fails to pass the whitelist check"})
+        assert pn.ip_blocked() is True
+        assert "whitelist" in pn.ip_block_note().lower()
+
+        # Successful call clears
+        pn._observe_response({"code": 0, "msg": "ok", "data": {}})
+        assert pn.ip_blocked() is False
+        assert pn.ip_block_note() == ""
+
+    def test_observe_response_non_matching_codes_do_not_toggle(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        import paynow as pn
+        pn._clear_ip_blocked()
+        pn._observe_response({"code": 400, "msg": "bad"})
+        assert pn.ip_blocked() is False
+        pn._observe_response({"code": 10000001, "msg": "sign error"})
+        assert pn.ip_blocked() is False
+
+
+class TestPaynowGracefulDegradation:
+    """HTTP-level tests for the IP-block graceful degradation.
+
+    NOTE: The `paynow._mark_ip_blocked` / `_clear_ip_blocked` helpers mutate
+    *in-process* state — they only affect the current Python process, not the
+    running FastAPI server. So these tests can only meaningfully assert the
+    contract *if* the running server's PayNow module has already been flagged
+    (i.e. real outbound calls in this env are failing with code 10000039).
+    We check via GET /paynow/banks first and skip if the gateway is healthy."""
+
+    def _server_ip_blocked(self, user_a) -> bool:
+        r = requests.get(f"{BASE_URL}/api/paynow/banks",
+                         headers=_auth_headers(user_a["token"]), timeout=15)
+        if r.status_code != 200:
+            return False
+        d = r.json()
+        return d.get("enabled") is False and d.get("reason") == "gateway_ip_blocked"
+
+    def test_paynow_banks_reports_blocked(self, user_a):
+        if not self._server_ip_blocked(user_a):
+            pytest.skip("Server PayNow gateway is currently healthy; blocked-path unreachable via HTTP.")
+        r = requests.get(f"{BASE_URL}/api/paynow/banks",
+                         headers=_auth_headers(user_a["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["enabled"] is False
+        assert d["reason"] == "gateway_ip_blocked"
+        assert d["data"] == []
+
+    def test_deposits_paynow_auto_fast_fails_with_400_no_doc_inserted(self, user_a):
+        if not self._server_ip_blocked(user_a):
+            pytest.skip("Server PayNow gateway is currently healthy; blocked-path unreachable via HTTP.")
+        deps_before = requests.get(f"{BASE_URL}/api/deposits",
+                                   headers=_auth_headers(user_a["token"]), timeout=15).json()
+        pn_before = [d for d in deps_before if (d.get("method") or "").startswith("paynow")]
+
+        r = requests.post(f"{BASE_URL}/api/deposits",
+                          json={"amount": 500.0, "method": "paynow-auto"},
+                          headers=_auth_headers(user_a["token"]), timeout=15)
+        assert r.status_code == 400, f"expected 400 got {r.status_code}: {r.text}"
+        body = r.json()
+        assert "instant pay" in body["detail"].lower()
+        assert "temporarily unavailable" in body["detail"].lower()
+
+        deps_after = requests.get(f"{BASE_URL}/api/deposits",
+                                  headers=_auth_headers(user_a["token"]), timeout=15).json()
+        pn_after = [d for d in deps_after if (d.get("method") or "").startswith("paynow")]
+        assert len(pn_after) == len(pn_before), \
+            f"deposit doc leaked despite fast-fail: {len(pn_before)} -> {len(pn_after)}"
+
+    def test_deposits_paynow_auto_returns_400_when_gateway_call_fails(self, user_a):
+        """When the gateway is unreachable/whitelisted-out, POST /deposits paynow-auto
+        must return a 400 (NOT 5xx) so Cloudflare passes the body through."""
+        if not self._server_ip_blocked(user_a):
+            pytest.skip("Server PayNow gateway is currently healthy; failure-path unreachable via HTTP.")
+        r = requests.post(f"{BASE_URL}/api/deposits",
+                          json={"amount": 500.0, "method": "paynow-auto"},
+                          headers=_auth_headers(user_a["token"]), timeout=30)
+        assert r.status_code == 400, f"expected 400 got {r.status_code}: {r.text}"
+        assert isinstance(r.json().get("detail"), str) and len(r.json()["detail"]) > 5
+
+    def test_manual_bank_deposit_still_works_regardless_of_paynow_state(self, admin_headers, user_a):
+        """Manual deposits (method = payment_account id) must NOT be affected by
+        PayNow gateway state — this MUST pass whether the gateway is healthy or blocked."""
+        r1 = requests.post(f"{BASE_URL}/api/admin/payment-accounts",
+                           json={"bank_name": "TEST_IPBlk_Bank",
+                                 "account_name": "Test Acc",
+                                 "account_number": "1234567890",
+                                 "active": True},
+                           headers=admin_headers, timeout=15)
+        assert r1.status_code == 200
+        aid = r1.json()["id"]
+        try:
+            r = requests.post(f"{BASE_URL}/api/deposits",
+                              json={"amount": 600.0, "method": aid, "reference": "TEST_MANUAL_OK"},
+                              headers=_auth_headers(user_a["token"]), timeout=15)
+            assert r.status_code == 200, r.text
+            dep = r.json()
+            assert dep["status"] == "pending"
+            adm = requests.get(f"{BASE_URL}/api/admin/deposits",
+                               headers=admin_headers, timeout=15).json()
+            row = next((d for d in adm if d["id"] == dep["id"]), None)
+            assert row is not None
+            assert row.get("payment_account_bank") == "TEST_IPBlk_Bank"
+            assert row.get("payment_account_number") == "1234567890"
+            assert row.get("gateway") == "manual"
+        finally:
+            requests.delete(f"{BASE_URL}/api/admin/payment-accounts/{aid}",
+                            headers=admin_headers, timeout=15)
