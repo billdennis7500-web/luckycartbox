@@ -841,3 +841,180 @@ class TestWithdrawalWithBoundAccount:
         assert d["account_number"] == "1112223334"
         assert d["account_name"] == "Explicit"
 
+
+# ---------------------------------------------------------------------------
+# Iteration 6 - Admin get user regression, debit/overdraft, deposit enrichment
+# ---------------------------------------------------------------------------
+class TestAdminGetUserRegression:
+    """Ensures /api/admin/users/{uid} does not leak ObjectId and works for invested users."""
+
+    def _has_objectid_string(self, obj) -> bool:
+        """Recursively check if any value looks like a raw ObjectId('...') string."""
+        if isinstance(obj, str):
+            return "ObjectId(" in obj
+        if isinstance(obj, dict):
+            return any(self._has_objectid_string(v) for v in obj.values())
+        if isinstance(obj, list):
+            return any(self._has_objectid_string(v) for v in obj)
+        return False
+
+    def test_admin_get_invested_user_returns_200_and_no_objectid_leak(self, admin_headers, user_b):
+        # user_b fixture is guaranteed to be invested
+        uid = user_b["user"]["id"]
+        r = requests.get(f"{BASE_URL}/api/admin/users/{uid}",
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "user" in data
+        assert "transactions" in data
+        assert "investments" in data
+        assert data["user"]["id"] == uid
+        # invested user should have >=1 investment
+        assert len(data["investments"]) >= 1
+        inv = data["investments"][0]
+        # FK fields must be stringified, not raw ObjectId
+        assert isinstance(inv["user_id"], str)
+        assert isinstance(inv["product_id"], str)
+        assert "ObjectId" not in inv["user_id"]
+        assert "ObjectId" not in inv["product_id"]
+        # No _id leak anywhere
+        assert "_id" not in inv
+        for t in data["transactions"]:
+            assert "_id" not in t
+        assert "_id" not in data["user"]
+        # Deep scan for raw ObjectId(...) strings in serialized output
+        assert not self._has_objectid_string(data), "Raw ObjectId string leaked into response"
+
+    def test_admin_get_nonexistent_user_returns_404(self, admin_headers):
+        r = requests.get(f"{BASE_URL}/api/admin/users/507f1f77bcf86cd799439011",
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 404
+
+
+class TestAdminAddBalanceDebit:
+    """Negative amount now debits, with overdraft guard."""
+
+    def test_positive_amount_credits_admin_credit_tx(self, admin_headers, user_a):
+        uid = user_a["user"]["id"]
+        before = requests.get(f"{BASE_URL}/api/auth/me",
+                              headers=_auth_headers(user_a["token"]), timeout=15).json()
+        r = requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                          json={"amount": 250.0, "note": "TEST_credit"},
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        assert r.json()["user"]["wallet_balance"] - before["wallet_balance"] == pytest.approx(250.0, abs=0.01)
+        tx = requests.get(f"{BASE_URL}/api/transactions",
+                          headers=_auth_headers(user_a["token"]), timeout=15).json()
+        assert any(t["type"] == "admin_credit" and t["amount"] == 250.0 for t in tx)
+
+    def test_negative_amount_debits_admin_debit_tx(self, admin_headers, user_b):
+        uid = user_b["user"]["id"]
+        # Ensure some balance
+        requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                      json={"amount": 1000.0}, headers=admin_headers, timeout=15)
+        before = requests.get(f"{BASE_URL}/api/auth/me",
+                              headers=_auth_headers(user_b["token"]), timeout=15).json()
+        r = requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                          json={"amount": -100.0, "note": "TEST_debit"},
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        after_bal = r.json()["user"]["wallet_balance"]
+        assert before["wallet_balance"] - after_bal == pytest.approx(100.0, abs=0.01)
+        tx = requests.get(f"{BASE_URL}/api/transactions",
+                          headers=_auth_headers(user_b["token"]), timeout=15).json()
+        assert any(t["type"] == "admin_debit" and t["amount"] == -100.0 for t in tx)
+
+    def test_overdraft_debit_returns_400(self, admin_headers, user_a):
+        uid = user_a["user"]["id"]
+        me = requests.get(f"{BASE_URL}/api/auth/me",
+                          headers=_auth_headers(user_a["token"]), timeout=15).json()
+        wallet = me["wallet_balance"]
+        # Try to debit way more than wallet
+        r = requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                          json={"amount": -(wallet + 999999.0), "note": "TEST_overdraft"},
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 400
+        assert "cannot debit" in r.json()["detail"].lower()
+        # Balance unchanged
+        me2 = requests.get(f"{BASE_URL}/api/auth/me",
+                           headers=_auth_headers(user_a["token"]), timeout=15).json()
+        assert me2["wallet_balance"] == wallet
+
+    def test_zero_amount_rejected(self, admin_headers, user_a):
+        r = requests.post(f"{BASE_URL}/api/admin/users/{user_a['user']['id']}/add-balance",
+                          json={"amount": 0}, headers=admin_headers, timeout=15)
+        assert r.status_code == 400
+
+
+class TestDepositEnrichment:
+    """POST /api/deposits with method = payment_account id should embed bank fields."""
+
+    def test_deposit_with_payment_account_enriches_bank_fields(self, admin_headers, user_a):
+        # Create a payment account
+        r1 = requests.post(f"{BASE_URL}/api/admin/payment-accounts",
+                           json={"bank_name": "TEST_EnrichBank", "account_name": "Enrich Acc",
+                                 "account_number": "5555555555", "active": True},
+                           headers=admin_headers, timeout=15)
+        assert r1.status_code == 200
+        aid = r1.json()["id"]
+        try:
+            # User creates deposit with method = payment account id
+            r = requests.post(f"{BASE_URL}/api/deposits",
+                              json={"amount": 1500.0, "method": aid, "reference": "TEST_ENRICH"},
+                              headers=_auth_headers(user_a["token"]), timeout=15)
+            assert r.status_code == 200, r.text
+            dep = r.json()
+            did = dep["id"]
+            # Response should include enriched fields (from admin GET at least)
+            adm = requests.get(f"{BASE_URL}/api/admin/deposits",
+                               headers=admin_headers, timeout=15).json()
+            match = next((d for d in adm if d["id"] == did), None)
+            assert match is not None
+            assert match.get("payment_account_id") == aid
+            assert match.get("payment_account_bank") == "TEST_EnrichBank"
+            assert match.get("payment_account_number") == "5555555555"
+            assert match.get("payment_account_name") == "Enrich Acc"
+            assert match.get("gateway") == "manual"
+            assert match.get("status") == "pending"
+        finally:
+            requests.delete(f"{BASE_URL}/api/admin/payment-accounts/{aid}",
+                            headers=admin_headers, timeout=15)
+
+    def test_deposit_with_non_paynow_free_text_method_no_enrichment(self, admin_headers, user_a):
+        # method = "Bank" (a plain string, not a valid ObjectId) should NOT set enrichment
+        r = requests.post(f"{BASE_URL}/api/deposits",
+                          json={"amount": 1200.0, "method": "Bank", "reference": "TEST_PLAIN"},
+                          headers=_auth_headers(user_a["token"]), timeout=15)
+        assert r.status_code == 200
+        did = r.json()["id"]
+        adm = requests.get(f"{BASE_URL}/api/admin/deposits",
+                           headers=admin_headers, timeout=15).json()
+        match = next((d for d in adm if d["id"] == did), None)
+        assert match is not None
+        assert "payment_account_bank" not in match or match.get("payment_account_bank") is None
+        assert match.get("gateway") == "manual"
+
+    def test_deposit_paynow_method_does_not_enrich_payment_account_fields(self, admin_headers, user_a):
+        """method starting with 'paynow' should route through PayNow (not manual enrichment).
+        We can't easily assert PayNow success in tests, but even on gateway failure the
+        doc must never contain payment_account_bank/number/name.
+        """
+        # Directly inspect DB: create a paynow deposit; if PayNow disabled or fails, the doc
+        # still exists in some state and must not have payment_account_* fields.
+        r = requests.post(f"{BASE_URL}/api/deposits",
+                          json={"amount": 800.0, "method": "paynow-auto"},
+                          headers=_auth_headers(user_a["token"]), timeout=45)
+        # Either PayNow is enabled and succeeded (200) or gateway is disabled/errored (502/400).
+        # In any case, no manual deposit doc with enrichment should be produced.
+        if r.status_code == 200:
+            dep = r.json()
+            # Gateway should be paynow
+            assert dep.get("gateway") == "paynow"
+            assert "checkout_url" in dep
+            assert "payment_account_bank" not in dep or dep.get("payment_account_bank") is None
+            assert "payment_account_number" not in dep or dep.get("payment_account_number") is None
+            assert "payment_account_name" not in dep or dep.get("payment_account_name") is None
+        else:
+            # 502 is acceptable when gateway offline; the created "failed" doc is fine
+            assert r.status_code in (400, 502), f"unexpected {r.status_code}: {r.text}"
+

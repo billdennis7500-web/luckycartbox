@@ -1,11 +1,10 @@
 import React from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
 
-import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import AdminLogin from "@/pages/AdminLogin";
 import Register from "@/pages/Register";
@@ -34,6 +33,13 @@ import AdminCoupons from "@/pages/admin/AdminCoupons";
 import AdminAccounts from "@/pages/admin/AdminAccounts";
 import AdminSettings from "@/pages/admin/AdminSettings";
 
+function RootRedirect() {
+  const { user } = useAuth();
+  if (user === null) return null; // still loading /auth/me
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={user.role === "admin" ? "/admin" : "/dashboard"} replace />;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -46,7 +52,7 @@ function App() {
           }}
         />
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="/register" element={<Register />} />

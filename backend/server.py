@@ -768,6 +768,19 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         "created_at": now_utc().isoformat(),
     }
 
+    # If a payment account id was chosen, enrich with bank details so the
+    # admin table can show "which account did the user try to pay into".
+    if payload.method and not payload.method.startswith("paynow"):
+        try:
+            pa = await db.payment_accounts.find_one({"_id": oid(payload.method)})
+        except Exception:
+            pa = None
+        if pa:
+            doc["payment_account_id"] = str(pa["_id"])
+            doc["payment_account_bank"] = pa.get("bank_name")
+            doc["payment_account_number"] = pa.get("account_number")
+            doc["payment_account_name"] = pa.get("account_name")
+
     # If Paynow auto-flow is enabled AND user chose it (method starts with "paynow"),
     # create the payin at PayNow and store the checkout URL.
     if paynow.enabled() and (payload.method or "").startswith("paynow"):
@@ -1108,11 +1121,18 @@ async def admin_get_user(uid: str, admin: dict = Depends(get_admin_user)):
         raise HTTPException(404, "User not found")
     tx = await db.transactions.find({"user_id": u["_id"]}).sort("created_at", -1).to_list(200)
     invs = await db.investments.find({"user_id": u["_id"]}).sort("created_at", -1).to_list(200)
+
+    def clean_inv(i: dict) -> dict:
+        d = clean(i)
+        # `clean()` already stringifies top-level ObjectIds; make sure the FK fields are strings too
+        d["user_id"] = str(i.get("user_id")) if i.get("user_id") else None
+        d["product_id"] = str(i.get("product_id")) if i.get("product_id") else None
+        return d
+
     return {
         "user": clean(u),
-        "transactions": [clean(t) | {"user_id": str(t["user_id"])} for t in tx],
-        "investments": [(lambda d: {**d, "id": str(d.pop("_id")), "user_id": str(d["user_id"]),
-                                    "product_id": str(d["product_id"])})(dict(i)) for i in invs],
+        "transactions": [clean(t) for t in tx],
+        "investments": [clean_inv(i) for i in invs],
     }
 
 
@@ -1123,8 +1143,13 @@ async def admin_add_balance(uid: str, payload: AddBalanceIn, admin: dict = Depen
     u = await db.users.find_one({"_id": oid(uid)})
     if not u:
         raise HTTPException(404, "User not found")
+    # Guard debit from going negative
+    if payload.amount < 0 and (u.get("wallet_balance", 0) + payload.amount) < 0:
+        raise HTTPException(400, f"Cannot debit ₦{abs(payload.amount):,.0f} — user only has ₦{u.get('wallet_balance', 0):,.0f}")
+    tx_type = "admin_credit" if payload.amount > 0 else "admin_debit"
+    default_note = "Admin credit" if payload.amount > 0 else "Admin debit"
     await db.users.update_one({"_id": u["_id"]}, {"$inc": {"wallet_balance": payload.amount}})
-    await add_transaction(u["_id"], "admin_credit", payload.amount, payload.note or "Admin credit",
+    await add_transaction(u["_id"], tx_type, payload.amount, payload.note or default_note,
                           {"admin_id": str(admin["_id"])})
     u = await db.users.find_one({"_id": u["_id"]})
     return {"ok": True, "user": clean(u)}
