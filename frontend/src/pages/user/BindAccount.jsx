@@ -95,10 +95,11 @@ export default function BindAccount() {
     setVerify({ status: "idle" });
   };
 
-  // Silent, non-blocking eligibility check once the user has a bank + 10 digits
+  // Silent, non-blocking eligibility check once the user has a bank + 10 digits.
+  // Also runs on mount when we hydrate an existing binding, so users see a fresh signal.
   useEffect(() => {
     const digits = (form.account_number || "").replace(/\D/g, "");
-    if (!paynowEnabled || !form.bank_code || digits.length < 10) {
+    if (initialLoad || !paynowEnabled || !form.bank_code || digits.length < 10) {
       setVerify({ status: "idle" });
       return;
     }
@@ -112,13 +113,15 @@ export default function BindAccount() {
         });
         if (cancelled) return;
         setVerify({ status: data?.exists ? "reachable" : "unknown" });
-      } catch {
+      } catch (err) {
         if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.warn("[bind] verify-account failed", err?.response?.status, err?.message);
         setVerify({ status: "unknown" });
       }
     }, 400);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [form.bank_code, form.account_number, paynowEnabled]);
+  }, [form.bank_code, form.account_number, paynowEnabled, initialLoad]);
 
   const submit = async (e) => {
     e.preventDefault();

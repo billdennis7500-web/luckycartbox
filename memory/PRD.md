@@ -82,3 +82,18 @@ See `/app/memory/test_credentials.md`.
 ### Deferred
 - SMS OTP for phone verification (needs provider selection — Termii recommended).
 - Automatic reconciliation cron that queries `/open/v3/payins/query` for stuck-pending deposits older than 30 min.
+
+## 2026-07-27 · Withdrawal UX split + Portfolio nav tab
+
+### Delivered
+- **Dedicated Bind Bank Account page** (`/bank-account`): bank picker drawer (32 curated + 485 total), 9–12 digit account number input, account name input, silent non-blocking PayNow eligibility check with a **neutral blue "We couldn't auto-check" banner** replacing the old scary "PayNow could not verify" failure copy.
+- **Withdraw page simplified** (`/withdraw`): shows a bound-account card with "Change" link (or a CTA card if not bound), a single amount input, and a submit button. No more inline bank picker.
+- **New /investments page** ("Portfolio" tab) — active/completed/all tabs, active-capital & total-earned summary chips, per-plan progress bars.
+- **Bottom nav expanded to 5 items** (Home, Invest, Portfolio, Referrals, Profile). "Active investments" section removed from Home/Dashboard.
+- Backend: new `GET / POST / DELETE /api/me/bank-account` (with 9–12 digit validation, brand persistence). `POST /api/withdrawals` now accepts `{amount}` only, resolving bank fields from the bound account. Backwards-compatible with explicit bank fields.
+- 50/50 pytest passing (10 new tests for `/me/bank-account` + amount-only withdrawal).
+
+### Deferred (unchanged)
+- `server.py` router split (1527 lines now — router files exist under `/backend/routers/*` but not yet mounted).
+- SMS OTP for phone verification.
+- PayNow `query_payee` 429 retry/backoff hardening.
