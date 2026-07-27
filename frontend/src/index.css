@@ -153,3 +153,65 @@ h1, h2, h3, h4, h5, h6 {
     transform: translateY(-2px);
     border-color: #0055FF;
 }
+
+/* ---------------------------------------------------------------------------
+   Light-mode text-white repair
+   ---------------------------------------------------------------------------
+   Most of the app was designed dark-first with `text-white` used liberally as
+   "primary content color". In light mode this becomes invisible on cards,
+   inputs, outlined buttons, etc. Rather than manually re-classing ~150 call
+   sites, we globally re-target `.text-white` in light mode to the semantic
+   `--nb-text` token, then restore `#FFFFFF` for elements that live on top of
+   a solid colored button/badge background (blue / green / red / amber / violet
+   variants used across the app). Both self-referential (`button.text-white`)
+   and descendant (`button > .text-white`) shapes are covered.
+   -------------------------------------------------------------------------- */
+html.theme-light .text-white { color: var(--nb-text); }
+html.theme-light .hover\:text-white:hover { color: var(--nb-text); }
+
+/* Elements that ARE themselves the coloured button/badge */
+html.theme-light .bg-\[\#0055FF\].text-white,
+html.theme-light .bg-\[\#3377FF\].text-white,
+html.theme-light .bg-\[\#10B981\].text-white,
+html.theme-light .bg-\[\#0EA97A\].text-white,
+html.theme-light .bg-\[\#0ea770\].text-white,
+html.theme-light .bg-\[\#EF4444\].text-white,
+html.theme-light .bg-\[\#dc2626\].text-white,
+html.theme-light .bg-\[\#F59E0B\].text-white,
+html.theme-light .bg-\[\#8B5CF6\].text-white,
+html.theme-light .bg-\[\#EB1C24\].text-white,
+/* Icons or spans NESTED inside a coloured button/badge */
+html.theme-light .bg-\[\#0055FF\] .text-white,
+html.theme-light .bg-\[\#3377FF\] .text-white,
+html.theme-light .bg-\[\#10B981\] .text-white,
+html.theme-light .bg-\[\#0EA97A\] .text-white,
+html.theme-light .bg-\[\#0ea770\] .text-white,
+html.theme-light .bg-\[\#EF4444\] .text-white,
+html.theme-light .bg-\[\#dc2626\] .text-white,
+html.theme-light .bg-\[\#F59E0B\] .text-white,
+html.theme-light .bg-\[\#8B5CF6\] .text-white,
+html.theme-light .bg-\[\#EB1C24\] .text-white {
+  color: #FFFFFF;
+}
+
+/* Inputs / textareas that have Tailwind's text-white on a light-card background
+   need explicit dark text so users can see what they type. Covers the
+   Deposit amount, Withdraw amount, Bind Account fields, Coupon code etc. */
+html.theme-light input.text-white,
+html.theme-light textarea.text-white,
+html.theme-light select.text-white {
+  color: var(--nb-text);
+}
+
+/* Placeholder color for consistent legibility in light mode */
+html.theme-light input::placeholder,
+html.theme-light textarea::placeholder {
+  color: var(--nb-muted);
+  opacity: 0.75;
+}
+
+/* Some elements use `bg-white` (opaque white) explicitly (e.g. the deposit
+   iframe container waiting for PayNow). In light mode the surrounding is now
+   white too, so add a subtle border for definition (only if not already
+   bordered). Handled via CSS variable at those specific sites — nothing to do
+   here globally, kept as a comment for future maintainers. */
