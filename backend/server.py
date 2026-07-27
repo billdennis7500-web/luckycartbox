@@ -187,6 +187,10 @@ DEFAULT_SETTINGS = {
     "site_name": "NaijaInvest",
     "telegram_url": "",
     "welcome_message": "Welcome to NaijaInvest — grow your money the smart way. Invest today, cash out tomorrow.",
+    "withdrawal_fee_pct": 15.0,
+    "auto_payout_enabled": False,
+    "deposit_quick_amounts": [500, 1000, 2000, 5000, 10000, 20000],
+    "batch_approve_limit": 50,
 }
 
 
@@ -464,6 +468,11 @@ class ApprovalIn(BaseModel):
     note: Optional[str] = ""
 
 
+class BulkApprovalIn(BaseModel):
+    ids: List[str]
+    note: Optional[str] = ""
+
+
 class AddBalanceIn(BaseModel):
     amount: float
     note: Optional[str] = "Admin credit"
@@ -497,6 +506,10 @@ class SettingsIn(BaseModel):
     site_name: Optional[str] = None
     telegram_url: Optional[str] = None
     welcome_message: Optional[str] = None
+    withdrawal_fee_pct: Optional[float] = None
+    auto_payout_enabled: Optional[bool] = None
+    deposit_quick_amounts: Optional[List[float]] = None
+    batch_approve_limit: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -871,6 +884,34 @@ async def user_verify_deposit(did: str, user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Withdrawals
 # ---------------------------------------------------------------------------
+async def _paynow_payout_withdrawal(w: dict, note: str = "") -> dict:
+    """Trigger PayNow payout for a withdrawal (net of fee). Raises on gateway error."""
+    payout_amount = float(w.get("payout_amount") or w.get("amount") or 0)
+    merchant_order_no = f"W{str(w['_id'])[-16:]}{int(datetime.now().timestamp())}"
+    pn = await paynow.create_payout(
+        merchant_order_no=merchant_order_no,
+        amount=payout_amount,
+        bank_code=w["bank_code"],
+        account_name=w["account_name"],
+        account_no=w["account_number"],
+        remarks=note or "Withdrawal",
+    )
+    if pn.get("code") != 0:
+        raise HTTPException(400, f"Gateway declined: {pn.get('msg') or 'unknown'}")
+    await db.withdrawals.update_one(
+        {"_id": w["_id"]},
+        {"$set": {
+            "status": "processing",
+            "processed_at": now_utc().isoformat(),
+            "admin_note": note or "",
+            "gateway": "paynow",
+            "merchant_order_no": merchant_order_no,
+            "gateway_response": pn,
+        }},
+    )
+    return pn
+
+
 @api.post("/withdrawals")
 async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_current_user)):
     if not user.get("has_invested"):
@@ -895,13 +936,21 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
     if not (bank_name and account_number and account_name):
         raise HTTPException(400, "Please bind a bank account before withdrawing")
 
-    # Hold the funds
+    # Compute platform fee + net payout
+    fee_pct = float(settings.get("withdrawal_fee_pct") or 0)
+    fee = round(float(payload.amount) * fee_pct / 100.0, 2)
+    payout_amount = round(float(payload.amount) - fee, 2)
+
+    # Hold the gross amount from the user's wallet
     await db.users.update_one({"_id": user["_id"]}, {"$inc": {"wallet_balance": -payload.amount}})
     doc = {
         "user_id": user["_id"],
         "user_name": user["name"],
         "user_phone": user["phone"],
         "amount": float(payload.amount),
+        "fee": fee,
+        "fee_pct": fee_pct,
+        "payout_amount": payout_amount,
         "bank_name": bank_name,
         "account_number": account_number,
         "account_name": account_name,
@@ -911,7 +960,21 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
     }
     res = await db.withdrawals.insert_one(doc)
     await add_transaction(user["_id"], "withdrawal_hold", -payload.amount,
-                          "Withdrawal requested (pending)", {"withdrawal_id": str(res.inserted_id)})
+                          f"Withdrawal requested (fee ₦{fee:.0f}, payout ₦{payout_amount:.0f})",
+                          {"withdrawal_id": str(res.inserted_id), "fee": fee, "payout_amount": payout_amount})
+
+    # Auto-payout when admin has enabled it AND PayNow is live AND we have a bank_code.
+    auto_ok = bool(settings.get("auto_payout_enabled")) and paynow.enabled() and bool(bank_code)
+    if auto_ok:
+        w = await db.withdrawals.find_one({"_id": res.inserted_id})
+        try:
+            await _paynow_payout_withdrawal(w, note="Auto-payout")
+        except HTTPException as e:
+            # Log the failure but leave withdrawal pending so admin can retry manually
+            logger.warning(f"Auto-payout failed for withdrawal {res.inserted_id}: {e.detail}")
+        except Exception:
+            logger.exception("Auto-payout unexpected failure")
+
     return clean(await db.withdrawals.find_one({"_id": res.inserted_id}))
 
 
@@ -1133,11 +1196,80 @@ async def admin_get_user(uid: str, admin: dict = Depends(get_admin_user)):
         d["product_id"] = str(i.get("product_id")) if i.get("product_id") else None
         return d
 
+    # Sum of approved deposits (real cash the user has funded)
+    total_deposited = 0.0
+    async for r in db.deposits.aggregate([
+        {"$match": {"user_id": u["_id"], "status": "approved"}},
+        {"$group": {"_id": None, "s": {"$sum": "$amount"}}},
+    ]):
+        total_deposited = float(r["s"])
+
+    # Inviter (whoever's referral_code == u.referred_by)
+    inviter = None
+    if u.get("referred_by"):
+        inv = await db.users.find_one({"referral_code": u["referred_by"]})
+        if inv:
+            inviter = {
+                "id": str(inv["_id"]),
+                "name": inv.get("name"),
+                "phone": inv.get("phone"),
+                "referral_code": inv.get("referral_code"),
+            }
+
+    # Gen-1 referrals (people who signed up under this user's code)
+    gen1_docs = await db.users.find(
+        {"referred_by": u.get("referral_code")}
+    ).sort("created_at", -1).to_list(200) if u.get("referral_code") else []
+
+    def shape_ref(x: dict) -> dict:
+        return {
+            "id": str(x["_id"]),
+            "name": x.get("name"),
+            "phone": x.get("phone"),
+            "has_invested": bool(x.get("has_invested")),
+            "total_invested": float(x.get("total_invested") or 0),
+            "created_at": x.get("created_at"),
+        }
+
     return {
         "user": clean(u),
         "transactions": [clean(t) for t in tx],
         "investments": [clean_inv(i) for i in invs],
+        "total_deposited": total_deposited,
+        "inviter": inviter,
+        "gen1_referrals": [shape_ref(r) for r in gen1_docs],
     }
+
+
+@api.post("/admin/users/{uid}/impersonate")
+async def admin_impersonate(uid: str, response: Response, admin: dict = Depends(get_admin_user)):
+    """Issue an access token for the target user and swap the auth cookies to it, so the admin
+    now navigates the app as the impersonated user. Admin's real cookies are backed up in the
+    frontend via localStorage (see AuthContext.impersonate) so the pill can restore them.
+    """
+    u = await db.users.find_one({"_id": oid(uid)})
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.get("role") == "admin":
+        raise HTTPException(400, "Cannot impersonate another admin")
+    access = create_access_token(str(u["_id"]), u.get("role") or "user")
+    refresh = create_refresh_token(str(u["_id"]))
+    set_auth_cookies(response, access, refresh)
+    logger.info(f"Admin {admin.get('email') or admin['_id']} impersonating user {u['_id']}")
+    return {"ok": True, "access_token": access, "user": clean(u)}
+
+
+@api.post("/admin/impersonate/stop")
+async def admin_impersonate_stop(response: Response, admin_id: str = Query(...)):
+    """Restore admin cookies. `admin_id` is the admin's own user_id, provided by the frontend
+    from localStorage. We re-issue tokens for that admin id."""
+    a = await db.users.find_one({"_id": oid(admin_id)})
+    if not a or a.get("role") != "admin":
+        raise HTTPException(400, "Invalid admin id")
+    access = create_access_token(str(a["_id"]), "admin")
+    refresh = create_refresh_token(str(a["_id"]))
+    set_auth_cookies(response, access, refresh)
+    return {"ok": True, "user": clean(a)}
 
 
 @api.post("/admin/users/{uid}/add-balance")
@@ -1152,9 +1284,18 @@ async def admin_add_balance(uid: str, payload: AddBalanceIn, admin: dict = Depen
         raise HTTPException(400, f"Cannot debit ₦{abs(payload.amount):,.0f} — user only has ₦{u.get('wallet_balance', 0):,.0f}")
     tx_type = "admin_credit" if payload.amount > 0 else "admin_debit"
     default_note = "Admin credit" if payload.amount > 0 else "Admin debit"
-    await db.users.update_one({"_id": u["_id"]}, {"$inc": {"wallet_balance": payload.amount}})
+    # Track lifetime admin-credit / debit totals on the user doc so the admin users list can
+    # surface a "Funded by admin" chip without loading transactions per row.
+    inc = {"wallet_balance": payload.amount}
+    if payload.amount > 0:
+        inc["total_admin_credited"] = float(payload.amount)
+    else:
+        inc["total_admin_debited"] = float(-payload.amount)
+    await db.users.update_one({"_id": u["_id"]}, {"$inc": inc})
     await add_transaction(u["_id"], tx_type, payload.amount, payload.note or default_note,
-                          {"admin_id": str(admin["_id"])})
+                          {"admin_id": str(admin["_id"]),
+                           "admin_email": admin.get("email"),
+                           "admin_name": admin.get("name")})
     u = await db.users.find_one({"_id": u["_id"]})
     return {"ok": True, "user": clean(u)}
 
@@ -1263,28 +1404,13 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
 
     # PayNow automatic payout if enabled AND withdrawal has bank_code
     if paynow.enabled() and w.get("bank_code"):
-        merchant_order_no = f"W{str(w['_id'])[-16:]}{int(datetime.now().timestamp())}"
         try:
-            pn = await paynow.create_payout(
-                merchant_order_no=merchant_order_no,
-                amount=float(w["amount"]),
-                bank_code=w["bank_code"],
-                account_name=w["account_name"],
-                account_no=w["account_number"],
-                remarks=payload.note or "Withdrawal",
-            )
+            await _paynow_payout_withdrawal(w, note=payload.note or "")
+        except HTTPException:
+            raise
         except Exception as e:
             logger.exception("PayNow payout failed")
             raise HTTPException(502, f"Payment gateway error: {e}")
-        if pn.get("code") != 0:
-            raise HTTPException(400, f"Gateway declined: {pn.get('msg') or 'unknown'}")
-        await db.withdrawals.update_one(
-            {"_id": w["_id"]},
-            {"$set": {"status": "processing", "processed_at": now_utc().isoformat(),
-                      "admin_note": payload.note or "", "gateway": "paynow",
-                      "merchant_order_no": merchant_order_no,
-                      "gateway_response": pn}},
-        )
         return {"ok": True, "gateway": "paynow", "status": "processing"}
 
     # Manual flow
@@ -1294,6 +1420,49 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
     await add_transaction(w["user_id"], "withdrawal", -w["amount"], "Withdrawal approved",
                           {"withdrawal_id": str(w["_id"])})
     return {"ok": True}
+
+
+@api.post("/admin/withdrawals/bulk-approve")
+async def bulk_approve_withdrawals(payload: BulkApprovalIn, admin: dict = Depends(get_admin_user)):
+    settings = await get_settings()
+    limit = int(settings.get("batch_approve_limit") or 50)
+    ids = [i for i in (payload.ids or []) if i]
+    if not ids:
+        raise HTTPException(400, "No withdrawal ids supplied")
+    if len(ids) > limit:
+        raise HTTPException(400, f"Batch too large — limit is {limit} at a time")
+
+    results = {"approved": 0, "processing": 0, "skipped": 0, "errors": []}
+    for wid in ids:
+        try:
+            w = await db.withdrawals.find_one({"_id": oid(wid)})
+        except Exception:
+            results["errors"].append({"id": wid, "error": "Invalid id"}); results["skipped"] += 1; continue
+        if not w:
+            results["errors"].append({"id": wid, "error": "Not found"}); results["skipped"] += 1; continue
+        if w["status"] != "pending":
+            results["skipped"] += 1; continue
+
+        if paynow.enabled() and w.get("bank_code"):
+            try:
+                await _paynow_payout_withdrawal(w, note=payload.note or "")
+                results["processing"] += 1
+            except HTTPException as e:
+                results["errors"].append({"id": wid, "error": e.detail}); results["skipped"] += 1
+            except Exception as e:
+                logger.exception("PayNow payout failed in bulk")
+                results["errors"].append({"id": wid, "error": str(e)}); results["skipped"] += 1
+        else:
+            await db.withdrawals.update_one(
+                {"_id": w["_id"]},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "admin_note": payload.note or "Bulk approved"}},
+            )
+            await add_transaction(w["user_id"], "withdrawal", -w["amount"], "Withdrawal approved (bulk)",
+                                  {"withdrawal_id": str(w["_id"])})
+            results["approved"] += 1
+
+    return {"ok": True, **results}
 
 
 # Admin: PayNow utilities
@@ -1536,6 +1705,9 @@ async def public_settings():
         "welcome_bonus": s.get("welcome_bonus") or 0,
         "min_deposit": s.get("min_deposit") or 0,
         "min_withdrawal": s.get("min_withdrawal") or 0,
+        "withdrawal_fee_pct": s.get("withdrawal_fee_pct") or 0,
+        "auto_payout_enabled": bool(s.get("auto_payout_enabled")),
+        "deposit_quick_amounts": s.get("deposit_quick_amounts") or [500, 1000, 2000, 5000, 10000, 20000],
     }
 
 

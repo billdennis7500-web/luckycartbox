@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 9 verified iteration-9 features (settings extension, withdrawal fees, bulk-approve, impersonation, admin_get_user shape, admin_add_balance total_admin_credited). Added 14 new pytest cases across 6 classes (TestSettingsExtension, TestWithdrawFeeCalc, TestBulkApproveWithdrawals, TestImpersonation, TestAdminGetUserShape, TestAdminAddBalanceTotalCredited). Backend total: 76 tests, 74 passed, 2 failed. Frontend E2E covered: dashboard welcome dialog inset, quick-actions Deposit→Withdraw→Redeem→Invest order, deposit quick-amounts from settings, withdraw fee preview computes ₦2,000 → -₦300 → ₦1,700, dynamic instant-payout banner reflects auto_payout state, admin nav badges, admin settings 4 new fields present, admin users chips (stat-funded, filter-funded-toggle, funded-badge-* rendered — 6 funded users detected), admin withdrawals summary chips (auto-payout chip shows 'Manual approval'/'Auto-payout ON' correctly, wd-pending-sum, wd-fees-sum, wd-batch-limit), bulk-approve UI (checkbox column, wd-select-all, bulk-approve-btn appearing after selection with 'Approve N selected' label), admin user detail (stat-total-deposited, stat-admin-credited, user-impersonate-btn, user-inviter-empty when no inviter, user-gen1-empty when no gen1), impersonation E2E (admin → user dashboard with orange 'Viewing as TEST_FE · Return' pill).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/admin/users/{uid}", "issue": "Inviter lookup is broken. Code at server.py:1210 queries `db.users.find_one({\"referral_code\": u[\"referred_by\"]})` but `referred_by` is stored as the referrer's ObjectId (server.py:593). It should be `{\"_id\": u[\"referred_by\"]}`. Result: `inviter` is ALWAYS null for referred users → admin UI's 'user-inviter-card' NEVER renders even when a user was referred. Reproduced by registering user_b with user_a's referral_code, then GET /admin/users/<user_b_id> returns inviter=None. Fix: change the query to `{\"_id\": u[\"referred_by\"]}` (referred_by is already an ObjectId).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/paynow/verify-account", "issue": "TestPaynowVerifyAccount::test_verify_account_happy_path failed with an outbound ConnectTimeout to preview.emergentagent.com from the pod (30s timeout). Environmental network flake, not code — Kubernetes pod cannot reach its own public hostname during that call. Passes serially in most other runs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminUserDetail", "issue": "Because of the backend inviter bug above, users who WERE referred still get shown 'user-inviter-empty' / 'Direct signup — no inviter.' — the card path is unreachable in production. Report-only; blocked by backend fix.", "selector": "[data-testid='user-inviter-card']", "priority": "HIGH"},
+      {"component": "Dashboard welcome dialog", "issue": "Bounding box measured at x=32, width=396 on a 428px viewport → left gap=32px but right gap=0. The `w-[calc(100%-2rem)] mx-4` combination is being overridden — visually the dialog kisses the right edge. Recommend `w-[calc(100%-2rem)] max-w-[calc(100vw-2rem)]` on the Radix DialogContent, or remove the redundant `mx-4` since Radix already centers via `left-1/2 -translate-x-1/2`.", "selector": "[role='dialog']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Impersonation → Return", "issue": "After clicking [data-testid='impersonation-return-btn'] the URL stayed at /dashboard and pill remained visible even after 3s wait. stopImpersonation() calls the API + removes impersonation_admin_id + setUser(admin) + nav('/admin') — but observed no navigation and no pill removal. Possible race: setUser(admin) hasn't propagated before nav happens, and AdminLayout may bounce back if it doesn't see admin role yet. Consider awaiting a small tick or forcing a full page reload after stop (window.location.href = '/admin'). Non-blocking — impersonation ITSELF works (pill renders correctly with 'Viewing as TEST_FE').", "affected_selectors": ["[data-testid='impersonation-return-btn']", "[data-testid='impersonation-pill']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "HIGH: Fix inviter lookup in server.py admin_get_user — replace `{\"referral_code\": u[\"referred_by\"]}` with `{\"_id\": u[\"referred_by\"]}`. Existing test TestAdminGetUserShape::test_admin_get_user_includes_new_fields will pass after this one-line fix.",
+    "MEDIUM: Welcome dialog is not symmetrically inset on 428px viewport — right edge flush. Adjust class stack on DialogContent.",
+    "LOW: Impersonation return-to-admin flow — ensure full nav happens (consider window.location.assign('/admin') for hard reload so cookies+context sync).",
+    "Consider setting `auto_payout_enabled=false` as the default in production settings until PayNow live-payout has been end-to-end validated (chip currently was left ON by prior smoke test; I reset it back to OFF)."
+  ],
+  "critical_code_review_comments": [
+    "server.py admin_get_user inviter query is a functional bug shipping to production — referred_by field is an ObjectId, not a referral_code. This has probably always been broken for the admin panel inviter card.",
+    "PayNow gateway is currently ENABLED in this env; combined with `auto_payout_enabled` toggle, a stray true value will cause LIVE payouts on every user withdrawal that has a bank_code. Recommend guarding `auto_payout_enabled=true` behind a second confirmation or wallet-limit check.",
+    "server.py has crossed 1740 lines — repeated recommendation across iterations to split routers.",
+    "Bulk approve logs each failed payout via logger.exception but doesn't cap total processing time — if PayNow is slow, a batch of 50 could hold the request open for minutes. Consider making it background/queued or lowering default batch_approve_limit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (appended 14 tests across 6 new classes: TestSettingsExtension, TestWithdrawFeeCalc, TestBulkApproveWithdrawals, TestImpersonation, TestAdminGetUserShape, TestAdminAddBalanceTotalCredited)"
+  ],
+  "success_rate": {
+    "backend": "97.4% (74/76 pytest — 1 real bug: inviter lookup; 1 env network flake on paynow verify-account)",
+    "frontend": "~95% — all requested testids/behaviours verified; 1 minor visual asymmetry on welcome dialog + 1 impersonation-return re-render nit"
+  },
+  "test_credentials": "Admin: billdennis750@gmail.com/djscan30 (also +2348000000000). Test user: +2348047969299/pass1234.",
+  "seed_data_creation": "Created & then rejected a single pending withdrawal (id 6a6779acc9edf995ffc5581a) to exercise the bulk-approve UI. Held funds refunded. Settings reset to: withdrawal_fee_pct=15, auto_payout_enabled=false, batch_approve_limit=50, deposit_quick_amounts=[500,1000,2000,5000,10000,20000]. New TEST_ users may be present from pytest runs (they are cleaned up between session-scoped fixtures re-use).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After the inviter fix, re-run pytest — TestAdminGetUserShape::test_admin_get_user_includes_new_fields should turn green (bringing to 75/76 excluding the network flake). Watch for auto_payout_enabled setting drift — PayNow is live in this env. Frontend testids added this iter: setting-withdrawal-fee, setting-batch-limit, setting-auto-payout, setting-quick-amounts, stat-funded, filter-funded-toggle, funded-badge-*, stat-total-deposited, stat-admin-credited, user-impersonate-btn, user-funded-badge, user-inviter-card / user-inviter-empty, user-gen1-empty / user-gen1-row-*, wd-auto-payout-chip, wd-pending-sum, wd-fees-sum, wd-batch-limit, wd-select-all, wd-select-<id>, bulk-approve-btn, withdraw-fee-preview, withdraw-net-payout, admin-nav-badge-pending_deposits/pending_withdrawals, impersonation-pill, impersonation-return-btn.",
+  "rca of the issue": "admin_get_user inviter lookup RCA: register() at server.py:593 stores `referred_by = ref_user['_id']` (ObjectId). admin_get_user at server.py:1210 queries with `{'referral_code': u['referred_by']}` — this compares the string field `referral_code` against an ObjectId, always no-match. Fix: `{'_id': u['referred_by']}`. Reproduction: register user B with user A's referral_code; GET /api/admin/users/{B_id}; inviter is None instead of A's shape."
+}

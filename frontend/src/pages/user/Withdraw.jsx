@@ -27,10 +27,16 @@ export default function Withdraw() {
   const [bound, setBound] = useState(null);
   const [loading, setLoading] = useState(false);
   const [paynowEnabled, setPaynowEnabled] = useState(false);
+  const [feePct, setFeePct] = useState(0);
+  const [autoPayout, setAutoPayout] = useState(false);
 
   const load = () => {
     api.get("/me/bank-account").then((r) => setBound(r.data)).catch(() => setBound(null));
     api.get("/paynow/banks").then((r) => setPaynowEnabled(!!r.data?.enabled)).catch(() => setPaynowEnabled(false));
+    api.get("/settings/public").then((r) => {
+      setFeePct(Number(r.data?.withdrawal_fee_pct) || 0);
+      setAutoPayout(!!r.data?.auto_payout_enabled);
+    }).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -83,8 +89,14 @@ export default function Withdraw() {
         <div className="rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-4 flex items-start gap-3" data-testid="withdraw-instant-banner">
           <Zap className="w-5 h-5 text-[#0055FF] mt-0.5" />
           <div className="text-xs">
-            <div className="font-display font-600 text-sm">Instant bank payout</div>
-            <div className="text-[#94A3B8] mt-1">Approved withdrawals land in your bank within minutes.</div>
+            <div className="font-display font-600 text-sm">
+              {autoPayout ? "Instant auto-payout enabled" : "Instant bank payout"}
+            </div>
+            <div className="text-[#94A3B8] mt-1">
+              {autoPayout
+                ? "Your withdrawal fires the moment you submit — no waiting for admin review."
+                : "Approved withdrawals land in your bank within minutes."}
+            </div>
           </div>
         </div>
       )}
@@ -142,6 +154,31 @@ export default function Withdraw() {
             <p className="text-xs text-[#94A3B8] mt-1">
               Available: <span className="text-white tabular">{formatNaira(user?.wallet_balance)}</span>
             </p>
+
+            {/* Fee preview */}
+            {feePct > 0 && Number(amount) > 0 && (
+              <div
+                data-testid="withdraw-fee-preview"
+                className="mt-3 rounded-xl border border-[#F59E0B]/30 bg-[#F59E0B]/5 p-3 text-xs space-y-1"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[#94A3B8]">You send</span>
+                  <span className="tabular text-white">{formatNaira(Number(amount))}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#94A3B8]">Platform fee ({feePct}%)</span>
+                  <span className="tabular text-[#F59E0B]">
+                    − {formatNaira(Number(amount) * feePct / 100)}
+                  </span>
+                </div>
+                <div className="pt-1 mt-1 border-t border-[#F59E0B]/20 flex items-center justify-between font-display">
+                  <span className="text-white">You receive</span>
+                  <span className="tabular font-800 text-[#10B981]" data-testid="withdraw-net-payout">
+                    {formatNaira(Number(amount) - Number(amount) * feePct / 100)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <Button type="submit"

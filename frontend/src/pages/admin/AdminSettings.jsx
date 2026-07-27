@@ -18,6 +18,16 @@ export default function AdminSettings() {
 
   const save = async () => {
     try {
+      // Parse quick amounts (comma or newline separated string → array of numbers)
+      const quickRaw = (typeof s.deposit_quick_amounts === "string"
+        ? s.deposit_quick_amounts
+        : (s.deposit_quick_amounts || []).join(", ")
+      );
+      const quickAmounts = String(quickRaw)
+        .split(/[,\n]/)
+        .map((x) => Number(String(x).trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+
       await api.put("/admin/settings", {
         welcome_bonus: Number(s.welcome_bonus),
         min_deposit: Number(s.min_deposit),
@@ -25,8 +35,14 @@ export default function AdminSettings() {
         site_name: s.site_name,
         telegram_url: (s.telegram_url || "").trim(),
         welcome_message: (s.welcome_message || "").trim(),
+        withdrawal_fee_pct: Number(s.withdrawal_fee_pct) || 0,
+        auto_payout_enabled: !!s.auto_payout_enabled,
+        deposit_quick_amounts: quickAmounts,
+        batch_approve_limit: Math.max(1, Number(s.batch_approve_limit) || 50),
       });
       toast.success("Settings saved");
+      // Normalize the local state after save
+      setS({ ...s, deposit_quick_amounts: quickAmounts });
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail) || "Failed"); }
   };
 
@@ -94,6 +110,64 @@ export default function AdminSettings() {
               className="mt-2 w-full rounded-md bg-[#121E30] border border-[#1A2B44] text-white px-3 py-2 text-sm focus:outline-none focus:border-[#0055FF]/40"
             />
           </div>
+        </div>
+
+        <div className="pt-3 border-t border-[#1A2B44]">
+          <div className="text-xs uppercase tracking-widest text-[#94A3B8] mb-3">Withdrawals</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Platform fee (%)</Label>
+              <Input type="number" step="0.01" min="0" max="100"
+                     value={s.withdrawal_fee_pct ?? 0}
+                     onChange={(e) => setS({ ...s, withdrawal_fee_pct: e.target.value })}
+                     data-testid="setting-withdrawal-fee"
+                     className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11 tabular" />
+              <p className="text-xs text-[#94A3B8] mt-1">Deducted from every withdrawal. 0 disables the fee.</p>
+            </div>
+            <div>
+              <Label>Bulk approve limit</Label>
+              <Input type="number" min="1" max="500"
+                     value={s.batch_approve_limit ?? 50}
+                     onChange={(e) => setS({ ...s, batch_approve_limit: e.target.value })}
+                     data-testid="setting-batch-limit"
+                     className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11 tabular" />
+              <p className="text-xs text-[#94A3B8] mt-1">Max withdrawals you can approve at once.</p>
+            </div>
+          </div>
+          <label className="mt-4 flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!s.auto_payout_enabled}
+              onChange={(e) => setS({ ...s, auto_payout_enabled: e.target.checked })}
+              data-testid="setting-auto-payout"
+              className="mt-1 w-4 h-4 accent-[#0055FF]"
+            />
+            <div>
+              <div className="text-sm font-display font-600">
+                Auto-payout {s.auto_payout_enabled ? <span className="text-[#10B981]">(ON)</span> : <span className="text-[#F59E0B]">(OFF — manual approval)</span>}
+              </div>
+              <div className="text-xs text-[#94A3B8]">
+                When ON, user withdrawals fire the gateway immediately. When OFF, admin must approve manually — recommended for higher control.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div className="pt-3 border-t border-[#1A2B44]">
+          <div className="text-xs uppercase tracking-widest text-[#94A3B8] mb-3">Deposit page</div>
+          <Label>Quick amount presets (₦)</Label>
+          <Input
+            value={
+              typeof s.deposit_quick_amounts === "string"
+                ? s.deposit_quick_amounts
+                : (s.deposit_quick_amounts || []).join(", ")
+            }
+            onChange={(e) => setS({ ...s, deposit_quick_amounts: e.target.value })}
+            placeholder="500, 1000, 2000, 5000, 10000, 20000"
+            data-testid="setting-quick-amounts"
+            className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-11 tabular"
+          />
+          <p className="text-xs text-[#94A3B8] mt-1">Comma-separated. Rendered as chips on the user deposit page.</p>
         </div>
 
         <Button onClick={save} data-testid="setting-save-btn" className="bg-[#0055FF] hover:bg-[#3377FF]">Save</Button>

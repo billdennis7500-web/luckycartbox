@@ -77,7 +77,6 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
 }
 
 /* -------------- quick amount chip -------------- */
-const QUICK_AMOUNTS = [500, 1000, 2000, 5000, 10000, 20000];
 function QuickAmount({ value, selected, onClick }) {
   return (
     <button
@@ -121,6 +120,7 @@ export default function Deposit() {
   const [loading, setLoading] = useState(false);
   const [instantEnabled, setInstantEnabled] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [quickAmounts, setQuickAmounts] = useState([500, 1000, 2000, 5000, 10000, 20000]);
 
   // waiting drawer state
   const [waitDep, setWaitDep] = useState(null);
@@ -130,6 +130,10 @@ export default function Deposit() {
   const load = () => {
     api.get("/payment-accounts").then((r) => setAccounts(r.data)).finally(() => setInitialLoad(false));
     api.get("/paynow/banks").then((r) => setInstantEnabled(!!r.data?.enabled)).catch(() => setInstantEnabled(false));
+    api.get("/settings/public").then((r) => {
+      const qa = r.data?.deposit_quick_amounts;
+      if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
+    }).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -304,9 +308,9 @@ export default function Deposit() {
                 data-testid="deposit-amount-input"
                 className="mt-2 bg-[#121E30] border-[#1A2B44] text-white h-12 tabular text-lg"
               />
-              {/* Quick amount chips */}
+              {/* Quick amount chips (admin-configurable) */}
               <div className="mt-3 grid grid-cols-3 gap-2" data-testid="deposit-quick-amounts">
-                {QUICK_AMOUNTS.map((v) => (
+                {quickAmounts.map((v) => (
                   <QuickAmount
                     key={v}
                     value={v}

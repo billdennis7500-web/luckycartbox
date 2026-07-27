@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Home, Store, Users, User, TrendingUp, Shield, LineChart } from "lucide-react";
+import { Home, Store, Users, User, TrendingUp, Shield, LineChart, LogIn, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 
 const NAV = [
   { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
@@ -11,11 +12,50 @@ const NAV = [
   { to: "/profile",     label: "Profile",     icon: User,      testid: "botnav-profile" },
 ];
 
+function ImpersonationPill() {
+  const { user, stopImpersonation, isImpersonating } = useAuth();
+  const nav = useNavigate();
+  const [loading, setLoading] = useState(false);
+  if (!isImpersonating()) return null;
+  const returnToAdmin = async () => {
+    setLoading(true);
+    try {
+      await stopImpersonation();
+      toast.success("Back to admin");
+      nav("/admin");
+    } catch {
+      toast.error("Couldn't switch back — try logging in again");
+    } finally { setLoading(false); }
+  };
+  return (
+    <div
+      data-testid="impersonation-pill"
+      className="fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-1.5rem)]"
+    >
+      <div className="flex items-center gap-2 rounded-full border border-[#F59E0B]/40 bg-[#F59E0B]/15 text-[#F59E0B] backdrop-blur px-3 py-1.5 shadow-lg">
+        <LogIn className="w-3 h-3" />
+        <span className="text-[11px] font-medium truncate">
+          Viewing as <b>{user?.name}</b>
+        </span>
+        <button
+          onClick={returnToAdmin}
+          disabled={loading}
+          data-testid="impersonation-return-btn"
+          className="text-[11px] font-medium underline underline-offset-2 hover:no-underline inline-flex items-center gap-1"
+        >
+          <ArrowLeft className="w-3 h-3" /> Return
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function UserLayout() {
   const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#020813] text-[#F8FAFC] flex flex-col">
+      <ImpersonationPill />
       {/* Top bar */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-[#020813]/80 border-b border-[#1A2B44]">
         <div className="max-w-3xl mx-auto flex items-center justify-between px-5 py-4">

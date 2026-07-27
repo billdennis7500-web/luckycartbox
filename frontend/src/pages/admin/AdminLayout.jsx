@@ -1,28 +1,37 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/api";
 import {
   LayoutDashboard, Users, PackageOpen, ArrowDownToLine, ArrowUpFromLine,
   Percent, Ticket, Landmark, Settings, LogOut, Shield, Menu, X, ExternalLink,
 } from "lucide-react";
 
 const NAV = [
-  { to: "/admin", end: true, label: "Overview", icon: LayoutDashboard },
-  { to: "/admin/users", label: "Users", icon: Users },
-  { to: "/admin/products", label: "Products", icon: PackageOpen },
-  { to: "/admin/deposits", label: "Deposits", icon: ArrowDownToLine },
-  { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpFromLine },
-  { to: "/admin/referrals", label: "Referrals", icon: Percent },
-  { to: "/admin/coupons", label: "Coupons", icon: Ticket },
-  { to: "/admin/accounts", label: "Payment accounts", icon: Landmark },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
+  { to: "/admin", end: true, label: "Overview", icon: LayoutDashboard, key: null },
+  { to: "/admin/users", label: "Users", icon: Users, key: null },
+  { to: "/admin/products", label: "Products", icon: PackageOpen, key: null },
+  { to: "/admin/deposits", label: "Deposits", icon: ArrowDownToLine, key: "pending_deposits" },
+  { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpFromLine, key: "pending_withdrawals" },
+  { to: "/admin/referrals", label: "Referrals", icon: Percent, key: null },
+  { to: "/admin/coupons", label: "Coupons", icon: Ticket, key: null },
+  { to: "/admin/accounts", label: "Payment accounts", icon: Landmark, key: null },
+  { to: "/admin/settings", label: "Settings", icon: Settings, key: null },
 ];
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
+  const [stats, setStats] = useState({});
   const onLogout = async () => { await logout(); nav("/"); };
+
+  useEffect(() => {
+    const load = () => api.get("/admin/stats").then((r) => setStats(r.data)).catch(() => {});
+    load();
+    const t = setInterval(load, 30000); // refresh every 30s
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#020813] text-[#F8FAFC] flex">
@@ -41,24 +50,36 @@ export default function AdminLayout() {
         </div>
 
         <div className="px-3 py-5 space-y-1 overflow-y-auto max-h-[calc(100vh-14rem)]">
-          {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              onClick={() => setOpen(false)}
-              data-testid={`admin-nav-${n.label.toLowerCase().replace(/\s+/g, '-')}`}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
-                  isActive
-                    ? "bg-[#0055FF]/15 text-white border border-[#0055FF]/40"
-                    : "text-[#94A3B8] hover:text-white hover:bg-[#121E30] border border-transparent"
-                }`
-              }
-            >
-              <n.icon className="w-4 h-4" /> {n.label}
-            </NavLink>
-          ))}
+          {NAV.map((n) => {
+            const badge = n.key ? Number(stats[n.key] || 0) : 0;
+            return (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.end}
+                onClick={() => setOpen(false)}
+                data-testid={`admin-nav-${n.label.toLowerCase().replace(/\s+/g, '-')}`}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
+                    isActive
+                      ? "bg-[#0055FF]/15 text-white border border-[#0055FF]/40"
+                      : "text-[#94A3B8] hover:text-white hover:bg-[#121E30] border border-transparent"
+                  }`
+                }
+              >
+                <n.icon className="w-4 h-4" />
+                <span className="flex-1">{n.label}</span>
+                {badge > 0 && (
+                  <span
+                    data-testid={`admin-nav-badge-${n.key}`}
+                    className="text-[10px] tabular font-800 px-1.5 py-0.5 rounded-full bg-[#F59E0B] text-white"
+                  >
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 px-3 pb-5 space-y-2">

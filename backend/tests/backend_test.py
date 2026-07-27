@@ -1072,3 +1072,268 @@ class TestPublicSettingsAndTelegram:
         assert d["telegram_url"] == ""
         # welcome_message should still be truthy (either previously set or default)
         assert isinstance(d["welcome_message"], str)
+
+
+# ---------------------------------------------------------------------------
+# Iteration 9 — settings extension, withdrawal fee, bulk approve, impersonation,
+# admin_get_user shape, admin add-balance total_admin_credited tracker.
+# NOTE: PayNow gateway is currently enabled in this env, so we deliberately keep
+# `auto_payout_enabled=False` throughout and submit withdrawals with an empty
+# bank_code so no live gateway call ever fires.
+# ---------------------------------------------------------------------------
+def _reset_settings(admin_headers):
+    """Restore known baseline for these tests."""
+    requests.put(f"{BASE_URL}/api/admin/settings",
+                 json={"withdrawal_fee_pct": 15.0,
+                       "auto_payout_enabled": False,
+                       "deposit_quick_amounts": [500, 1000, 2000, 5000, 10000, 20000],
+                       "batch_approve_limit": 50},
+                 headers=admin_headers, timeout=15)
+
+
+class TestSettingsExtension:
+    def test_settings_roundtrip_new_fields(self, admin_headers):
+        payload = {
+            "withdrawal_fee_pct": 12.5,
+            "auto_payout_enabled": False,
+            "deposit_quick_amounts": [250, 750, 2500, 6000],
+            "batch_approve_limit": 25,
+        }
+        r = requests.put(f"{BASE_URL}/api/admin/settings", json=payload,
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        s = r.json()
+        assert s["withdrawal_fee_pct"] == 12.5
+        assert s["auto_payout_enabled"] is False
+        assert s["deposit_quick_amounts"] == [250, 750, 2500, 6000]
+        assert s["batch_approve_limit"] == 25
+
+        pub = requests.get(f"{BASE_URL}/api/settings/public", timeout=15).json()
+        assert pub["withdrawal_fee_pct"] == 12.5
+        assert pub["auto_payout_enabled"] is False
+        assert pub["deposit_quick_amounts"] == [250, 750, 2500, 6000]
+        # batch_approve_limit MUST NOT leak on public endpoint
+        assert "batch_approve_limit" not in pub
+        _reset_settings(admin_headers)
+
+
+class TestWithdrawFeeCalc:
+    def test_withdraw_computes_fee_and_payout_amount(self, admin_headers, user_b):
+        _reset_settings(admin_headers)
+        # Ensure user_b has enough balance for ₦2000 withdrawal
+        requests.post(f"{BASE_URL}/api/admin/users/{user_b['user']['id']}/add-balance",
+                      json={"amount": 5000.0}, headers=admin_headers, timeout=15)
+        # Submit with explicit bank fields but bank_code="" so auto-payout can't fire
+        r = requests.post(f"{BASE_URL}/api/withdrawals",
+                          json={"amount": 2000.0,
+                                "bank_name": "TEST_Bank",
+                                "account_number": "0123456789",
+                                "account_name": "TEST User B",
+                                "bank_code": ""},
+                          headers=_auth_headers(user_b["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        w = r.json()
+        assert w["amount"] == pytest.approx(2000.0, abs=0.01)
+        assert w["fee_pct"] == pytest.approx(15.0, abs=0.01)
+        assert w["fee"] == pytest.approx(300.0, abs=0.01)
+        assert w["payout_amount"] == pytest.approx(1700.0, abs=0.01)
+        assert w["status"] == "pending"
+
+    def test_withdraw_zero_fee_when_pct_zero(self, admin_headers, user_b):
+        # temporarily set fee to 0
+        requests.put(f"{BASE_URL}/api/admin/settings",
+                     json={"withdrawal_fee_pct": 0.0},
+                     headers=admin_headers, timeout=15)
+        requests.post(f"{BASE_URL}/api/admin/users/{user_b['user']['id']}/add-balance",
+                      json={"amount": 5000.0}, headers=admin_headers, timeout=15)
+        r = requests.post(f"{BASE_URL}/api/withdrawals",
+                          json={"amount": 1500.0,
+                                "bank_name": "TEST_Bank",
+                                "account_number": "0123456789",
+                                "account_name": "TEST User B",
+                                "bank_code": ""},
+                          headers=_auth_headers(user_b["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        w = r.json()
+        assert w["fee"] == pytest.approx(0.0, abs=0.01)
+        assert w["payout_amount"] == pytest.approx(1500.0, abs=0.01)
+        _reset_settings(admin_headers)
+
+
+class TestBulkApproveWithdrawals:
+    def _create_pending(self, admin_headers, user_b, amount=1200.0):
+        requests.post(f"{BASE_URL}/api/admin/users/{user_b['user']['id']}/add-balance",
+                      json={"amount": amount + 5000.0}, headers=admin_headers, timeout=15)
+        r = requests.post(f"{BASE_URL}/api/withdrawals",
+                          json={"amount": amount,
+                                "bank_name": "TEST_Bulk",
+                                "account_number": "0123456789",
+                                "account_name": "TEST Bulk",
+                                "bank_code": ""},
+                          headers=_auth_headers(user_b["token"]), timeout=15)
+        assert r.status_code == 200, r.text
+        return r.json()["id"]
+
+    def test_empty_ids_returns_400(self, admin_headers):
+        _reset_settings(admin_headers)
+        r = requests.post(f"{BASE_URL}/api/admin/withdrawals/bulk-approve",
+                          json={"ids": []}, headers=admin_headers, timeout=15)
+        assert r.status_code == 400
+        assert "no withdrawal ids" in r.json()["detail"].lower()
+
+    def test_over_limit_returns_400(self, admin_headers):
+        # Set tight limit to test the over-limit branch without needing 50+ ids
+        requests.put(f"{BASE_URL}/api/admin/settings",
+                     json={"batch_approve_limit": 2},
+                     headers=admin_headers, timeout=15)
+        r = requests.post(f"{BASE_URL}/api/admin/withdrawals/bulk-approve",
+                          json={"ids": ["a", "b", "c"]},
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 400
+        assert "batch too large" in r.json()["detail"].lower()
+        _reset_settings(admin_headers)
+
+    def test_bulk_approve_happy_path_and_skip_non_pending(self, admin_headers, user_b):
+        _reset_settings(admin_headers)
+        w1 = self._create_pending(admin_headers, user_b, amount=1100.0)
+        w2 = self._create_pending(admin_headers, user_b, amount=1200.0)
+        # Approve one via single-approve to make it non-pending -> bulk should skip
+        s = requests.post(f"{BASE_URL}/api/admin/withdrawals/{w1}/approve",
+                          json={"note": "pre-approve"}, headers=admin_headers, timeout=15)
+        assert s.status_code == 200
+
+        r = requests.post(f"{BASE_URL}/api/admin/withdrawals/bulk-approve",
+                          json={"ids": [w1, w2], "note": "TEST_bulk"},
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["ok"] is True
+        # w1 already approved => skipped ; w2 pending, no bank_code => manual approved
+        assert body["skipped"] >= 1
+        assert body["approved"] >= 1
+
+        # Verify w2 now approved
+        adm = requests.get(f"{BASE_URL}/api/admin/withdrawals",
+                           headers=admin_headers, timeout=15).json()
+        row = next((x for x in adm if x["id"] == w2), None)
+        assert row is not None
+        assert row["status"] == "approved"
+
+
+class TestImpersonation:
+    def test_impersonate_happy_path_and_stop(self, admin_headers, user_b):
+        uid = user_b["user"]["id"]
+        # Get admin id from /auth/me
+        adm_me = requests.get(f"{BASE_URL}/api/auth/me",
+                              headers=admin_headers, timeout=15).json()
+        admin_id = adm_me["id"]
+
+        r = requests.post(f"{BASE_URL}/api/admin/users/{uid}/impersonate",
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["ok"] is True
+        assert "access_token" in d
+        assert d["user"]["id"] == uid
+        assert d["user"]["role"] != "admin"
+
+        # The returned access_token should let us call /auth/me and land on the target user
+        r2 = requests.get(f"{BASE_URL}/api/auth/me",
+                          headers=_auth_headers(d["access_token"]), timeout=15)
+        assert r2.status_code == 200
+        assert r2.json()["id"] == uid
+
+        # Stop impersonation - restores admin cookies via admin_id query
+        r3 = requests.post(f"{BASE_URL}/api/admin/impersonate/stop",
+                           params={"admin_id": admin_id},
+                           headers=admin_headers, timeout=15)
+        assert r3.status_code == 200
+        assert r3.json()["user"]["role"] == "admin"
+
+    def test_impersonate_admin_refused(self, admin_headers):
+        adm_me = requests.get(f"{BASE_URL}/api/auth/me",
+                              headers=admin_headers, timeout=15).json()
+        r = requests.post(f"{BASE_URL}/api/admin/users/{adm_me['id']}/impersonate",
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 400
+        assert "admin" in r.json()["detail"].lower()
+
+    def test_impersonate_missing_user_404(self, admin_headers):
+        # Use a plausible-but-nonexistent ObjectId
+        r = requests.post(f"{BASE_URL}/api/admin/users/507f1f77bcf86cd799439011/impersonate",
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 404
+
+    def test_impersonate_stop_invalid_admin_id_400(self, admin_headers, user_b):
+        # Pass a normal user's id as admin_id -> should 400
+        r = requests.post(f"{BASE_URL}/api/admin/impersonate/stop",
+                          params={"admin_id": user_b["user"]["id"]},
+                          headers=admin_headers, timeout=15)
+        assert r.status_code == 400
+
+
+class TestAdminGetUserShape:
+    def test_admin_get_user_includes_new_fields(self, admin_headers, user_b, user_a):
+        # user_b was referred by user_a and has invested -> should have inviter + total_invested
+        uid = user_b["user"]["id"]
+        r = requests.get(f"{BASE_URL}/api/admin/users/{uid}",
+                         headers=admin_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "total_deposited" in d
+        assert isinstance(d["total_deposited"], (int, float))
+        assert "inviter" in d
+        # user_b was created with user_a's referral_code
+        assert d["inviter"] is not None
+        assert d["inviter"]["id"] == user_a["user"]["id"]
+        assert "gen1_referrals" in d
+        assert isinstance(d["gen1_referrals"], list)
+
+    def test_admin_get_user_regression_no_inviter_no_deposits(self, admin_headers):
+        # user_a has no referrer and no approved deposits -> still returns 200 with empty shape
+        phone = _rand_phone()
+        r = requests.post(f"{BASE_URL}/api/auth/register",
+                          json={"phone": phone, "password": "pass1234",
+                                "name": "TEST_Solo"}, timeout=15)
+        assert r.status_code == 200
+        uid = r.json()["user"]["id"]
+        d = requests.get(f"{BASE_URL}/api/admin/users/{uid}",
+                         headers=admin_headers, timeout=15).json()
+        assert d["total_deposited"] == 0
+        assert d["inviter"] is None
+        assert d["gen1_referrals"] == []
+
+
+class TestAdminAddBalanceTotalCredited:
+    def test_positive_credit_increments_total_admin_credited(self, admin_headers, user_a):
+        uid = user_a["user"]["id"]
+        # Read current value from admin users list (or 0 if missing)
+        users = requests.get(f"{BASE_URL}/api/admin/users",
+                             headers=admin_headers, timeout=15).json()
+        row = next((u for u in users if u["id"] == uid), None)
+        assert row is not None
+        before = float(row.get("total_admin_credited") or 0)
+
+        requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                      json={"amount": 137.0, "note": "TEST_track"},
+                      headers=admin_headers, timeout=15)
+
+        users2 = requests.get(f"{BASE_URL}/api/admin/users",
+                              headers=admin_headers, timeout=15).json()
+        row2 = next((u for u in users2 if u["id"] == uid), None)
+        after = float(row2.get("total_admin_credited") or 0)
+        assert after - before == pytest.approx(137.0, abs=0.01)
+
+    def test_transaction_meta_includes_admin_email_and_name(self, admin_headers, user_a):
+        uid = user_a["user"]["id"]
+        requests.post(f"{BASE_URL}/api/admin/users/{uid}/add-balance",
+                      json={"amount": 42.0, "note": "TEST_meta"},
+                      headers=admin_headers, timeout=15)
+        detail = requests.get(f"{BASE_URL}/api/admin/users/{uid}",
+                              headers=admin_headers, timeout=15).json()
+        tx = detail["transactions"]
+        cred_tx = next((t for t in tx if t.get("note") == "TEST_meta"), None)
+        assert cred_tx is not None
+        meta = cred_tx.get("meta") or {}
+        assert "admin_email" in meta
+        assert "admin_name" in meta

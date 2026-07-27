@@ -129,9 +129,9 @@ export default function Dashboard() {
           Quick actions
         </h2>
         <div className="grid grid-cols-4 gap-3" data-testid="quick-actions-grid">
-          <QuickAction to="/deposit"     icon={ArrowDownToLine} label="Deposit" tone="green"  testid="quick-deposit-link" />
-          <QuickAction to="/coupon"      icon={Ticket}          label="Redeem"  tone="amber"  testid="quick-redeem-link" />
-          <QuickAction to="/withdraw"    icon={ArrowUpFromLine} label="Withdraw" tone="blue"  testid="quick-withdraw-link" />
+          <QuickAction to="/deposit"     icon={ArrowDownToLine} label="Deposit"  tone="green"  testid="quick-deposit-link" />
+          <QuickAction to="/withdraw"    icon={ArrowUpFromLine} label="Withdraw" tone="blue"   testid="quick-withdraw-link" />
+          <QuickAction to="/coupon"      icon={Ticket}          label="Redeem"   tone="amber"  testid="quick-redeem-link" />
           <QuickAction to="/marketplace" icon={TrendingUp}      label="Invest"   tone="violet" testid="quick-invest-link" />
         </div>
       </section>
@@ -186,7 +186,7 @@ export default function Dashboard() {
       <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
         <DialogContent
           data-testid="welcome-dialog"
-          className="bg-[#0B1524] border-[#1A2B44] text-white max-w-md rounded-2xl overflow-hidden"
+          className="bg-[#0B1524] border-[#1A2B44] text-white max-w-md w-[calc(100%-2rem)] mx-4 rounded-2xl overflow-hidden"
         >
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-[#0055FF]/30 blur-3xl" />
