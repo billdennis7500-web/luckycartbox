@@ -138,6 +138,25 @@ async def _post(path: str, biz: Dict[str, Any]) -> Dict[str, Any]:
     return _observe_response(data)
 
 
+# PayNow occasionally returns transient "system is busy" / "please try again"
+# messages that clear up on a retry a second or two later. We treat any non-zero
+# code whose msg contains one of these substrings as retryable.
+_TRANSIENT_MSG_HINTS = ("busy", "try again", "timeout", "temporarily",
+                        "please retry", "transient")
+
+
+def _is_transient_paynow_error(resp: Dict[str, Any]) -> bool:
+    if not resp:
+        return True
+    try:
+        if int(resp.get("code") or 0) == 0:
+            return False
+    except (TypeError, ValueError):
+        return True
+    msg = str(resp.get("msg") or "").lower()
+    return any(hint in msg for hint in _TRANSIENT_MSG_HINTS)
+
+
 async def create_payin(merchant_order_no: str, amount: float,
                        payer_key: Optional[str] = None,
                        first_name: Optional[str] = None,
@@ -152,7 +171,25 @@ async def create_payin(merchant_order_no: str, amount: float,
     if payer_key: biz["payerKey"] = payer_key
     if first_name: biz["firstName"] = first_name
     if last_name: biz["lastName"] = last_name
-    return await _post("/open/v1/payins/create", biz)
+
+    # Retry up to 2 additional times if PayNow returns a transient error.
+    # Backoff 0.6s → 1.5s. `merchantOrderNo` stays the same across retries so
+    # PayNow can de-duplicate if the first request actually succeeded but the
+    # response was garbled — we'd then get a "duplicate order" code, not a new
+    # link, which is intentional.
+    import asyncio
+    delays = [0.6, 1.5]
+    for attempt in range(3):
+        resp = await _post("/open/v1/payins/create", biz)
+        if not _is_transient_paynow_error(resp):
+            return resp
+        if attempt < len(delays):
+            logger.warning(
+                "PayNow create_payin transient error (attempt %d/%d): code=%s msg=%s — retrying in %.1fs",
+                attempt + 1, 3, resp.get("code"), resp.get("msg"), delays[attempt],
+            )
+            await asyncio.sleep(delays[attempt])
+    return resp
 
 
 async def query_payin(merchant_order_nos: list) -> Dict[str, Any]:

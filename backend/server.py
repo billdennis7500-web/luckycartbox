@@ -875,14 +875,35 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         checkout_url = pn_data.get("link")
         platform_order_no = pn_data.get("orderNo")
         if pn.get("code") != 0 or not checkout_url:
+            gateway_error = pn.get("msg") or "no checkout link"
             await db.deposits.update_one({"_id": res.inserted_id},
                                          {"$set": {"status": "failed",
-                                                   "gateway_error": pn.get("msg") or "no checkout link",
+                                                   "gateway_error": gateway_error,
                                                    "gateway_response": pn}})
-            # Friendly message if we now know the pod IP is blocked, else surface the raw msg.
-            if paynow.ip_blocked():
-                raise HTTPException(400, "Instant Pay is temporarily unavailable. Please pick a bank transfer option below.")
-            raise HTTPException(400, f"Payment declined: {pn.get('msg') or 'unknown error'}. Try a bank transfer.")
+            # Return the same well-formed "gateway_ready=false" shape as the
+            # IP-block branch so the frontend opens the drawer with the retry
+            # button + bank-transfer fallback CTA. Without this the user only
+            # gets a toast error and no easy recovery path — the "system is
+            # busy" case reported to us in production.
+            outbound_ip = "unknown"
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as _c:
+                    r = await _c.get("https://api.ipify.org")
+                    outbound_ip = r.text.strip() or "unknown"
+            except Exception:
+                pass
+            d = await db.deposits.find_one({"_id": res.inserted_id})
+            return clean(d) | {
+                "user_id": str(d["user_id"]),
+                "gateway": "paynow",
+                "checkout_url": None,
+                "gateway_ready": False,
+                "outbound_ip": outbound_ip,
+                "gateway_message": (
+                    f"Instant Pay is momentarily unavailable ({gateway_error}). "
+                    "Please try again in a few seconds, or pick a bank transfer option."
+                ),
+            }
 
         await db.deposits.update_one(
             {"_id": res.inserted_id},

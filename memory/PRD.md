@@ -323,6 +323,18 @@ Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.
 - **Frontend**: new **Danger Zone** card at the bottom of `AdminSettings` (red border, warning icon, explanatory copy). Opens a shadcn Dialog requiring the exact phrase `DELETE ALL DATA` before the destructive "Wipe platform" button enables. On success shows a summary grid (Users / Deposits / Withdrawals / Investments / Transactions / Coupons reset) with the counts that were removed.
 - Verified end-to-end via Playwright: card renders, dialog opens, wrong phrase keeps button disabled, correct phrase enables it. Backend guard also verified via curl (`nope` → 400 with mismatch message).
 
+## 2026-07-27 · PayNow transient-error handling ("system is busy")
+
+### Delivered
+- **`paynow.create_payin` now auto-retries transient errors** up to 2 additional times (0.6s → 1.5s backoff) when PayNow returns a non-zero code whose msg contains any of: `busy`, `try again`, `timeout`, `temporarily`, `please retry`, `transient`. The same `merchantOrderNo` is re-sent across retries so PayNow can de-duplicate if the first request actually succeeded but the response was garbled. Non-transient failures (unknown errors, IP block, bad amount, etc.) do NOT retry.
+- **When Instant Pay create_payin still fails after retries**, the `POST /api/deposits` endpoint now returns the same well-formed `{gateway_ready:false, outbound_ip, gateway_message}` shape as the IP-block branch — instead of raising an HTTP 400 that just surfaced a raw toast dead-end. This makes the deposit drawer open with the amber warm-up card + green **Retry now** button + **Use bank transfer instead** CTA, so the user has a one-tap recovery path from the same place they initiated the deposit.
+- Retry-decision unit checks pass; a real create_payin still succeeds with a valid link.
+
+### Deferred (unchanged)
+- Product logo icon upload.
+- SMS OTP for phone verification.
+- Auto-reconciliation cron for stuck deposits >30 min.
+
 ### Deferred (unchanged)
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.
