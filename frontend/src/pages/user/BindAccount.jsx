@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/drawer";
 import { toast } from "sonner";
 import {
-  Search, Check, ChevronRight, Loader2, ShieldCheck, Trash2, ArrowLeft, Info,
+  Search, Check, ChevronRight, Loader2, Trash2, ArrowLeft, AlertTriangle,
 } from "lucide-react";
 
 function BankLogo({ brand, size = "md" }) {
@@ -37,7 +37,6 @@ export default function BindAccount() {
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [existing, setExisting] = useState(null);
-  const [verify, setVerify] = useState({ status: "idle" }); // idle | loading | reachable | unknown
 
   const loadBanks = () => {
     setBanksLoading(true);
@@ -85,43 +84,13 @@ export default function BindAccount() {
     setForm({ ...form, bank_code: b.bankCode, bank_name: b.bankName, brand: b.brand });
     setBankQuery("");
     setBankOpen(false);
-    setVerify({ status: "idle" });
   };
 
   const clearBank = () => {
     setForm({ ...form, bank_code: "", bank_name: "", brand: null });
     setBankQuery("");
     setBankOpen(true);
-    setVerify({ status: "idle" });
   };
-
-  // Silent, non-blocking eligibility check once the user has a bank + 10 digits.
-  // Also runs on mount when we hydrate an existing binding, so users see a fresh signal.
-  useEffect(() => {
-    const digits = (form.account_number || "").replace(/\D/g, "");
-    if (initialLoad || !paynowEnabled || !form.bank_code || digits.length < 10) {
-      setVerify({ status: "idle" });
-      return;
-    }
-    let cancelled = false;
-    setVerify({ status: "loading" });
-    const t = setTimeout(async () => {
-      try {
-        const { data } = await api.post("/paynow/verify-account", {
-          bank_code: form.bank_code,
-          account_number: digits,
-        });
-        if (cancelled) return;
-        setVerify({ status: data?.exists ? "reachable" : "unknown" });
-      } catch (err) {
-        if (cancelled) return;
-        // eslint-disable-next-line no-console
-        console.warn("[bind] verify-account failed", err?.response?.status, err?.message);
-        setVerify({ status: "unknown" });
-      }
-    }, 400);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [form.bank_code, form.account_number, paynowEnabled, initialLoad]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -129,6 +98,14 @@ export default function BindAccount() {
     if (!form.bank_name) return toast.error("Choose your bank first");
     if (digits.length < 9) return toast.error("Enter a valid account number");
     if (!(form.account_name || "").trim()) return toast.error("Enter the account name");
+    // One-last-look confirmation so users can't accidentally save a typo.
+    const confirmMsg =
+      `Please double-check:\n\n` +
+      `Bank: ${form.bank_name}\n` +
+      `Account #: ${digits}\n` +
+      `Name: ${form.account_name.trim()}\n\n` +
+      `Save this account? Wrong details can cause withdrawals to be lost.`;
+    if (!window.confirm(confirmMsg)) return;
     setLoading(true);
     try {
       await api.post("/me/bank-account", {
@@ -153,7 +130,6 @@ export default function BindAccount() {
       toast.success("Bank account removed");
       setExisting(null);
       setForm({ bank_code: "", bank_name: "", account_number: "", account_name: "", brand: null });
-      setVerify({ status: "idle" });
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Could not remove");
     }
@@ -204,6 +180,20 @@ export default function BindAccount() {
 
       <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-5 rounded-2xl">
         <form onSubmit={submit} className="space-y-4">
+          {/* Manual-entry warning — the platform no longer auto-fetches your
+              account name from PayNow, so users must type every field carefully. */}
+          <div
+            data-testid="bind-manual-warning"
+            className="rounded-lg border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-3 flex items-start gap-2.5"
+          >
+            <AlertTriangle className="w-4 h-4 text-[#F59E0B] mt-0.5 shrink-0" />
+            <div className="text-[11px] leading-relaxed text-[var(--nb-text)]/90">
+              <b>Please fill in your bank details carefully.</b> Withdrawals sent to a
+              wrong bank / account number can be lost and may not be recoverable.
+              Double-check every digit before saving.
+            </div>
+          </div>
+
           {/* Bank picker */}
           <div>
             <Label>Bank</Label>
@@ -264,26 +254,9 @@ export default function BindAccount() {
                    required inputMode="numeric" maxLength={12}
                    data-testid="bind-accountnum-input"
                    className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-12 tabular tracking-wider" />
-            {verify.status === "loading" && (
-              <div data-testid="bind-verify-loading"
-                   className="mt-2 text-xs text-[var(--nb-muted)] flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" /> Checking account…
-              </div>
-            )}
-            {verify.status === "reachable" && (
-              <div data-testid="bind-verify-reachable"
-                   className="mt-2 text-xs px-3 py-2 rounded-md border bg-[#10B981]/10 border-[#10B981]/30 text-[#10B981] flex items-center gap-2">
-                <ShieldCheck className="w-3 h-3" />
-                We can reach this account. Type the name exactly as it appears on your bank record.
-              </div>
-            )}
-            {verify.status === "unknown" && (
-              <div data-testid="bind-verify-unknown"
-                   className="mt-2 text-xs px-3 py-2 rounded-md border bg-[#0055FF]/10 border-[#0055FF]/30 text-[var(--nb-muted)] flex items-center gap-2">
-                <Info className="w-3 h-3 text-[#0055FF]" />
-                We couldn't auto-check this account. Double-check the number — payouts to a wrong account fail with a clear error.
-              </div>
-            )}
+            <p className="text-[10px] text-[var(--nb-muted)] mt-1.5 tabular">
+              Enter your NUBAN — usually 10 digits. Type slowly and double-check.
+            </p>
           </div>
 
           {/* Account name */}
@@ -291,10 +264,10 @@ export default function BindAccount() {
             <Label>Account name</Label>
             <Input value={form.account_name} onChange={set("account_name")} required
                    data-testid="bind-accountname-input"
-                   placeholder="Full name as it appears on your bank record"
+                   placeholder="Full name exactly as it appears on your bank record"
                    className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-12" />
             <p className="text-xs text-[var(--nb-muted)] mt-1">
-              Your bank doesn't expose the stored name automatically, so please type it carefully.
+              Must match your bank record character-for-character. Wrong names cause payouts to bounce.
             </p>
           </div>
 

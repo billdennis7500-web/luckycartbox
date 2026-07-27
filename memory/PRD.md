@@ -340,3 +340,14 @@ Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.
 - PayNow `query_payee` 429 retry/backoff hardening.
 - Product logo icon upload.
 - Auto-reconciliation cron for stuck deposits >30 min.
+
+## 2026-07-27 · Manual-only bank account binding
+
+### Delivered
+- **Removed the auto-detect / auto-verify UX** from `/bank-account`. The `useEffect` that debounced `POST /paynow/verify-account` after every keystroke on the account number is gone. The green *"We can reach this account"* / blue *"couldn't auto-check"* chips are gone.
+- **Persistent amber warning banner** at the top of the form: *"Please fill in your bank details carefully. Withdrawals sent to a wrong bank / account number can be lost and may not be recoverable. Double-check every digit before saving."*
+- **Helper text on each field** reinforces manual accuracy (account #, account name).
+- **One-last-look confirmation on submit** — a native `confirm()` pops up showing the entered Bank / Account # / Name so users can spot a typo before it's persisted.
+- Bank picker (drawer with 200+ Nigerian banks) is retained as convenience; fallback manual text input still available when picker is unavailable.
+
+Verified via Playwright: amber warning card renders, all three auto-verify testids absent from the DOM, `yarn build` compiles clean.
