@@ -1,0 +1,16 @@
+{
+  "summary": "Verified welcome-bonus fix. Registered a fresh Nigerian user, confirmed wallet_balance == settings.welcome_bonus (500.00), bonus_balance == 0, welcome_bonus_given == true, exactly one welcome_bonus transaction with meta.credits_wallet=true, and withdrawal still returns 400 'must invest first' for the new user. All 4 tests passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_welcome_bonus.py", "/app/test_reports/pytest/welcome_bonus.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": ["/app/backend/tests/test_welcome_bonus.py"],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "Freshly registered user per run; phone generated as +2348<last9-of-epoch>, password TestPass123",
+  "seed_data_creation": "Registers one fresh Nigerian user per run (idempotent via timestamp-derived phone).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Welcome bonus fix is verified green: registration credits wallet_balance with settings.welcome_bonus, bonus_balance=0, welcome_bonus_given=true, single welcome_bonus tx with meta.credits_wallet=true, and withdrawal gating (has_invested=false) still enforced with HTTP 400. Test file /app/backend/tests/test_welcome_bonus.py can be re-used as regression.",
+  "rca of the issue": "N/A - fix verified; original RCA per problem statement: welcome_bonus was crediting a separate bonus_balance field never consumed by purchases/withdrawals. Fix routes it directly into wallet_balance while preserving withdrawal invest-gate."
+}

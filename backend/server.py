@@ -624,8 +624,13 @@ async def register(payload: RegisterIn, response: Response):
         "name": payload.name.strip(),
         "password_hash": hash_password(payload.password),
         "role": "user",
-        "wallet_balance": 0.0,
-        "bonus_balance": welcome,
+        # Welcome bonus is credited directly into the spendable wallet_balance so
+        # it's usable for investments (purchases debit wallet_balance). The
+        # withdrawal endpoint still gates on `has_invested == True`, so the bonus
+        # can't be cashed out without investing first — preserving the anti-farm
+        # policy while making the bonus visible/useful.
+        "wallet_balance": welcome,
+        "bonus_balance": 0.0,
         "total_earned": 0.0,
         "total_invested": 0.0,
         "referral_code": code,
@@ -635,7 +640,9 @@ async def register(payload: RegisterIn, response: Response):
         "created_at": now_utc().isoformat(),
     }
     res = await db.users.insert_one(doc)
-    await add_transaction(res.inserted_id, "welcome_bonus", welcome, "Welcome bonus")
+    await add_transaction(res.inserted_id, "welcome_bonus", welcome,
+                          f"Welcome bonus (₦{welcome:.0f})",
+                          {"credits_wallet": True})
 
     access = create_access_token(str(res.inserted_id), "user")
     refresh = create_refresh_token(str(res.inserted_id))
@@ -1123,9 +1130,8 @@ async def wallet_history(user: dict = Depends(get_current_user), days: int = 30)
             d = d.replace(tzinfo=timezone.utc)
         day = d.date().isoformat()
         amt = float(t.get("amount", 0.0))
-        # only movements that changed wallet_balance (exclude welcome_bonus which goes to bonus_balance)
-        if t["type"] == "welcome_bonus":
-            continue
+        # welcome_bonus now credits wallet_balance directly, so it counts toward daily
+        # wallet movement just like a deposit.
         bucket = per_day.setdefault(day, {"credit": 0.0, "debit": 0.0})
         if amt >= 0:
             bucket["credit"] += amt
