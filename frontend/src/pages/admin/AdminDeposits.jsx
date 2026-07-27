@@ -78,8 +78,17 @@ export default function AdminDeposits() {
 
   const act = async (d, action) => {
     try {
-      await api.post(`/admin/deposits/${d.id}/${action}`, { note: "" });
-      toast.success(`Deposit ${action}d`);
+      const { data } = await api.post(`/admin/deposits/${d.id}/${action}`, { note: "" });
+      if (action === "approve" && data?.wallet_balance != null) {
+        toast.success(
+          `Approved · Credited ₦${Number(data.amount || 0).toLocaleString()}`,
+          {
+            description: `${data.user_name || d.user_name || "User"} · New balance ₦${Number(data.wallet_balance).toLocaleString()}`,
+          },
+        );
+      } else {
+        toast.success(`Deposit ${action}d`);
+      }
       load();
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Failed");

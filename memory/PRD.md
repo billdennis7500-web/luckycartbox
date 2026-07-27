@@ -300,6 +300,18 @@ Verified via Playwright — iframe measured at `{x:0, y:85, w:420, h:746}` = 82.
 - **After user taps the reveal link:** footer transforms to the green **"I've paid — check now"** primary + a smaller Close secondary. `verifyRevealed` state resets on close and on every fresh checkout.
 - No changes to iframe size (still ~83% of viewport).
 
+## 2026-07-27 · Deposit-approve atomicity + confirmation toast
+
+### Delivered
+- **Hardened `POST /admin/deposits/{did}/approve`** so an approved deposit can never leave the wallet un-credited:
+  * Uses `find_one_and_update` with a `status == "pending"` filter to atomically flip the deposit — if a webhook / another admin got there first, the endpoint refuses with 409 instead of double-crediting.
+  * Guards against zero/None/negative amounts (400 rather than silent no-op `$inc`).
+  * Uses `find_one_and_update(ReturnDocument.AFTER)` on the wallet so we can return the **new balance** to the frontend.
+  * Rolls the deposit back to `pending` if the user document is missing.
+  * Logs every credit with before/after context for future forensics.
+- **AdminDeposits toast now shows** `Approved · Credited ₦X` with `{userName} · New balance ₦Y` — admin can visually confirm the credit landed and how much the wallet is now sitting at, without having to click through to the user detail page. Removes the guesswork behind the "approved but balance didn't change?" reports.
+- Verified end-to-end with a regression test (`/app/tmp/test_dep_approve.py`): TEST_Norm → deposit ₦750 → admin approves → response returns new balance ₦750 → DB confirms wallet_balance is ₦750 → double-approve properly 400s with "Already approved".
+
 ### Deferred (unchanged)
 - SMS OTP for phone verification.
 - PayNow `query_payee` 429 retry/backoff hardening.

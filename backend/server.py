@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 
 import paynow
 from nigerian_banks import filter_popular
+from pymongo import ReturnDocument
 
 # ---------------------------------------------------------------------------
 # Config
@@ -1389,18 +1390,64 @@ async def admin_deposits(admin: dict = Depends(get_admin_user), status: Optional
 
 @api.post("/admin/deposits/{did}/approve")
 async def approve_deposit(did: str, payload: ApprovalIn, admin: dict = Depends(get_admin_user)):
+    """Admin manually approves a deposit.
+
+    Hardened against double-credit races and silent no-op credits:
+      1. Atomically flip status pending → approved via `find_one_and_update` filtered
+         on `status == "pending"`, so if a webhook / other admin got there first we
+         refuse to double-credit.
+      2. Validate the deposit amount is a positive number before touching wallet_balance.
+      3. Credit `wallet_balance` via `find_one_and_update` returning the AFTER document
+         so we can report the new balance back to the admin dashboard (the previous
+         version returned only `{ok: true}`, which made it impossible to visually
+         confirm the credit actually landed — the root of the "approved but balance
+         didn't change" bug report).
+      4. If the user document is missing, roll the deposit back to pending so nothing
+         is left half-processed.
+    """
     dep = await db.deposits.find_one({"_id": oid(did)})
     if not dep:
         raise HTTPException(404, "Deposit not found")
     if dep["status"] != "pending":
         raise HTTPException(400, f"Already {dep['status']}")
-    await db.deposits.update_one({"_id": dep["_id"]},
-                                 {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
-                                           "admin_note": payload.note or ""}})
-    await db.users.update_one({"_id": dep["user_id"]}, {"$inc": {"wallet_balance": dep["amount"]}})
-    await add_transaction(dep["user_id"], "deposit", dep["amount"], "Deposit approved",
+    amount = float(dep.get("amount") or 0)
+    if amount <= 0:
+        raise HTTPException(400, "Deposit amount must be a positive number")
+
+    updated_dep = await db.deposits.find_one_and_update(
+        {"_id": dep["_id"], "status": "pending"},
+        {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                  "admin_note": payload.note or "",
+                  "approved_by": str(admin.get("_id", ""))}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated_dep:
+        # Another actor (webhook / another admin) already moved this deposit.
+        raise HTTPException(409, "Deposit was already processed. Refresh to see the latest state.")
+
+    updated_user = await db.users.find_one_and_update(
+        {"_id": dep["user_id"]},
+        {"$inc": {"wallet_balance": amount}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated_user:
+        # User missing — undo the deposit status flip so it can be retried.
+        await db.deposits.update_one({"_id": dep["_id"]}, {"$set": {"status": "pending"}})
+        raise HTTPException(500, "User not found. Deposit reverted to pending.")
+
+    await add_transaction(dep["user_id"], "deposit", amount, "Deposit approved",
                           {"deposit_id": str(dep["_id"])})
-    return {"ok": True}
+    new_bal = float(updated_user.get("wallet_balance") or 0)
+    logger.info(
+        "Admin %s approved deposit %s (₦%.2f) for user %s → new balance ₦%.2f",
+        admin.get("email") or admin.get("_id"), did, amount, dep["user_id"], new_bal,
+    )
+    return {
+        "ok": True,
+        "amount": amount,
+        "wallet_balance": new_bal,
+        "user_name": updated_user.get("name") or updated_user.get("phone"),
+    }
 
 
 @api.post("/admin/deposits/{did}/reject")
