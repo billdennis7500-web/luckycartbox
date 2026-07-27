@@ -657,6 +657,58 @@ async def my_transactions(user: dict = Depends(get_current_user)):
     return [clean(d) | {"user_id": str(d["user_id"])} for d in docs]
 
 
+@api.get("/wallet-history")
+async def wallet_history(user: dict = Depends(get_current_user), days: int = 30):
+    """Daily wallet history for the last N days. Returns credits, debits and running balance ending at the current wallet_balance."""
+    user = await process_profit_drops(user)
+    days = max(1, min(days, 180))
+    now = now_utc()
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    txs = await db.transactions.find({"user_id": user["_id"]}).sort("created_at", 1).to_list(5000)
+
+    # sum by day, and total pre-start balance
+    per_day = {}
+    for t in txs:
+        d = t.get("created_at")
+        if isinstance(d, str):
+            d = datetime.fromisoformat(d)
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        day = d.date().isoformat()
+        amt = float(t.get("amount", 0.0))
+        # only movements that changed wallet_balance (exclude welcome_bonus which goes to bonus_balance)
+        if t["type"] == "welcome_bonus":
+            continue
+        bucket = per_day.setdefault(day, {"credit": 0.0, "debit": 0.0})
+        if amt >= 0:
+            bucket["credit"] += amt
+        else:
+            bucket["debit"] += -amt
+
+    # build ordered days
+    ordered = []
+    for i in range(days):
+        d = (start + timedelta(days=i)).date().isoformat()
+        b = per_day.get(d, {"credit": 0.0, "debit": 0.0})
+        ordered.append({"date": d, "credit": round(b["credit"], 2), "debit": round(b["debit"], 2),
+                        "net": round(b["credit"] - b["debit"], 2)})
+
+    # walk backwards from current balance to fill running balance
+    balances = [0.0] * len(ordered)
+    balances[-1] = float(user.get("wallet_balance", 0.0))
+    for i in range(len(ordered) - 1, 0, -1):
+        balances[i - 1] = balances[i] - ordered[i]["net"]
+    for i, o in enumerate(ordered):
+        o["balance"] = round(balances[i], 2)
+
+    return {
+        "days": days,
+        "current_balance": float(user.get("wallet_balance", 0.0)),
+        "series": ordered,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Referrals
 # ---------------------------------------------------------------------------
