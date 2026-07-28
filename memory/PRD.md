@@ -424,3 +424,44 @@ Our `shpay.verify_callback_signature()` was signing **all** fields in the callba
 - Live: user's wallet balance and transaction feed both show the credit.
 - Cron logs: `SHPAY reconcile credited user=… amount=₦1000.00 dep=…` printed on first run.
 - Deposits DB: outstanding order flipped `pending → approved` with `reconciled: true`.
+
+
+## 2026-07-28 · 1SSPay gateway integration + admin gateway toggles (P0 feature)
+
+### Delivered
+1. **New backend module `/app/backend/onesspay.py`** — full 1SSPay OpenAPI client (`https://api.1sspay.com`). HMAC-SHA1 + Base64 signing per spec (sort keys ASCII, `key=value&…`, HMAC-SHA1 with merchant key, Base64). Nigeria `country=4`. Public API: `enabled`, `sign`, `verify_callback_signature`, `create_payin`, `create_payout`, `query_payin`, `query_payout`, `get_balance`, `list_banks` (static 211-bank list).
+2. **Env vars** added to `/app/backend/.env`: `ONESSPAY_ENABLED`, `ONESSPAY_BASE_URL`, `ONESSPAY_MERCHANT_ID`, `ONESSPAY_KEY`, `ONESSPAY_COUNTRY`, `ONESSPAY_PAYIN_NOTIFY_URL`, `ONESSPAY_PAYOUT_NOTIFY_URL`. Currently using the docs' sample merchant credentials as placeholder; merchant needs to swap for real credentials (channel returned "channel authority not open" on the sample).
+3. **New API endpoints** (in `server.py`):
+   - `GET /api/onesspay/status` — user probe (enabled + gateway_ready + optional error message).
+   - `GET /api/onesspay/banks` — 1SSPay's 211-bank list (NR0xxx codes).
+   - `GET /api/admin/onesspay/health` — admin probe (returns balance + outbound IP for IP-whitelist debugging).
+   - `POST /api/onesspay/webhook/payin` — form-urlencoded payin callback, responds with literal `"success"` per spec. Signature verified (HMAC-SHA1+Base64). Idempotent.
+   - `POST /api/onesspay/webhook/payout` — form-urlencoded payout callback.
+   - `POST /api/admin/withdrawals/{wid}/onesspay-payout` — admin manual dispatch via 1SSPay.
+4. **`POST /api/deposits`** extended: `onesspay-auto` → new 1SSPay branch mirroring the SHPAY/PayNow shape (returns checkout URL + graceful "gateway unavailable" fallback with outbound_ip when 1SSPay refuses).
+5. **New `_onesspay_reconcile_cron()`** + `reconcile_pending_onesspay_deposits()` / `reconcile_pending_onesspay_withdrawals()` — safety net that mirrors SHPAY/PayNow crons. Every 5 min queries 1SSPay `/payment/orderStatus` and `/payout/orderStatus` and settles any pending orders that reached status=2 (success) or 3/4/5 (fail).
+
+### Admin gateway toggles (per gateway × per direction, 6 toggles total)
+1. **New settings field** `gateway_toggles` — `{paynow:{payin,payout}, shpay:{payin,payout}, onesspay:{payin,payout}}`, defaults to all ON.
+2. **New helpers** `get_gateway_toggles()`, `gateway_payin_allowed()`, `gateway_payout_allowed()` — used across:
+   - `/api/paynow/banks`, `/api/shpay/status`, `/api/onesspay/status` → honor payin toggles (hide the tile when OFF).
+   - `POST /api/deposits` → rejects with friendly 400 if the picked gateway is toggled off for payin.
+   - `/api/admin/withdrawals/{wid}/approve` → skips PayNow auto-payout when paynow-payout is OFF; falls back to manual approve.
+   - `/api/admin/withdrawals/{wid}/shpay-payout`, `/api/admin/withdrawals/{wid}/onesspay-payout` → 400 if that gateway's payout toggle is OFF.
+3. **New admin endpoints**:
+   - `GET /api/admin/gateways` — returns rows with `{key, label, color, configured, payin, payout}`.
+   - `PUT /api/admin/gateways` — updates one or more toggles atomically.
+4. **Frontend (`/app/frontend/src/pages/admin/AdminSettings.jsx`)** — new **Payment Gateways** card between the PayNow webhook URLs and Danger Zone. Renders 3 gateway rows, each with two toggle chips (Collection / Payout) and a `configured` indicator so admin can tell which env-side gateways are wired up. Toggles PATCH the backend live (no Save button).
+5. **Frontend (`/app/frontend/src/pages/user/Deposit.jsx`)** — added a third **Fast Pay** violet-orange tile (color `#F97316`) alongside PayNow's Instant Pay and SHPAY's Quick Pay. Fully symmetric with the other two: same drawer, same iframe checkout, same graceful "warming up" fallback with outbound_ip readout. Waiting drawer title/subtitle are gateway-aware.
+6. **Frontend (`/app/frontend/src/pages/admin/AdminWithdrawals.jsx`)** — per-row actions now include gateway-specific payout chips (SHPAY violet, 1SSPay orange) shown only when that gateway's payout toggle is ON. Default "Approve" button still exists and routes through PayNow when paynow-payout is on.
+
+### Verified (live backend)
+- All 3 gateways return `configured=true` in `/api/admin/gateways`.
+- `/api/onesspay/status` = `enabled:true, gateway_ready:false, code:1007` ("channel authority not open") — expected until merchant swaps credentials.
+- `/api/onesspay/banks` returns 211 banks with NR0xxx codes.
+- Toggle test: turning off shpay-payin → `/shpay/status` returns disabled; a `POST /api/deposits {method:"shpay-auto"}` returns 400 with friendly error. Toggling back on restores it.
+- 1SSPay signature tests: valid callback verifies, tampered amount rejects, missing sign rejects.
+- `yarn build` compiles clean.
+
+### ⚠️ Deploy pre-req
+Merchant must provide their real 1SSPay `MerchantId` + `Key` in `.env` (currently seeded with the docs' sample credentials, which have `code=1007 "channel authority not open"` for Nigeria). Additionally, 1SSPay likely requires IP whitelisting — the current outbound IP is visible via `GET /api/admin/onesspay/health`.

@@ -119,6 +119,8 @@ export default function Deposit() {
   const [gatewayReady, setGatewayReady] = useState(true);
   const [shpayEnabled, setShpayEnabled] = useState(false);
   const [shpayReady, setShpayReady] = useState(true);
+  const [onesspayEnabled, setOnesspayEnabled] = useState(false);
+  const [onesspayReady, setOnesspayReady] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
   const [quickAmounts, setQuickAmounts] = useState([500, 1000, 2000, 5000, 10000, 20000]);
 
@@ -144,6 +146,10 @@ export default function Deposit() {
       setShpayEnabled(!!r.data?.enabled);
       setShpayReady(r.data?.gateway_ready !== false);
     }).catch(() => { setShpayEnabled(false); setShpayReady(false); });
+    api.get("/onesspay/status").then((r) => {
+      setOnesspayEnabled(!!r.data?.enabled);
+      setOnesspayReady(r.data?.gateway_ready !== false);
+    }).catch(() => { setOnesspayEnabled(false); setOnesspayReady(false); });
     api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
@@ -173,8 +179,9 @@ export default function Deposit() {
 
   const isInstant = method === "instant-pay";
   const isShpay = method === "shpay-pay";
+  const isOnesspay = method === "onesspay-pay";
   const selectedAcct = accounts.find((a) => a.id === method);
-  const hasAnyMethod = instantEnabled || shpayEnabled || accounts.length > 0;
+  const hasAnyMethod = instantEnabled || shpayEnabled || onesspayEnabled || accounts.length > 0;
 
   const copy = async (val) => {
     try { await navigator.clipboard.writeText(String(val)); toast.success("Copied"); }
@@ -186,11 +193,11 @@ export default function Deposit() {
     if (!method) return toast.error("Choose a payment option");
     setLoading(true);
     try {
-      const backendMethod = isInstant ? "paynow-auto" : (isShpay ? "shpay-auto" : method);
+      const backendMethod = isInstant ? "paynow-auto" : (isShpay ? "shpay-auto" : (isOnesspay ? "onesspay-auto" : method));
       const { data } = await api.post("/deposits", { amount: Number(amount), method: backendMethod, reference });
-      if (data.gateway === "paynow" || data.gateway === "shpay") {
-        // Both gateways return either a checkout URL (happy path) or a
-        // gateway_ready:false response — open the same in-app drawer for both.
+      if (data.gateway === "paynow" || data.gateway === "shpay" || data.gateway === "onesspay") {
+        // All auto-flow gateways return either a checkout URL (happy path) or a
+        // gateway_ready:false response — open the same in-app drawer for all.
         setWaitDep(data);
         setWaitState(data.gateway_ready === false ? "unavailable" : "waiting");
         setVerifyRevealed(false);
@@ -309,6 +316,25 @@ export default function Deposit() {
                 </span>
               </div>
             )}
+            {onesspayEnabled && (
+              <div className="relative">
+                <MethodBlock
+                  selected={isOnesspay}
+                  onClick={() => setMethod("onesspay-pay")}
+                  tone={{ bg: "#F97316", fg: "#FFFFFF" }}
+                  icon={<Zap className="w-5 h-5" />}
+                  label="Fast Pay"
+                  sub="Bank transfer"
+                  testid="deposit-method-onesspay"
+                />
+                <span
+                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#F97316] text-white shadow"
+                  data-testid="deposit-onesspay-badge"
+                >
+                  Auto
+                </span>
+              </div>
+            )}
             {accounts.map((a) => {
               const brand = bankTint(a.bank_name);
               return (
@@ -329,7 +355,7 @@ export default function Deposit() {
       )}
 
       {/* Selected manual account detail */}
-      {selectedAcct && !isInstant && !isShpay && (
+      {selectedAcct && !isInstant && !isShpay && !isOnesspay && (
         <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-4" data-testid="deposit-selected-panel">
           <div className="flex items-center gap-3">
             <div
@@ -394,7 +420,7 @@ export default function Deposit() {
               )}
             </div>
 
-            {!isInstant && selectedAcct && (
+            {!isInstant && !isShpay && !isOnesspay && selectedAcct && (
               <div>
                 <Label>Transaction reference <span className="text-[var(--nb-muted)]">(optional)</span></Label>
                 <Input
@@ -413,7 +439,7 @@ export default function Deposit() {
               data-testid="deposit-submit-button"
               className="w-full h-12 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl glow-primary"
             >
-              {loading ? "Processing…" : isInstant ? "Pay instantly" : "Submit for approval"}
+              {loading ? "Processing…" : (isInstant || isShpay || isOnesspay) ? "Pay instantly" : "Submit for approval"}
             </Button>
           </form>
         </Card>
@@ -448,7 +474,9 @@ export default function Deposit() {
                   : waitState === "rejected"
                   ? "Payment failed"
                   : waitState === "unavailable"
-                  ? "Instant Pay is warming up"
+                  ? (waitDep?.gateway === "shpay" ? "Quick Pay is warming up"
+                     : waitDep?.gateway === "onesspay" ? "Fast Pay is warming up"
+                     : "Instant Pay is warming up")
                   : "Complete your payment"}
               </div>
               <div className="text-[11px] text-[var(--nb-muted)] leading-tight truncate">
@@ -493,7 +521,9 @@ export default function Deposit() {
                     <Clock className="w-6 h-6 text-[#F59E0B]" />
                   </div>
                   <div className="mt-3 font-display font-700 text-white">
-                    Instant Pay is warming up
+                    {waitDep?.gateway === "shpay" ? "Quick Pay is warming up"
+                     : waitDep?.gateway === "onesspay" ? "Fast Pay is warming up"
+                     : "Instant Pay is warming up"}
                   </div>
                   <div className="text-xs text-[var(--nb-muted)] mt-1.5 leading-relaxed max-w-md mx-auto">
                     {waitDep.gateway_message || "Our payment gateway is finalising server access checks. This usually clears in a few minutes."}

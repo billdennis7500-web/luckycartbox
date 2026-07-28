@@ -20,6 +20,7 @@ export default function AdminWithdrawals() {
   const [batchLimit, setBatchLimit] = useState(50);
   const [autoPayout, setAutoPayout] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [payoutGateways, setPayoutGateways] = useState({ paynow: false, shpay: false, onesspay: false });
 
   const load = () => {
     const params = tab === "all" ? {} : { status: tab };
@@ -37,6 +38,16 @@ export default function AdminWithdrawals() {
     // Also fetch admin settings for the accurate batch limit
     api.get("/admin/settings")
       .then((r) => setBatchLimit(Number(r.data?.batch_approve_limit) || 50))
+      .catch(() => {});
+    // Which payout gateways are currently enabled by admin toggles?
+    api.get("/admin/gateways")
+      .then((r) => {
+        const out = { paynow: false, shpay: false, onesspay: false };
+        (r.data?.gateways || []).forEach((g) => {
+          if (g.key in out) out[g.key] = !!(g.configured && g.payout);
+        });
+        setPayoutGateways(out);
+      })
       .catch(() => {});
   }, []);
 
@@ -65,6 +76,17 @@ export default function AdminWithdrawals() {
       load();
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Failed");
+    }
+  };
+
+  const payoutVia = async (w, gateway) => {
+    const label = { paynow: "PayNow", shpay: "SHPAY", onesspay: "1SSPay" }[gateway] || gateway;
+    try {
+      await api.post(`/admin/withdrawals/${w.id}/${gateway}-payout`, { note: "" });
+      toast.success(`${label} payout dispatched`);
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || `${label} payout failed`);
     }
   };
 
@@ -208,11 +230,27 @@ export default function AdminWithdrawals() {
                   <td className="px-4 py-3"><StatusPill status={w.status} /></td>
                   <td className="px-4 py-3 text-right">
                     {w.status === "pending" ? (
-                      <div className="inline-flex gap-2">
+                      <div className="inline-flex flex-wrap gap-1.5 justify-end">
+                        {/* Default Approve — routes via PayNow when paynow payout is enabled */}
                         <Button size="sm" onClick={() => act(w, "approve")} data-testid={`approve-wd-${w.id}`}
-                                className="bg-[#10B981] hover:bg-[#0ea770]"><Check className="w-3 h-3 mr-1"/>Approve</Button>
+                                className="bg-[#10B981] hover:bg-[#0ea770] h-8 px-2.5 text-xs"><Check className="w-3 h-3 mr-1"/>Approve</Button>
+                        {/* Explicit gateway routing chips — only show if that gateway's payout is enabled */}
+                        {payoutGateways.shpay && (
+                          <Button size="sm" variant="outline" onClick={() => payoutVia(w, "shpay")}
+                                  data-testid={`shpay-payout-wd-${w.id}`}
+                                  className="border-[#8B5CF6]/40 bg-transparent text-[#8B5CF6] hover:bg-[#8B5CF6]/10 h-8 px-2.5 text-xs">
+                            SHPAY
+                          </Button>
+                        )}
+                        {payoutGateways.onesspay && (
+                          <Button size="sm" variant="outline" onClick={() => payoutVia(w, "onesspay")}
+                                  data-testid={`onesspay-payout-wd-${w.id}`}
+                                  className="border-[#F97316]/40 bg-transparent text-[#F97316] hover:bg-[#F97316]/10 h-8 px-2.5 text-xs">
+                            1SSPay
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" onClick={() => act(w, "reject")} data-testid={`reject-wd-${w.id}`}
-                                className="border-[#EF4444]/40 bg-transparent text-[#EF4444] hover:bg-[#EF4444]/10"><X className="w-3 h-3 mr-1"/>Reject</Button>
+                                className="border-[#EF4444]/40 bg-transparent text-[#EF4444] hover:bg-[#EF4444]/10 h-8 px-2.5 text-xs"><X className="w-3 h-3 mr-1"/>Reject</Button>
                       </div>
                     ) : (
                       <span className="text-xs text-[var(--nb-muted)]">Processed</span>

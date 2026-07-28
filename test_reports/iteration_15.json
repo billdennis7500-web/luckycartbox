@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 15 backend testing complete. Verified 1SSPay integration + admin gateway toggle system end-to-end. All 16 tests PASSED covering: (1) GET/PUT /admin/gateways shape and partial-update semantics, (2) payin gating for shpay/paynow/onesspay via status endpoints, (3) 400 friendly error on POST /deposits when the chosen gateway's payin toggle is OFF, (4) 400 gating on /admin/withdrawals/{wid}/shpay-payout and /onesspay-payout when payout toggle is OFF, (5) /api/onesspay/status returning enabled:true + gateway_ready:false + code:1007 (expected — sample creds have Nigeria channel closed), (6) /api/onesspay/banks returning 211 banks with NR0090=ZENITH BANK and NR0161=ACCESS BANK PLC, (7) /api/admin/onesspay/health returning outbound_ip + balance_response.code, (8) POST /api/deposits {method:onesspay-auto} graceful-degradation shape (status=failed, gateway=onesspay, gateway_ready=false, outbound_ip, gateway_message mentions whitelist), (9) /api/onesspay/webhook/payin returning literal 'success' (text/plain) on valid HMAC-SHA1+Base64 sig, and literal 'signature_invalid' on tampered amount. All toggles restored to ON at teardown.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_gateway_toggles_onesspay.py",
+    "/app/test_reports/pytest/gateway_toggles_iter15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~2860 lines. The onesspay endpoints (~2400-2570) and admin gateway endpoints (~2796-2837) reuse the same shape as paynow/shpay — a good moment to extract a `routers/gateways.py` module to keep server.py maintainable.",
+    "Tests initially failed intermittently under the enforced -n 2 xdist workers because the /admin/gateways setting is a single shared mongo document mutated across workers. Consolidated all mutating tests into ONE class (TestGatewayIntegration) so `--dist loadscope` pins them to one worker — this is a test-file discipline note for any future gateway-toggle tests.",
+    "onesspay_payin_webhook correctly uses PlainTextResponse to return raw 'success' / 'signature_invalid' text (verified content-type: text/plain).",
+    "1SSPay webhook returns literal 'success' even for unknown orderNo — matches idempotency contract, avoids retry storms from 1SSPay's aggressive retry schedule (30s/90s/3m/6m/15m/30m/60m)."
+  ],
+  "updated_files": ["/app/backend/tests/test_gateway_toggles_onesspay.py"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "n/a"},
+  "test_credentials": "Admin: billdennis750@gmail.com / djscan30 (from /app/memory/test_credentials.md). Test user auto-registered per session with random NG phone.",
+  "seed_data_creation": "Ephemeral user (random +23480xxxxxxxx phone) per test session. No permanent data written; all toggle mutations reverted at session teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Gateway toggle tests live at /app/backend/tests/test_gateway_toggles_onesspay.py. ALL toggle-mutating tests MUST stay inside a single class so pytest-xdist loadscope pins them to one worker — otherwise concurrent workers race on the shared mongo settings doc (observed failure in the first run). 1SSPay sample merchant credentials return code=1007 (channel not open for Nigeria) — this is expected, tests assert the graceful-degradation shape (gateway_ready:false, outbound_ip present, gateway_message mentions whitelist). Outbound IP whitelist state may change; tests do not assert code==200 for onesspay balance calls. Post-teardown state: paynow/shpay/onesspay all payin=true and payout=true.",
+  "rca of the issue": "N/A — no product issues found. All 14 items from the review request verified. One test-hygiene issue was surfaced by pytest.ini's mandatory -n 2 --dist loadscope: cross-worker races on shared toggle state. Mitigation: single-class test grouping (loadscope pins to one worker)."
+}

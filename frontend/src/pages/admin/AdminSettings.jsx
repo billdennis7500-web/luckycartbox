@@ -203,10 +203,136 @@ export default function AdminSettings() {
         </Card>
       )}
 
+      <GatewayTogglesCard />
+
       <DangerZoneCard />
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Payment Gateway toggles — admin can enable/disable each gateway for       */
+/*  payin (collections) and payout (withdrawals) independently.                */
+/* -------------------------------------------------------------------------- */
+
+function GatewayTogglesCard() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/admin/gateways")
+      .then((r) => setRows(r.data?.gateways || []))
+      .catch(() => toast.error("Failed to load gateway toggles"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const setToggle = async (key, direction, value) => {
+    setSaving(true);
+    try {
+      const patch = { [key]: { [direction]: value } };
+      const { data } = await api.put("/admin/gateways", patch);
+      setRows(data?.gateways || []);
+      toast.success(`${key} ${direction} ${value ? "enabled" : "disabled"}`);
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card
+      className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4"
+      data-testid="admin-gateway-toggles-card"
+    >
+      <div>
+        <h2 className="font-display text-lg font-600">Payment Gateways</h2>
+        <p className="text-xs text-[var(--nb-muted)] mt-1">
+          Turn each gateway ON/OFF for <span className="text-white">collection</span> (deposits) and{" "}
+          <span className="text-white">payout</span> (withdrawals) independently. Users only see the gateways you enable for collection.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-[var(--nb-muted)]">Loading gateways…</div>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row) => (
+            <div
+              key={row.key}
+              className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card2)] p-4"
+              data-testid={`gateway-row-${row.key}`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-lg grid place-items-center shrink-0"
+                  style={{ background: `${row.color}20`, color: row.color, border: `1px solid ${row.color}40` }}
+                >
+                  <span className="font-display font-800 text-xs">{row.key.slice(0, 2).toUpperCase()}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-display font-700 text-white truncate">{row.label}</div>
+                  <div className="text-[11px] text-[var(--nb-muted)]">
+                    {row.configured ? "Configured" : "Not configured in .env"}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <ToggleChip
+                  label="Collection (payin)"
+                  value={row.payin}
+                  disabled={!row.configured || saving}
+                  onChange={(v) => setToggle(row.key, "payin", v)}
+                  testid={`toggle-${row.key}-payin`}
+                />
+                <ToggleChip
+                  label="Payout"
+                  value={row.payout}
+                  disabled={!row.configured || saving}
+                  onChange={(v) => setToggle(row.key, "payout", v)}
+                  testid={`toggle-${row.key}-payout`}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ToggleChip({ label, value, disabled, onChange, testid }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!value)}
+      data-testid={testid}
+      className={`flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors ${
+        value
+          ? "border-[#10B981]/40 bg-[#10B981]/10 text-white"
+          : "border-[var(--nb-border)] bg-[var(--nb-card)] text-[var(--nb-muted)]"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : "hover:border-[#0055FF]/40"}`}
+    >
+      <span className="text-xs font-display font-600">{label}</span>
+      <span
+        className={`w-9 h-5 rounded-full relative transition-colors ${
+          value ? "bg-[#10B981]" : "bg-[var(--nb-border)]"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+            value ? "left-4" : "left-0.5"
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
 
 /* -------------------------------------------------------------------------- */
 /*  Danger Zone — wipe all user data                                          */

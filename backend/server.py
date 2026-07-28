@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 
 import paynow
 import shpay
+import onesspay
 from nigerian_banks import filter_popular
 from pymongo import ReturnDocument
 
@@ -195,7 +196,60 @@ DEFAULT_SETTINGS = {
     "auto_payout_enabled": False,
     "deposit_quick_amounts": [500, 1000, 2000, 5000, 10000, 20000],
     "batch_approve_limit": 50,
+    # Admin-controlled gateway visibility. Each gateway can be toggled
+    # independently for payin (deposits) and payout (withdrawals). Default:
+    # every gateway on both directions is ON; admin can turn any off from the
+    # AdminSettings → Payment Gateways panel.
+    "gateway_toggles": {
+        "paynow":   {"payin": True, "payout": True},
+        "shpay":    {"payin": True, "payout": True},
+        "onesspay": {"payin": True, "payout": True},
+    },
 }
+
+
+# Recognised gateway keys — used to validate admin toggle input.
+GATEWAY_KEYS = ("paynow", "shpay", "onesspay")
+
+
+async def get_gateway_toggles() -> dict:
+    """Return the current gateway toggles, merged with defaults so newly added
+    gateways are always ON until an admin explicitly turns them off."""
+    s = await get_settings()
+    stored = s.get("gateway_toggles") or {}
+    defaults = DEFAULT_SETTINGS["gateway_toggles"]
+    out: dict = {}
+    for g in GATEWAY_KEYS:
+        cfg = stored.get(g) or {}
+        out[g] = {
+            "payin":  bool(cfg.get("payin",  defaults[g]["payin"])),
+            "payout": bool(cfg.get("payout", defaults[g]["payout"])),
+        }
+    return out
+
+
+def _gateway_module_enabled(gateway: str) -> bool:
+    """Is the gateway module itself configured & enabled at the env level?"""
+    if gateway == "paynow":   return paynow.enabled()
+    if gateway == "shpay":    return shpay.enabled()
+    if gateway == "onesspay": return onesspay.enabled()
+    return False
+
+
+async def gateway_payin_allowed(gateway: str) -> bool:
+    """A gateway can serve payins only if BOTH (env-configured) AND (admin
+    toggle says payin=True)."""
+    if not _gateway_module_enabled(gateway):
+        return False
+    t = await get_gateway_toggles()
+    return bool(t.get(gateway, {}).get("payin"))
+
+
+async def gateway_payout_allowed(gateway: str) -> bool:
+    if not _gateway_module_enabled(gateway):
+        return False
+    t = await get_gateway_toggles()
+    return bool(t.get(gateway, {}).get("payout"))
 
 
 async def get_settings() -> dict:
@@ -298,6 +352,7 @@ async def startup():
     asyncio.create_task(_profit_drop_cron())
     asyncio.create_task(_paynow_reconcile_cron())
     asyncio.create_task(_shpay_reconcile_cron())
+    asyncio.create_task(_onesspay_reconcile_cron())
 
 
 async def _paynow_reconcile_cron():
@@ -326,6 +381,110 @@ async def _shpay_reconcile_cron():
         except Exception:
             logger.exception("shpay reconcile cron error")
         await asyncio.sleep(5 * 60)
+
+
+async def _onesspay_reconcile_cron():
+    """Every 5 minutes, poll 1SSPay for pending payin/payout orders and settle them.
+    Safety net for missed 1SSPay webhooks (same pattern as SHPAY/PayNow crons)."""
+    await asyncio.sleep(75)  # stagger from shpay cron
+    while True:
+        try:
+            if onesspay.enabled():
+                await reconcile_pending_onesspay_deposits()
+                await reconcile_pending_onesspay_withdrawals()
+        except Exception:
+            logger.exception("onesspay reconcile cron error")
+        await asyncio.sleep(5 * 60)
+
+
+async def reconcile_pending_onesspay_deposits() -> int:
+    """Query 1SSPay for pending onesspay deposits and credit any that show status=2 (success)."""
+    pending = await db.deposits.find({"gateway": "onesspay", "status": "pending"}).to_list(200)
+    credited = 0
+    for dep in pending:
+        pay_no = dep.get("platform_order_no")
+        if not pay_no:
+            continue
+        try:
+            resp = await onesspay.query_payin(pay_no)
+        except Exception:
+            logger.exception("1SSPay query_payin failed for %s", pay_no)
+            continue
+        if int(resp.get("code") or 0) != 200:
+            continue
+        data = resp.get("data") or {}
+        status = str(data.get("status") or "")
+        if status == "2":  # success
+            amount_real = float(data.get("amountReal") or dep["amount"] or 0)
+            updated = await db.deposits.find_one_and_update(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data,
+                          "settled_amount": amount_real,
+                          "reconciled": True}},
+                return_document=ReturnDocument.AFTER,
+            )
+            if not updated:
+                continue
+            credit_amount = amount_real if amount_real > 0 else float(dep["amount"])
+            await db.users.update_one({"_id": dep["user_id"]},
+                                      {"$inc": {"wallet_balance": credit_amount}})
+            await add_transaction(dep["user_id"], "deposit", credit_amount,
+                                  "Deposit auto-credited (1SSPay reconciled)",
+                                  {"deposit_id": str(dep["_id"]), "gateway": "onesspay"})
+            logger.info("1SSPay reconcile credited user=%s amount=₦%.2f dep=%s",
+                        dep["user_id"], credit_amount, dep["_id"])
+            credited += 1
+        elif status in ("3", "4"):
+            await db.deposits.update_one(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data,
+                          "gateway_error": data.get("failMsg") or "1SSPay reported failure"}},
+            )
+    return credited
+
+
+async def reconcile_pending_onesspay_withdrawals() -> int:
+    """Query 1SSPay for withdrawals in `processing` and settle them."""
+    processing = await db.withdrawals.find({"gateway": "onesspay", "status": "processing"}).to_list(200)
+    settled = 0
+    for w in processing:
+        pay_no = w.get("platform_order_no")
+        if not pay_no:
+            continue
+        try:
+            resp = await onesspay.query_payout(pay_no)
+        except Exception:
+            logger.exception("1SSPay query_payout failed for %s", pay_no)
+            continue
+        if int(resp.get("code") or 0) != 200:
+            continue
+        data = resp.get("data") or {}
+        status = str(data.get("status") or "")
+        if status == "2":  # success
+            await db.withdrawals.update_one(
+                {"_id": w["_id"], "status": "processing"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data, "reconciled": True}},
+            )
+            await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                          "Withdrawal paid out (1SSPay reconciled)")
+            settled += 1
+        elif status in ("3", "5"):
+            await db.users.update_one({"_id": w["user_id"]},
+                                      {"$inc": {"wallet_balance": float(w["amount"])}})
+            await db.withdrawals.update_one(
+                {"_id": w["_id"], "status": "processing"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data,
+                          "gateway_error": data.get("failMsg") or "1SSPay reported failure"}},
+            )
+            await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
+                                  "Withdrawal failed - refunded (1SSPay reconciled)",
+                                  {"withdrawal_id": str(w["_id"]), "gateway": "onesspay"})
+    return settled
+
 
 
 async def reconcile_pending_shpay_deposits() -> int:
@@ -882,7 +1041,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
 
     # If a payment account id was chosen, enrich with bank details so the
     # admin table can show "which account did the user try to pay into".
-    if payload.method and not payload.method.startswith("paynow"):
+    if payload.method and not any(payload.method.startswith(p) for p in ("paynow", "shpay", "onesspay")):
         try:
             pa = await db.payment_accounts.find_one({"_id": oid(payload.method)})
         except Exception:
@@ -892,6 +1051,12 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
             doc["payment_account_bank"] = pa.get("bank_name")
             doc["payment_account_number"] = pa.get("account_number")
             doc["payment_account_name"] = pa.get("account_name")
+
+    # Enforce admin gateway payin toggles — reject early with a friendly error
+    # if the user picked a gateway that admin has switched off.
+    method_prefix = (payload.method or "").split("-")[0] if payload.method else ""
+    if method_prefix in GATEWAY_KEYS and not await gateway_payin_allowed(method_prefix):
+        raise HTTPException(400, "This payment option is temporarily unavailable. Please choose another method.")
 
     # If Paynow auto-flow is enabled AND user chose it (method starts with "paynow"),
     # create the payin at PayNow and store the checkout URL.
@@ -1054,6 +1219,67 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         d = await db.deposits.find_one({"_id": res.inserted_id})
         return clean(d) | {"user_id": str(d["user_id"])}
 
+    # 1SSPay auto-flow — third gateway. Users pick method "onesspay-auto".
+    if onesspay.enabled() and (payload.method or "").startswith("onesspay"):
+        res = await db.deposits.insert_one(doc)
+        order_no = f"O{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
+        u_phone = (user.get("phone") or "").lstrip("+")
+        u_name  = user.get("name") or "User"
+        u_email = user.get("email") or f"{u_phone or 'user'}@naijainvest.local"
+        try:
+            resp = await onesspay.create_payin(
+                order_no=order_no,
+                amount=float(payload.amount),
+                name=u_name,
+                phone=u_phone[-10:] if u_phone else "0000000000",
+                email=u_email,
+            )
+        except Exception as e:
+            logger.exception("1SSPay create_payin failed")
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
+            raise HTTPException(400, "1SSPay is not reachable right now. Please try another payment option.")
+
+        if int(resp.get("code") or 0) != 200:
+            gateway_error = resp.get("msg") or "1SSPay declined the order"
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed",
+                                                   "gateway_error": gateway_error,
+                                                   "gateway_response": resp}})
+            outbound_ip = "unknown"
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as _c:
+                    r = await _c.get("https://api.ipify.org")
+                    outbound_ip = r.text.strip() or "unknown"
+            except Exception:
+                pass
+            d = await db.deposits.find_one({"_id": res.inserted_id})
+            return clean(d) | {
+                "user_id": str(d["user_id"]),
+                "gateway": "onesspay",
+                "checkout_url": None,
+                "gateway_ready": False,
+                "outbound_ip": outbound_ip,
+                "gateway_message": (
+                    f"Fast Pay is momentarily unavailable ({gateway_error}). "
+                    "If this is your first request, ask your merchant to whitelist your server IP in the 1SSPay dashboard."
+                ),
+            }
+
+        data = resp.get("data") or {}
+        checkout_url = data.get("jumpUrl")
+        pay_no = data.get("payNo")
+        await db.deposits.update_one(
+            {"_id": res.inserted_id},
+            {"$set": {"gateway": "onesspay",
+                      "merchant_order_no": order_no,
+                      "platform_order_no": pay_no,
+                      "checkout_url": checkout_url,
+                      "gateway_response": resp}},
+        )
+        d = await db.deposits.find_one({"_id": res.inserted_id})
+        return clean(d) | {"user_id": str(d["user_id"])}
+
     # Manual flow (existing behavior)
     res = await db.deposits.insert_one(doc)
     return clean(await db.deposits.find_one({"_id": res.inserted_id}))
@@ -1162,6 +1388,45 @@ async def _shpay_payout_withdrawal(w: dict, note: str = "") -> dict:
         }},
     )
     return sp
+
+
+async def _onesspay_payout_withdrawal(w: dict, note: str = "") -> dict:
+    """Trigger a 1SSPay payout for a withdrawal (net of fee). Raises on gateway error.
+
+    Note: 1SSPay uses its own bank code scheme (`NR0xxx`). If the withdrawal's
+    stored `bank_code` is in PayNow/SHPAY format, admin can either provide the
+    1SSPay code manually via the `w["onesspay_bank_code"]` override or the
+    caller must map it before calling this helper.
+    """
+    payout_amount = float(w.get("payout_amount") or w.get("amount") or 0)
+    order_no = f"OW{str(w['_id'])[-15:]}{int(datetime.now().timestamp())}"
+    bank_code = w.get("onesspay_bank_code") or w.get("bank_code") or ""
+    if not bank_code:
+        raise HTTPException(400, "This withdrawal has no bank code — user must re-bind their bank first.")
+    resp = await onesspay.create_payout(
+        order_no=order_no,
+        amount=payout_amount,
+        name=w["account_name"],
+        account_num=w["account_number"],
+        bank_code=bank_code,
+        phone=(w.get("user_phone") or "").lstrip("+")[-10:] or None,
+    )
+    if int(resp.get("code") or 0) != 200:
+        raise HTTPException(400, f"1SSPay declined: {resp.get('msg') or 'unknown'}")
+    data = resp.get("data") or {}
+    await db.withdrawals.update_one(
+        {"_id": w["_id"]},
+        {"$set": {
+            "status": "processing",
+            "processed_at": now_utc().isoformat(),
+            "admin_note": note or "",
+            "gateway": "onesspay",
+            "merchant_order_no": order_no,
+            "platform_order_no": data.get("payNo"),
+            "gateway_response": resp,
+        }},
+    )
+    return resp
 
 
 @api.post("/withdrawals")
@@ -1772,8 +2037,8 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
     if w["status"] != "pending":
         raise HTTPException(400, f"Already {w['status']}")
 
-    # PayNow automatic payout if enabled AND withdrawal has bank_code
-    if paynow.enabled() and w.get("bank_code"):
+    # PayNow automatic payout if enabled AND admin toggle allows AND withdrawal has bank_code
+    if paynow.enabled() and await gateway_payout_allowed("paynow") and w.get("bank_code"):
         try:
             await _paynow_payout_withdrawal(w, note=payload.note or "")
         except HTTPException:
@@ -1798,6 +2063,8 @@ async def admin_shpay_payout(wid: str, payload: ApprovalIn, admin: dict = Depend
     prefers to route through SHPAY."""
     if not shpay.enabled():
         raise HTTPException(400, "SHPAY is not configured")
+    if not await gateway_payout_allowed("shpay"):
+        raise HTTPException(400, "SHPAY payouts are currently disabled by admin")
     w = await db.withdrawals.find_one({"_id": oid(wid)})
     if not w:
         raise HTTPException(404, "Withdrawal not found")
@@ -1813,6 +2080,31 @@ async def admin_shpay_payout(wid: str, payload: ApprovalIn, admin: dict = Depend
         logger.exception("SHPAY payout failed")
         raise HTTPException(502, f"SHPAY error: {e}")
     return {"ok": True, "gateway": "shpay", "status": "processing"}
+
+
+@api.post("/admin/withdrawals/{wid}/onesspay-payout")
+async def admin_onesspay_payout(wid: str, payload: ApprovalIn, admin: dict = Depends(get_admin_user)):
+    """Send a specific pending withdrawal via 1SSPay. Requires the withdrawal to
+    have a `bank_code` in 1SSPay's `NR0xxx` format (see `onesspay.NIGERIAN_BANKS`).
+    """
+    if not onesspay.enabled():
+        raise HTTPException(400, "1SSPay is not configured")
+    if not await gateway_payout_allowed("onesspay"):
+        raise HTTPException(400, "1SSPay payouts are currently disabled by admin")
+    w = await db.withdrawals.find_one({"_id": oid(wid)})
+    if not w:
+        raise HTTPException(404, "Withdrawal not found")
+    if w["status"] != "pending":
+        raise HTTPException(400, f"Already {w['status']}")
+    try:
+        await _onesspay_payout_withdrawal(w, note=payload.note or "")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("1SSPay payout failed")
+        raise HTTPException(502, f"1SSPay error: {e}")
+    return {"ok": True, "gateway": "onesspay", "status": "processing"}
+
 
 
 @api.post("/admin/withdrawals/bulk-approve")
@@ -1917,7 +2209,7 @@ async def user_paynow_banks(user: dict = Depends(get_current_user), all: bool = 
     # rate limits) is exposed via `gateway_ready` so the UI can keep the Instant
     # Pay tile visible and still warn users transparently. Hiding the tile on
     # transient errors confuses users (they think the feature was removed).
-    if not paynow.enabled():
+    if not paynow.enabled() or not await gateway_payin_allowed("paynow"):
         return {"enabled": False, "reason": "disabled", "gateway_ready": False, "data": []}
     # If we previously flagged the IP as blocked, DO a real probe anyway so the
     # dashboard recovers instantly the moment the merchant whitelists this pod's
@@ -1949,7 +2241,7 @@ async def shpay_status(user: dict = Depends(get_current_user)):
     """Lightweight probe used by the Deposit page to decide whether to render the
     SHPAY Instant Pay tile. `enabled` reflects env config; `gateway_ready` reflects
     live reachability (a real call is made and its success flag is echoed)."""
-    if not shpay.enabled():
+    if not shpay.enabled() or not await gateway_payin_allowed("shpay"):
         return {"enabled": False, "gateway_ready": False, "reason": "disabled"}
     resp = await shpay.list_banks_cached()
     ok = bool(resp.get("success"))
@@ -2098,6 +2390,160 @@ async def shpay_webhook(request: Request):
 
     logger.warning("SHPAY webhook unknown event=%s outTradeNo=%s", event, out_trade_no)
     return "OK"
+
+
+# ---------------------------------------------------------------------------
+# 1SSPay endpoints (mirrors PayNow / SHPAY shape)
+# ---------------------------------------------------------------------------
+
+@api.get("/onesspay/status")
+async def onesspay_status(user: dict = Depends(get_current_user)):
+    """Lightweight probe used by the Deposit page to decide whether to render the
+    1SSPay Fast Pay tile."""
+    if not onesspay.enabled() or not await gateway_payin_allowed("onesspay"):
+        return {"enabled": False, "gateway_ready": False, "reason": "disabled"}
+    # Ping /payout/balance as a cheap connectivity + auth check. code=200 → live.
+    # code=1007 (channel_permission_check) also means the credentials worked but
+    # this merchant doesn't have Nigeria enabled — we still show the tile but
+    # mark gateway_ready=false so the UI can render a friendly warning.
+    try:
+        resp = await onesspay.get_balance()
+    except Exception:
+        return {"enabled": True, "gateway_ready": False, "reason": "unreachable"}
+    code = int(resp.get("code") or 0)
+    return {
+        "enabled": True,
+        "gateway_ready": code == 200,
+        "message": resp.get("msg") if code != 200 else None,
+        "code": code,
+    }
+
+
+@api.get("/onesspay/banks")
+async def onesspay_banks(user: dict = Depends(get_current_user)):
+    """Static bank list (NR0xxx codes) — the docs don't ship a /banks endpoint."""
+    if not onesspay.enabled():
+        return {"enabled": False, "gateway_ready": False, "data": []}
+    return {"enabled": True, "gateway_ready": True, "data": onesspay.list_banks()}
+
+
+@api.get("/admin/onesspay/health")
+async def admin_onesspay_health(admin: dict = Depends(get_admin_user)):
+    """Admin probe — returns balance + outbound IP so the merchant can whitelist
+    the server IP with 1SSPay if calls are being refused."""
+    outbound_ip = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as c:
+            r = await c.get("https://api.ipify.org")
+            outbound_ip = r.text.strip() or "unknown"
+    except Exception:
+        pass
+    if not onesspay.enabled():
+        return {"enabled": False, "outbound_ip": outbound_ip, "reason": "not configured"}
+    try:
+        bal = await onesspay.get_balance()
+    except Exception as e:
+        return {"enabled": True, "outbound_ip": outbound_ip, "error": str(e)}
+    return {"enabled": True, "outbound_ip": outbound_ip, "balance_response": bal}
+
+
+@api.post("/onesspay/webhook/payin", response_class=PlainTextResponse)
+async def onesspay_payin_webhook(request: Request):
+    """1SSPay payin callback. Form-urlencoded body. Response MUST be the literal
+    string `"success"` — anything else triggers their retry schedule
+    (30s/90s/3m/6m/15m/30m/60m).
+
+    Signature covers all form fields except `sign` itself, HMAC-SHA1 + Base64.
+    Idempotent: if the deposit is already approved we still return `"success"`.
+    """
+    form = await request.form()
+    body = {k: str(v) for k, v in form.items()}
+    logger.info("1SSPay payin webhook received: %s", body)
+    if not onesspay.verify_callback_signature(body):
+        logger.warning("1SSPay payin webhook: signature mismatch")
+        return PlainTextResponse("signature_invalid", status_code=200)
+
+    order_no = body.get("orderNo") or ""
+    status = (body.get("status") or "").strip()  # "2" = success, "3" = fail
+    amount_real_str = body.get("amountReal") or body.get("amount") or "0"
+    try:
+        amount_real = float(amount_real_str)
+    except Exception:
+        amount_real = 0.0
+
+    dep = await db.deposits.find_one({"merchant_order_no": order_no, "gateway": "onesspay"})
+    if not dep:
+        logger.warning("1SSPay payin webhook: unknown orderNo=%s", order_no)
+        return "success"
+    if status == "2":  # success
+        if dep["status"] != "pending":
+            return "success"
+        updated = await db.deposits.find_one_and_update(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body,
+                      "settled_amount": amount_real}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated:
+            return "success"
+        credit_amount = amount_real if amount_real > 0 else float(dep["amount"])
+        await db.users.update_one({"_id": dep["user_id"]},
+                                  {"$inc": {"wallet_balance": credit_amount}})
+        await add_transaction(dep["user_id"], "deposit", credit_amount,
+                              "Deposit auto-credited (1SSPay)",
+                              {"deposit_id": str(dep["_id"]), "gateway": "onesspay"})
+        logger.info("1SSPay payin credited user=%s amount=₦%.2f dep=%s",
+                    dep["user_id"], credit_amount, dep["_id"])
+        return "success"
+    if status in ("3", "4"):  # fail / expired
+        await db.deposits.update_one(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                      "gateway_error": body.get("failMsg") or "1SSPay reported failure",
+                      "gateway_callback": body}},
+        )
+    return "success"
+
+
+@api.post("/onesspay/webhook/payout", response_class=PlainTextResponse)
+async def onesspay_payout_webhook(request: Request):
+    """1SSPay payout callback."""
+    form = await request.form()
+    body = {k: str(v) for k, v in form.items()}
+    logger.info("1SSPay payout webhook received: %s", body)
+    if not onesspay.verify_callback_signature(body):
+        logger.warning("1SSPay payout webhook: signature mismatch")
+        return PlainTextResponse("signature_invalid", status_code=200)
+
+    order_no = body.get("orderNo") or ""
+    status = (body.get("status") or "").strip()
+    w = await db.withdrawals.find_one({"merchant_order_no": order_no, "gateway": "onesspay"})
+    if not w:
+        logger.warning("1SSPay payout webhook: unknown orderNo=%s", order_no)
+        return "success"
+    if status == "2" and w["status"] not in {"approved"}:
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body}},
+        )
+        await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                      "Withdrawal paid out (1SSPay)")
+    elif status in ("3", "5") and w["status"] not in {"approved", "rejected"}:
+        # 3=fail, 5=refunded (success→fail)
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                      "gateway_error": body.get("failMsg") or "1SSPay reported failure",
+                      "gateway_callback": body}},
+        )
+        await db.users.update_one({"_id": w["user_id"]},
+                                  {"$inc": {"wallet_balance": float(w["amount"])}})
+        await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
+                              "Withdrawal rejected - refunded (1SSPay)",
+                              {"withdrawal_id": str(w["_id"]), "gateway": "onesspay"})
+    return "success"
 
 
 class VerifyAccountIn(BaseModel):
@@ -2315,6 +2761,80 @@ async def admin_update_settings(payload: SettingsIn, admin: dict = Depends(get_a
     s = await get_settings()
     s.pop("_id", None)
     return s
+
+
+# ---------------------------------------------------------------------------
+# Admin: payment-gateway toggles (per gateway × per direction)
+# ---------------------------------------------------------------------------
+
+class GatewayToggleIn(BaseModel):
+    """Admin toggles for a single gateway."""
+    payin: Optional[bool] = None
+    payout: Optional[bool] = None
+
+
+class GatewayTogglesIn(BaseModel):
+    """Bulk update of all gateway toggles at once. Each key is optional so
+    admin can update just one gateway without clobbering the others."""
+    paynow:   Optional[GatewayToggleIn] = None
+    shpay:    Optional[GatewayToggleIn] = None
+    onesspay: Optional[GatewayToggleIn] = None
+
+
+def _gateway_meta(gateway: str) -> dict:
+    """Static per-gateway metadata for the admin UI (labels, colors)."""
+    return {
+        "paynow":   {"label": "PayNow — Instant Pay",   "color": "#0055FF",
+                     "configured": paynow.enabled()},
+        "shpay":    {"label": "SHPAY — Quick Pay",      "color": "#8B5CF6",
+                     "configured": shpay.enabled()},
+        "onesspay": {"label": "1SSPay — Fast Pay",      "color": "#F97316",
+                     "configured": onesspay.enabled()},
+    }[gateway]
+
+
+@api.get("/admin/gateways")
+async def admin_get_gateways(admin: dict = Depends(get_admin_user)):
+    """Return current toggles + module-level enabled flag + label metadata so
+    the admin UI can render toggle switches with the correct state."""
+    toggles = await get_gateway_toggles()
+    return {
+        "gateways": [
+            {"key": g, **_gateway_meta(g), **toggles[g]}
+            for g in GATEWAY_KEYS
+        ],
+    }
+
+
+@api.put("/admin/gateways")
+async def admin_update_gateways(payload: GatewayTogglesIn, admin: dict = Depends(get_admin_user)):
+    """Update one or more gateway toggles. Only fields present in the payload
+    are updated — omitted fields keep their current value."""
+    current = await get_gateway_toggles()
+    body = payload.model_dump()
+    changed = False
+    for g in GATEWAY_KEYS:
+        req = body.get(g)
+        if not req:
+            continue
+        if req.get("payin") is not None:
+            current[g]["payin"] = bool(req["payin"])
+            changed = True
+        if req.get("payout") is not None:
+            current[g]["payout"] = bool(req["payout"])
+            changed = True
+    if changed:
+        await db.settings.update_one(
+            {"_id": "global"},
+            {"$set": {"gateway_toggles": current}},
+            upsert=True,
+        )
+    return {
+        "gateways": [
+            {"key": g, **_gateway_meta(g), **current[g]}
+            for g in GATEWAY_KEYS
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
