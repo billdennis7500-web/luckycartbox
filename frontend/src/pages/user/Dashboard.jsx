@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import {
   AmbientCard, SoftCard, SectionHeader, MicroLabel, StackChip, StatChip, PillCTA,
 } from "@/components/design";
+import InstallAppTile from "@/components/InstallAppTile";
 
 function ActionTile({ to, icon: Icon, label, tone, testid }) {
   const tones = {
@@ -160,7 +161,7 @@ export default function Dashboard() {
           <ActionTile to="/deposit"     icon={ArrowDownToLine} label="Deposit"  tone="green"  testid="quick-deposit-link" />
           <ActionTile to="/withdraw"    icon={ArrowUpFromLine} label="Withdraw" tone="blue"   testid="quick-withdraw-link" />
           <ActionTile to="/coupon"      icon={Ticket}          label="Redeem"   tone="amber"  testid="quick-redeem-link" />
-          <ActionTile to="/marketplace" icon={TrendingUp}      label="Invest"   tone="violet" testid="quick-invest-link" />
+          <InstallAppTile />
         </div>
       </section>
 

@@ -21,3 +21,19 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// ---------------------------------------------------------------------------
+// Register the PWA service worker. Kept in a `load` handler so it doesn't
+// compete with the first render. Wrapped in try/catch so a broken/deleted
+// SW file never breaks the site — worst case, install-to-home-screen simply
+// stops being offered.
+// ---------------------------------------------------------------------------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/service-worker.js", { scope: "/" })
+      .catch(() => {
+        /* SW registration failed — that's fine, app still works fully. */
+      });
+  });
+}

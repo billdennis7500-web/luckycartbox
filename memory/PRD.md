@@ -701,3 +701,32 @@ Both themes now use the SAME visual grammar — `var(--nb-card)` body + gold das
 
 Verified via screenshot on Dashboard, Investments, Deposit, Marketplace (drawer) in both themes. No behavioural regressions.
 
+
+## 2026-07-28 · Progressive Web App (PWA) — installable to home screen
+
+User asked to "create an app for the website" and replace the "Invest" quick action with an install-app button. Implemented as a proper PWA (installable on Android/Chrome/Edge/Samsung/desktop, plus a hand-held helper for iOS Safari).
+
+### New assets
+- `/frontend/public/manifest.json` — name, gold `theme_color #F5C518`, standalone display, portrait orientation, 4 icons (192/512/maskable-512/apple-touch), 3 launcher shortcuts (Deposit / Invest / Withdraw), start_url `/dashboard`.
+- `/frontend/public/service-worker.js` — minimal SW that intercepts navigation requests and falls back to an offline page if the network is dead. Explicitly does NOT cache API responses (balances/gateways must stay fresh).
+- `/frontend/public/offline.html` — dark-gold branded fallback shown when the user is offline.
+- `/frontend/public/icon-192.png`, `/icon-512.png`, `/icon-maskable-512.png`, `/apple-touch-icon.png`, `/favicon-32.png`, `/favicon-64.png` — generated in Python/PIL from the NaijaInvest gold-gradient "trending-up arrow" brand mark.
+- `/frontend/public/index.html` — replaced boilerplate title/theme-color with real branding, wired manifest + iOS Safari meta tags (`apple-mobile-web-app-*`).
+
+### Frontend hook + component
+- `/frontend/src/hooks/usePWAInstall.js` — new hook that listens for `beforeinstallprompt` (stashed on `window.__nbDeferredInstall` so hot-reload doesn't lose it) and `appinstalled`. Exposes `{canInstall, isInstalled, isIOS, promptInstall()}`.
+- `/frontend/src/components/InstallAppTile.jsx` — drop-in tile matching the Dashboard `ActionTile` visual language exactly (dashed gold accents, gold glow, `var(--nb-card)` body). On click:
+  - if installed → toast "already on your home screen"
+  - if `beforeinstallprompt` deferred → call `prompt()` + show accepted/dismissed toast
+  - if iOS → open the 3-step "Share → Add to Home Screen" helper modal (`data-testid="ios-install-helper"`)
+  - otherwise → fallback toast pointing to the browser menu
+- `/frontend/src/index.js` — registers `/service-worker.js` on window `load`, wrapped in try/catch so a broken SW never breaks the site.
+- `/frontend/src/pages/user/Dashboard.jsx` — the 4th quick action tile ("Invest") swapped for `<InstallAppTile />`. Invest destination remains reachable via the bottom nav (`/marketplace`).
+
+### Verified
+- `curl` on `/manifest.json`, `/service-worker.js`, `/icon-192.png` → all 200.
+- `navigator.serviceWorker.getRegistrations()` returns scope `/` after page load.
+- `document.querySelector('[data-testid=install-app-tile]')` present on Dashboard.
+- Tile styled correctly in both dark (gold gradient icon on navy card) and light (gold gradient icon on white card) modes.
+- Fallback toast fires when browser has no deferred install event (verified in Chromium test env).
+
