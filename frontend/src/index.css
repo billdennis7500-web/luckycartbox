@@ -164,27 +164,27 @@ h1, h2, h3, h4, h5, h6 {
 /* ---------------------------------------------------------------------------
    Light-mode overrides — only kick in when `html.theme-light` is set.
    ---------------------------------------------------------------------------
-   Strategy:
-   1. Flip page-level `text-white` to the dark parchment text token.
-   2. Preserve `text-white` inside every dark-gold AmbientCard by matching the
-      React-converted inline gradient string (React lowercases and converts
-      hex → rgb, so we match `rgb(30, 27, 10)` = #1E1B0A used by every card).
-   3. Nudge muted-text contrast so the light theme meets AA.
+   Strategy (v2, adopted after user feedback):
+   Every ambient card in the app now uses `var(--nb-card)` as its background
+   (matching the Marketplace product-card pattern) so cards flip surface color
+   automatically — dark navy in dark mode, white in light mode. Text inside
+   uses `.text-white` which globally flips to the dark parchment token in
+   light mode. Gold dashed accent lines + tier-glow box-shadows stay untouched
+   (they read well on either surface). The only areas that intentionally stay
+   dark-gold in both themes are the "product image" thumbnails (marked with
+   `data-nb-image="dark"`) — the image needs a rich dark backdrop to pop.
    -------------------------------------------------------------------------- */
 html.theme-light .text-white {
     color: var(--nb-text) !important;
 }
-html.theme-light [style*="rgb(30, 27, 10)"] .text-white,
-html.theme-light [style*="rgb(30, 27, 10)"] h1,
-html.theme-light [style*="rgb(30, 27, 10)"] h2,
-html.theme-light [style*="rgb(30, 27, 10)"] h3,
-html.theme-light [data-nb-ambient="gold"] .text-white,
-html.theme-light [data-nb-ambient="gold"] h1,
-html.theme-light [data-nb-ambient="gold"] h2,
-html.theme-light [data-nb-ambient="gold"] h3 {
+/* Preserve white text ONLY inside intentionally-dark image thumbnails */
+html.theme-light [data-nb-image="dark"] .text-white,
+html.theme-light [data-nb-image="dark"] h1,
+html.theme-light [data-nb-image="dark"] h2,
+html.theme-light [data-nb-image="dark"] h3 {
     color: #F8FAFC !important;
 }
-/* Dialog / drawer overlays that use plain black background — soften in light */
+/* Inputs / textareas / selects keep their token color */
 html.theme-light input,
 html.theme-light textarea,
 html.theme-light select {

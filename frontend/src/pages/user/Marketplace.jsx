@@ -138,19 +138,13 @@ export default function Marketplace() {
         testid="load-more-products"
       />
 
-      {/* Slide-up confirm drawer — theme-aware dark-gold / light-cream aesthetic */}
+      {/* Slide-up confirm drawer — uses var(--nb-card) for automatic theme flip */}
       <Drawer open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <DrawerContent
           data-testid="invest-drawer"
-          className="border-0 max-w-lg mx-auto rounded-t-2xl overflow-hidden p-0"
+          className="border-0 max-w-lg mx-auto rounded-t-2xl overflow-hidden p-0 bg-[var(--nb-card)]"
           style={{
-            background: isLight
-              ? "linear-gradient(135deg,#FFFDF6 0%,#FBF3D9 45%,#F5EFDF 100%)"
-              : "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)",
-            color: isLight ? "#1A1508" : "#FFFFFF",
-            boxShadow: isLight
-              ? "0 -24px 80px -20px rgba(245,197,24,0.30), 0 0 0 1px rgba(245,197,24,0.35)"
-              : "0 -24px 80px -20px rgba(245,197,24,0.45), 0 0 0 1px rgba(245,197,24,0.25)",
+            boxShadow: "0 -24px 80px -20px rgba(245,197,24,0.40), 0 0 0 1px rgba(245,197,24,0.30)",
           }}
         >
           {/* Dashed gold accent line at the very top */}
@@ -363,6 +357,7 @@ function ProductRow({ p, onOpen, user }) {
         <div className="flex items-stretch min-h-[160px]">
           {/* --- LEFT: image area (~38% width) --- */}
           <div
+            data-nb-image="dark"
             className="relative shrink-0 w-[38%] max-w-[180px] min-h-full grid place-items-center p-4"
             style={{
               background:

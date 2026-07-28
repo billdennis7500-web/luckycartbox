@@ -101,7 +101,6 @@ export function AmbientCard({
       <Card
         data-nb-ambient="gold"
         className={`relative border-0 rounded-2xl bg-[var(--nb-card)] ${padded ? "p-5" : ""}`}
-        style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
       >
         {children}
       </Card>

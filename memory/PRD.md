@@ -678,3 +678,26 @@ User-reported fixes after the initial redesign:
 - **Confirm invest drawer theme-aware** — the Marketplace bottom drawer now consumes `useTheme()` and swaps the base gradient + text colors based on `theme === "light"`. In light mode: cream gradient bg (`#FFFDF6 → #FBF3D9 → #F5EFDF`), dark parchment title/description, subtly gold-tinted plan card, dark-gold stake text, purple-tinted "Total return" hero, and a transparent bordered Cancel button. Dark mode unchanged. `data-testid=invest-drawer` bg now flips correctly (verified via computed style).
 
 Compilation clean; all three method blocks measure identical widths post-fix.
+
+## 2026-07-28 · Unified surface treatment (v3)
+
+User asked to unify all "dark ambient" cards to match the Marketplace product-card pattern — where the card body uses `var(--nb-card)` so it flips surface color with the theme (dark navy in dark mode, white in light mode) while keeping only the gold dashed accents + tier glow shadows. This creates one consistent, theme-adaptive card language across the entire app.
+
+### Delivered
+- **design.jsx AmbientCard** — dropped the inline `#1E1B0A → #0B0906` gradient; the inner Card now relies on its own `bg-[var(--nb-card)]` class. `data-nb-ambient="gold"` attribute kept for future scoping.
+- **Dashboard** — ActionTile inner div and welcome-dialog body switched to `bg-[var(--nb-card)]`. Gold ambient orbs + dashed accents preserved.
+- **Deposit** — `MethodBlock` button, amount input card, and selected-manual-account panel all switched to `bg-[var(--nb-card)]`. Method tiles still glow with their tier tone. Sub-label under method name changed from `text-white/70` to `text-[var(--nb-muted)]` so it flips too.
+- **Investments** — `InvestmentCard` body switched to `bg-[var(--nb-card)]`. The 60×60 thumbnail area stays intentionally dark-gold via `data-nb-image="dark"` (image contrast). Empty state also flipped.
+- **Referrals** — network rows and empty-state card switched to `bg-[var(--nb-card)]`.
+- **Marketplace** — confirm-invest drawer body switched to `bg-[var(--nb-card)]` (dropped the theme-branching JS). Left product-image column stays dark-gold via `data-nb-image="dark"`.
+- **AdminProducts** — both product thumbnail placeholders (list view + edit sheet preview) marked `data-nb-image="dark"` so they stay dark-gold in light mode for image contrast.
+- **index.css light-mode rules** — old `[style*='rgb(30, 27, 10)']` + `[data-nb-ambient='gold']` exceptions removed. New single exception: `.text-white` is preserved white ONLY inside elements marked `data-nb-image="dark"` (the intentionally-dark image thumbnails).
+
+### Result
+Both themes now use the SAME visual grammar — `var(--nb-card)` body + gold dashed accents + tier-glow shadow — differing only by surface + text color:
+- **Dark mode:** dark navy body (`#0B1524`) + white text + gold accents.
+- **Light mode:** white body + dark parchment text + gold accents.
+- Product image thumbnails stay dark-gold in both themes (for image contrast).
+
+Verified via screenshot on Dashboard, Investments, Deposit, Marketplace (drawer) in both themes. No behavioural regressions.
+

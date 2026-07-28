@@ -39,9 +39,8 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       type="button"
       onClick={onClick}
       data-testid={testid}
-      className={`relative rounded-xl overflow-hidden text-left flex flex-col justify-between w-full min-w-0 min-h-[98px] transition-all card-hover`}
+      className={`relative rounded-xl overflow-hidden text-left flex flex-col justify-between w-full min-w-0 min-h-[98px] transition-all card-hover bg-[var(--nb-card)]`}
       style={{
-        background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 55%,#0B0906 100%)",
         // Uniform 1.5px border for both states — selected shows a stronger tinted ring
         // via inner glow only, so all 3 method tiles stay the same visual size.
         boxShadow: selected
@@ -75,7 +74,7 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       </div>
       <div className="relative px-2.5 pb-2.5 mt-1">
         <div className="font-display font-800 text-[13px] leading-tight text-white truncate">{label}</div>
-        <div className="text-[10px] text-white/70 mt-0.5 truncate tabular">{sub}</div>
+        <div className="text-[10px] text-[var(--nb-muted)] mt-0.5 truncate tabular">{sub}</div>
       </div>
     </button>
   );
@@ -383,8 +382,7 @@ export default function Deposit() {
           <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
                style={{ background: `repeating-linear-gradient(90deg,${bankTint(selectedAcct.bank_name).bg} 0 8px,transparent 8px 14px)`, opacity: 0.55 }} />
           <Card
-            className="relative border-0 rounded-2xl p-4"
-            style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+            className="relative border-0 rounded-2xl p-4 bg-[var(--nb-card)]"
           >
           <div className="flex items-center gap-3">
             <div
@@ -428,8 +426,7 @@ export default function Deposit() {
           <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
                style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
           <Card
-            className="relative border-0 rounded-2xl p-5"
-            style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+            className="relative border-0 rounded-2xl p-5 bg-[var(--nb-card)]"
           >
           <form onSubmit={submit} className="space-y-4">
             <div>

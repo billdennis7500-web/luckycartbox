@@ -83,13 +83,13 @@ function InvestmentCard({ inv }) {
            style={{ background: `repeating-linear-gradient(90deg,${glow} 0 8px,transparent 8px 14px)`, opacity: 0.55 }} />
 
       <div
-        className="relative"
-        style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+        className="relative bg-[var(--nb-card)]"
       >
         {/* Top row: thumbnail + name + status */}
         <div className="p-4 flex items-center gap-3">
-          {/* 60x60 thumbnail with tier glow */}
+          {/* 60x60 thumbnail with tier glow — stays dark for image contrast */}
           <div
+            data-nb-image="dark"
             className="relative w-16 h-16 rounded-xl grid place-items-center shrink-0 overflow-hidden"
             style={{
               background: `radial-gradient(circle at center,${tier.glow}44,${tier.glow}10 55%,transparent 80%),linear-gradient(135deg,#1E1B0A,#0B0906)`,
@@ -311,8 +311,7 @@ export default function Investments() {
                style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
           <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
                style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
-          <div className="relative p-8 text-center space-y-3"
-               style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}>
+          <div className="relative p-8 text-center space-y-3 bg-[var(--nb-card)]">
             <div className="mx-auto w-14 h-14 rounded-2xl grid place-items-center"
                  style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)",
                           boxShadow: "0 4px 20px rgba(245,197,24,0.35)" }}>

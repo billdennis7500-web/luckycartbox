@@ -140,7 +140,7 @@ export default function AdminProducts() {
           >
             {/* Compact preview: image left, info right */}
             <div className="flex gap-3">
-              <div className="w-20 h-20 shrink-0 rounded-lg grid place-items-center overflow-hidden"
+              <div data-nb-image="dark" className="w-20 h-20 shrink-0 rounded-lg grid place-items-center overflow-hidden"
                    style={{ background: "linear-gradient(135deg,#1E1B0A,#2A2410)" }}>
                 {p.image_url ? (
                   <img src={p.image_url} alt={p.name}
@@ -219,6 +219,7 @@ export default function AdminProducts() {
                 <Label>Product image</Label>
                 <div className="mt-2 flex items-center gap-3">
                   <div
+                    data-nb-image="dark"
                     className="w-24 h-24 shrink-0 rounded-lg grid place-items-center overflow-hidden border border-[var(--nb-border)]"
                     style={{ background: "linear-gradient(135deg,#1E1B0A,#2A2410)" }}
                     data-testid="prod-image-preview"

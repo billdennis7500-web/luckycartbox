@@ -30,8 +30,7 @@ function ActionTile({ to, icon: Icon, label, tone, testid }) {
         style={{ boxShadow: `0 4px 18px -6px ${t.g}55, 0 0 0 1px ${t.g}25` }}
       >
         <div
-          className="relative p-3 flex flex-col items-center justify-center gap-2 min-h-[92px]"
-          style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 60%,#0B0906 100%)" }}
+          className="relative p-3 flex flex-col items-center justify-center gap-2 min-h-[92px] bg-[var(--nb-card)]"
         >
           <div
             className="w-10 h-10 rounded-lg grid place-items-center"
@@ -276,8 +275,7 @@ export default function Dashboard() {
             <div className="absolute inset-x-0 bottom-0 h-[3px] z-10 pointer-events-none"
                  style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.7 }} />
 
-            <div className="relative p-6"
-                 style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#2A2410 50%,#0B0906 100%)" }}>
+            <div className="relative p-6 bg-[var(--nb-card)]">
               {/* Ambient orbs */}
               <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full pointer-events-none"
                    style={{ background: "radial-gradient(circle,#F5C51844,transparent 70%)" }} />

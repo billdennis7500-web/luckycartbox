@@ -248,8 +248,7 @@ export default function Referrals() {
                  style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
             <div className="absolute inset-x-0 bottom-0 h-[2px] z-10 pointer-events-none"
                  style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
-            <div className="relative p-8 text-center"
-                 style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+            <div className="relative p-8 text-center bg-[var(--nb-card)]"
                  data-testid={`no-${gen}`}>
               <div className="mx-auto w-12 h-12 rounded-2xl grid place-items-center mb-2"
                    style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)",
@@ -273,8 +272,7 @@ export default function Referrals() {
                 >
                   <div className="absolute inset-x-0 top-0 h-[2px] z-10 pointer-events-none"
                        style={{ background: `repeating-linear-gradient(90deg,${u.has_invested ? "#10B981" : "#F5C518"} 0 8px,transparent 8px 14px)`, opacity: 0.5 }} />
-                  <div className="relative flex items-center gap-3 px-4 py-3"
-                       style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 60%,#0B0906 100%)" }}>
+                  <div className="relative flex items-center gap-3 px-4 py-3 bg-[var(--nb-card)]">
                     <div
                       className="w-10 h-10 rounded-xl grid place-items-center text-sm font-display font-800 shrink-0"
                       style={{
