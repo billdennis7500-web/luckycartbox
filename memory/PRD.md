@@ -525,3 +525,27 @@ Whitelist **`46.20.101.18`** on:
 
 After this, container restarts / redeploys / IP rotations no longer matter — IPRoyal's IP stays permanent.
 
+
+
+## 2026-07-28 · Post-whitelist confirmation + actionable gateway error classifier (P0 UX)
+
+### Great news
+Whitelist of `46.20.101.18` at all 3 dashboards has taken effect at the IP level:
+- **PayNow**: `gateway_ready=True`, 32 banks reachable ✅
+- **SHPAY**: bank list works (155 banks), IP check passed ✅ — remaining error is `"Channel-Error:['Merchant is not active']"` (SHPAY merchant status)
+- **1SSPay**: signature accepted ✅ — remaining error is `code=1007 "channel authority not open"` (1SSPay account channel activation)
+
+Both SHPAY and 1SSPay's remaining errors are **business-status** issues on the merchant's side, not code/IP issues. Only their account teams can flip these flags.
+
+### The bug
+The previous graceful-error message always said *"whitelist your server IP"* — misleading now that the IP is whitelisted. Users saw *"SHPAY is momentarily unavailable (Channel-Error: Merchant is not active). Whitelist your server IP in the SHPAY dashboard."* — the fix has nothing to do with whitelisting.
+
+### Delivered
+New helper `classify_gateway_error(gateway_name, raw_msg)` in `backend/server.py` that pattern-matches the raw gateway error and returns an actionable user-facing message. 7 error classes handled: merchant-inactive, channel-not-open, IP-whitelist, balance-insufficient, bank-unsupported, signature, and unknown-fallback. Wired into `POST /api/deposits` for both SHPAY and 1SSPay graceful-degradation branches.
+
+### Verified live
+- SHPAY: *"Quick Pay is temporarily unavailable — your SHPAY merchant account is not activated yet. Log into your SHPAY dashboard and complete any pending KYC / activation steps, or contact your SHPAY account manager."*
+- 1SSPay: *"Fast Pay is temporarily unavailable — your 1SSPay payment channel isn't enabled yet. Ask your 1SSPay account manager to enable the Nigeria payin/payout channel for your merchant ID."*
+- IP-whitelist patterns still produce the correct whitelist hint.
+- All 7 patterns verified via python direct test.
+- `yarn build` clean; UI still shows the `Server IP: 46.20.101.18` copy chip.

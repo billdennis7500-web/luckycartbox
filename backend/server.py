@@ -252,6 +252,70 @@ async def gateway_payout_allowed(gateway: str) -> bool:
     return bool(t.get(gateway, {}).get("payout"))
 
 
+def classify_gateway_error(gateway_name: str, raw_msg: str) -> str:
+    """Turn a raw gateway error string into an actionable user-facing message.
+
+    Different gateway errors need different fixes:
+      • IP whitelist  → ask merchant to whitelist server IP
+      • Merchant not active / suspended → contact gateway's KYC / activation team
+      • Channel not open / permission → ask gateway to enable this payment channel
+      • Insufficient balance → top up merchant balance
+      • Bank list / bank code → user's bank isn't supported on this gateway
+      • Anything else → show raw message + generic hint
+    """
+    msg = (raw_msg or "").lower()
+    label = {
+        "paynow":   "Instant Pay",
+        "shpay":    "Quick Pay",
+        "onesspay": "Fast Pay",
+    }.get(gateway_name, gateway_name)
+    dashboard = {
+        "paynow":   "PayNow",
+        "shpay":    "SHPAY",
+        "onesspay": "1SSPay",
+    }.get(gateway_name, gateway_name)
+
+    # Merchant status
+    if any(k in msg for k in ("merchant is not active", "merchant not active",
+                                "merchant inactive", "merchant suspended",
+                                "merchant disabled", "merchant is disabled")):
+        return (f"{label} is temporarily unavailable — your {dashboard} merchant account is not activated yet. "
+                f"Log into your {dashboard} dashboard and complete any pending KYC / activation steps, or contact your {dashboard} account manager to activate the account.")
+
+    # Channel permission
+    if any(k in msg for k in ("channel authority", "channel permission",
+                                "channel not open", "channel is not open",
+                                "channel status", "channel is disabled",
+                                "channel stopped")):
+        return (f"{label} is temporarily unavailable — your {dashboard} payment channel isn't enabled yet. "
+                f"Ask your {dashboard} account manager to enable the Nigeria payin/payout channel for your merchant ID.")
+
+    # IP whitelist
+    if any(k in msg for k in ("ip whitelist", "not add ip", "please add ip whitelist",
+                                "not in whitelist", "please use the ip you whitelist",
+                                "whitelist check", "ip check")):
+        return (f"{label} is momentarily unavailable — this server's IP isn't on the {dashboard} whitelist yet. "
+                f"Whitelist your server IP in the {dashboard} dashboard and retry.")
+
+    # Insufficient balance (payout only, but include for completeness)
+    if any(k in msg for k in ("balance insufficient", "insufficient balance",
+                                "not enough balance", "balance not enough")):
+        return (f"{label} is temporarily unavailable — your {dashboard} merchant balance is insufficient. "
+                f"Top up your {dashboard} merchant balance from their dashboard.")
+
+    # Bank / account
+    if any(k in msg for k in ("bank code", "bank not support",
+                                "not supported", "invalid bank")):
+        return (f"{label} rejected this bank. The bank the user picked isn't supported on {dashboard} for this channel. Please choose another payment option or contact your {dashboard} account manager.")
+
+    # Sign / auth
+    if any(k in msg for k in ("sign", "signature")):
+        return (f"{label} rejected this request due to a signature error. This is a server-side issue — please contact support.")
+
+    # Unknown — surface the raw message so at least admin can debug
+    return (f"{label} is momentarily unavailable ({raw_msg}). Please try another payment option, or contact your {dashboard} account manager if this persists.")
+
+
 # ---------------------------------------------------------------------------
 # Bank code translation between gateways
 # ---------------------------------------------------------------------------
@@ -1321,10 +1385,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                 "checkout_url": None,
                 "gateway_ready": False,
                 "outbound_ip": outbound_ip,
-                "gateway_message": (
-                    f"SHPAY is momentarily unavailable ({gateway_error}). "
-                    "If this is your first request, whitelist your server IP in the SHPAY dashboard."
-                ),
+                "gateway_message": classify_gateway_error("shpay", gateway_error),
             }
 
         sp_result = sp.get("result") or {}
@@ -1382,10 +1443,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                 "checkout_url": None,
                 "gateway_ready": False,
                 "outbound_ip": outbound_ip,
-                "gateway_message": (
-                    f"Fast Pay is momentarily unavailable ({gateway_error}). "
-                    "If this is your first request, ask your merchant to whitelist your server IP in the 1SSPay dashboard."
-                ),
+                "gateway_message": classify_gateway_error("onesspay", gateway_error),
             }
 
         data = resp.get("data") or {}
