@@ -22,6 +22,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 
 import paynow
+import shpay
 from nigerian_banks import filter_popular
 from pymongo import ReturnDocument
 
@@ -921,6 +922,68 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         d = await db.deposits.find_one({"_id": res.inserted_id})
         return clean(d) | {"user_id": str(d["user_id"])}
 
+    # SHPAY auto-flow — mirrors PayNow. Users pick this by choosing method "shpay-auto".
+    if shpay.enabled() and (payload.method or "").startswith("shpay"):
+        res = await db.deposits.insert_one(doc)
+        out_trade_no = f"S{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
+        try:
+            sp = await shpay.create_payin(
+                out_trade_no,
+                float(payload.amount),
+                payer_name=user.get("name") or "User",
+                payer_mobile=(user.get("phone") or "").lstrip("+")[-10:],
+                # SHPAY requires an email; fall back to a synthesized one so users
+                # who signed up via phone-only can still transact.
+                payer_email=(user.get("email") or f"{user['phone'].lstrip('+')}@naijainvest.local"),
+                subject="Wallet deposit",
+                body=f"NaijaInvest deposit for {user.get('name')}",
+            )
+        except Exception as e:
+            logger.exception("SHPAY create_payin failed")
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
+            raise HTTPException(400, "SHPAY is not reachable right now. Please try a bank transfer or retry in a minute.")
+
+        if not sp.get("success"):
+            gateway_error = sp.get("message") or "SHPAY declined the order"
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed",
+                                                   "gateway_error": gateway_error,
+                                                   "gateway_response": sp}})
+            outbound_ip = "unknown"
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as _c:
+                    r = await _c.get("https://api.ipify.org")
+                    outbound_ip = r.text.strip() or "unknown"
+            except Exception:
+                pass
+            d = await db.deposits.find_one({"_id": res.inserted_id})
+            return clean(d) | {
+                "user_id": str(d["user_id"]),
+                "gateway": "shpay",
+                "checkout_url": None,
+                "gateway_ready": False,
+                "outbound_ip": outbound_ip,
+                "gateway_message": (
+                    f"SHPAY is momentarily unavailable ({gateway_error}). "
+                    "If this is your first request, whitelist your server IP in the SHPAY dashboard."
+                ),
+            }
+
+        sp_result = sp.get("result") or {}
+        checkout_url = sp_result.get("link")
+        trans_no = sp_result.get("transNo")
+        await db.deposits.update_one(
+            {"_id": res.inserted_id},
+            {"$set": {"gateway": "shpay",
+                      "merchant_order_no": out_trade_no,
+                      "platform_order_no": trans_no,
+                      "checkout_url": checkout_url,
+                      "gateway_response": sp}},
+        )
+        d = await db.deposits.find_one({"_id": res.inserted_id})
+        return clean(d) | {"user_id": str(d["user_id"])}
+
     # Manual flow (existing behavior)
     res = await db.deposits.insert_one(doc)
     return clean(await db.deposits.find_one({"_id": res.inserted_id}))
@@ -995,6 +1058,40 @@ async def _paynow_payout_withdrawal(w: dict, note: str = "") -> dict:
         }},
     )
     return pn
+
+
+async def _shpay_payout_withdrawal(w: dict, note: str = "") -> dict:
+    """Trigger a SHPAY payout for a withdrawal (net of fee). Raises on gateway error.
+
+    Same shape as `_paynow_payout_withdrawal` so admin endpoints can dispatch to
+    either gateway without conditional branches.
+    """
+    payout_amount = float(w.get("payout_amount") or w.get("amount") or 0)
+    out_trade_no = f"SW{str(w['_id'])[-15:]}{int(datetime.now().timestamp())}"
+    sp = await shpay.create_payout(
+        out_trade_no=out_trade_no,
+        amount=payout_amount,
+        account_name=w["account_name"],
+        account_no=w["account_number"],
+        bank_code=w["bank_code"],
+        subject=note or "Withdrawal",
+    )
+    if not sp.get("success"):
+        raise HTTPException(400, f"SHPAY declined: {sp.get('message') or 'unknown'}")
+    result = sp.get("result") or {}
+    await db.withdrawals.update_one(
+        {"_id": w["_id"]},
+        {"$set": {
+            "status": "processing",
+            "processed_at": now_utc().isoformat(),
+            "admin_note": note or "",
+            "gateway": "shpay",
+            "merchant_order_no": out_trade_no,
+            "platform_order_no": result.get("transNo"),
+            "gateway_response": sp,
+        }},
+    )
+    return sp
 
 
 @api.post("/withdrawals")
@@ -1624,6 +1721,30 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
     return {"ok": True}
 
 
+@api.post("/admin/withdrawals/{wid}/shpay-payout")
+async def admin_shpay_payout(wid: str, payload: ApprovalIn, admin: dict = Depends(get_admin_user)):
+    """Send a specific pending withdrawal via SHPAY instead of PayNow. Useful when
+    PayNow is IP-blocked or returning transient errors, or when the merchant simply
+    prefers to route through SHPAY."""
+    if not shpay.enabled():
+        raise HTTPException(400, "SHPAY is not configured")
+    w = await db.withdrawals.find_one({"_id": oid(wid)})
+    if not w:
+        raise HTTPException(404, "Withdrawal not found")
+    if w["status"] != "pending":
+        raise HTTPException(400, f"Already {w['status']}")
+    if not w.get("bank_code"):
+        raise HTTPException(400, "This withdrawal has no SHPAY bank_code — approve manually or ask the user to re-bind their bank via the SHPAY bank list.")
+    try:
+        await _shpay_payout_withdrawal(w, note=payload.note or "")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("SHPAY payout failed")
+        raise HTTPException(502, f"SHPAY error: {e}")
+    return {"ok": True, "gateway": "shpay", "status": "processing"}
+
+
 @api.post("/admin/withdrawals/bulk-approve")
 async def bulk_approve_withdrawals(payload: BulkApprovalIn, admin: dict = Depends(get_admin_user)):
     settings = await get_settings()
@@ -1750,6 +1871,167 @@ async def user_paynow_banks(user: dict = Depends(get_current_user), all: bool = 
     filtered = data if all else filter_popular(data)
     return {"enabled": True, "gateway_ready": True, "code": resp.get("code"),
             "data": filtered, "msg": resp.get("msg"), "total": len(data)}
+
+
+# ---------------------------------------------------------------------------
+# SHPAY endpoints (mirrors PayNow shape so frontend can treat them uniformly)
+# ---------------------------------------------------------------------------
+
+
+@api.get("/shpay/status")
+async def shpay_status(user: dict = Depends(get_current_user)):
+    """Lightweight probe used by the Deposit page to decide whether to render the
+    SHPAY Instant Pay tile. `enabled` reflects env config; `gateway_ready` reflects
+    live reachability (a real call is made and its success flag is echoed)."""
+    if not shpay.enabled():
+        return {"enabled": False, "gateway_ready": False, "reason": "disabled"}
+    resp = await shpay.list_banks_cached()
+    ok = bool(resp.get("success"))
+    return {
+        "enabled": True,
+        "gateway_ready": ok,
+        "message": resp.get("message") if not ok else None,
+        "bank_count": len(resp.get("result") or []) if ok else 0,
+    }
+
+
+@api.get("/shpay/banks")
+async def shpay_banks(user: dict = Depends(get_current_user)):
+    if not shpay.enabled():
+        return {"enabled": False, "gateway_ready": False, "reason": "disabled", "data": []}
+    resp = await shpay.list_banks_cached()
+    if not resp.get("success"):
+        return {"enabled": True, "gateway_ready": False, "reason": "gateway_unreachable",
+                "note": resp.get("message") or "SHPAY unreachable", "data": []}
+    return {"enabled": True, "gateway_ready": True, "data": resp.get("result") or []}
+
+
+@api.get("/admin/shpay/health")
+async def admin_shpay_health(admin: dict = Depends(get_admin_user)):
+    """Admin-only end-to-end SHPAY health probe. Returns balance + bank count so
+    the admin can see at a glance whether the gateway is reachable and funded."""
+    if not shpay.enabled():
+        raise HTTPException(400, "SHPAY is not configured")
+    bal = await shpay.get_balance()
+    banks = await shpay.list_banks_cached()
+    outbound_ip = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as _c:
+            r = await _c.get("https://api.ipify.org")
+            outbound_ip = r.text.strip() or "unknown"
+    except Exception:
+        pass
+    return {
+        "enabled": True,
+        "outbound_ip": outbound_ip,
+        "balance": bal.get("result") if bal.get("success") else None,
+        "balance_error": bal.get("message") if not bal.get("success") else None,
+        "bank_count": len(banks.get("result") or []) if banks.get("success") else 0,
+        "bank_error": banks.get("message") if not banks.get("success") else None,
+    }
+
+
+@api.post("/shpay/webhook")
+async def shpay_webhook(request: Request):
+    """Async callback endpoint SHPAY hits when a payin or payout settles.
+
+    Signature is verified via `shpay.verify_callback_signature`. Response must be
+    literally "OK" or "SUCCESS" (case-insensitive) — anything else triggers
+    SHPAY's retry schedule (60s / 600s / 3600s).
+
+    Idempotency: we key on `outTradeNo` and only credit / settle once. If the
+    deposit is already `approved` or the withdrawal is already `approved` we
+    silently ack `OK` so SHPAY stops retrying.
+    """
+    body = await request.json()
+    logger.info("SHPAY webhook received: %s", body)
+    if not shpay.verify_callback_signature(body):
+        # Return 200 with a body that ISN'T OK/SUCCESS — SHPAY will retry which
+        # gives us a shot at recovering after a config fix.
+        logger.warning("SHPAY webhook: signature mismatch, refusing to process")
+        return "SIGNATURE_INVALID"
+
+    event = (body.get("event") or "").upper()
+    out_trade_no = body.get("outTradeNo") or ""
+    status = (body.get("transStatus") or "").upper()
+    # SHPAY sends the ACTUAL paid amount in `transAmt` (normal orders) OR
+    # `paymentAmount` (recharge to the same virtual account).
+    trans_amt_str = body.get("transAmt") or body.get("paymentAmount") or "0"
+    try:
+        trans_amt = float(trans_amt_str)
+    except Exception:
+        trans_amt = 0.0
+
+    if event == "PAYIN":
+        dep = await db.deposits.find_one({"merchant_order_no": out_trade_no,
+                                          "gateway": "shpay"})
+        if not dep:
+            logger.warning("SHPAY payin webhook: unknown outTradeNo=%s", out_trade_no)
+            return "OK"  # ack so SHPAY doesn't retry an order we don't own
+        if status != "SUCCESS":
+            logger.info("SHPAY payin non-final status=%s for %s", status, out_trade_no)
+            if status == "FAIL":
+                await db.deposits.update_one(
+                    {"_id": dep["_id"], "status": "pending"},
+                    {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                              "gateway_error": body.get("extInfo") or "SHPAY reported failure",
+                              "gateway_callback": body}},
+                )
+            return "OK"
+        # SUCCESS — credit the user's wallet with the AMOUNT SHPAY says was paid.
+        if dep["status"] != "pending":
+            return "OK"  # already processed
+        updated_dep = await db.deposits.find_one_and_update(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body,
+                      "settled_amount": trans_amt}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated_dep:
+            return "OK"  # someone else settled it first
+        # Credit whichever amount SHPAY confirms (user may have paid a different amount)
+        credit_amount = trans_amt if trans_amt > 0 else float(dep["amount"])
+        await db.users.update_one({"_id": dep["user_id"]},
+                                  {"$inc": {"wallet_balance": credit_amount}})
+        await add_transaction(dep["user_id"], "deposit", credit_amount,
+                              "Deposit auto-credited (SHPAY)",
+                              {"deposit_id": str(dep["_id"]), "gateway": "shpay"})
+        logger.info("SHPAY payin credited user=%s amount=₦%.2f dep=%s",
+                    dep["user_id"], credit_amount, dep["_id"])
+        return "OK"
+
+    if event == "PAYOUT":
+        w = await db.withdrawals.find_one({"merchant_order_no": out_trade_no,
+                                           "gateway": "shpay"})
+        if not w:
+            logger.warning("SHPAY payout webhook: unknown outTradeNo=%s", out_trade_no)
+            return "OK"
+        if status == "SUCCESS" and w["status"] not in {"approved"}:
+            await db.withdrawals.update_one(
+                {"_id": w["_id"]},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_callback": body}},
+            )
+            await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                          "Withdrawal paid out (SHPAY)")
+        elif status == "FAIL" and w["status"] not in {"approved", "rejected"}:
+            # Refund the held amount
+            await db.withdrawals.update_one(
+                {"_id": w["_id"]},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_error": body.get("extInfo") or "SHPAY reported failure",
+                          "gateway_callback": body}},
+            )
+            await db.users.update_one({"_id": w["user_id"]},
+                                      {"$inc": {"wallet_balance": float(w["amount"])}})
+            await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
+                                  "Withdrawal rejected - refunded (SHPAY)",
+                                  {"withdrawal_id": str(w["_id"]), "gateway": "shpay"})
+        return "OK"
+
+    logger.warning("SHPAY webhook unknown event=%s outTradeNo=%s", event, out_trade_no)
+    return "OK"
 
 
 class VerifyAccountIn(BaseModel):

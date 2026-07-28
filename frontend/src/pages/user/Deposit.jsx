@@ -117,6 +117,8 @@ export default function Deposit() {
   const [loading, setLoading] = useState(false);
   const [instantEnabled, setInstantEnabled] = useState(false);
   const [gatewayReady, setGatewayReady] = useState(true);
+  const [shpayEnabled, setShpayEnabled] = useState(false);
+  const [shpayReady, setShpayReady] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
   const [quickAmounts, setQuickAmounts] = useState([500, 1000, 2000, 5000, 10000, 20000]);
 
@@ -138,6 +140,10 @@ export default function Deposit() {
       setInstantEnabled(!!r.data?.enabled);
       setGatewayReady(r.data?.gateway_ready !== false);
     }).catch(() => { setInstantEnabled(false); setGatewayReady(false); });
+    api.get("/shpay/status").then((r) => {
+      setShpayEnabled(!!r.data?.enabled);
+      setShpayReady(r.data?.gateway_ready !== false);
+    }).catch(() => { setShpayEnabled(false); setShpayReady(false); });
     api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
@@ -166,8 +172,9 @@ export default function Deposit() {
   }, [waitDep, waitState, refresh]);
 
   const isInstant = method === "instant-pay";
+  const isShpay = method === "shpay-pay";
   const selectedAcct = accounts.find((a) => a.id === method);
-  const hasAnyMethod = instantEnabled || accounts.length > 0;
+  const hasAnyMethod = instantEnabled || shpayEnabled || accounts.length > 0;
 
   const copy = async (val) => {
     try { await navigator.clipboard.writeText(String(val)); toast.success("Copied"); }
@@ -179,11 +186,11 @@ export default function Deposit() {
     if (!method) return toast.error("Choose a payment option");
     setLoading(true);
     try {
-      const backendMethod = isInstant ? "paynow-auto" : method;
+      const backendMethod = isInstant ? "paynow-auto" : (isShpay ? "shpay-auto" : method);
       const { data } = await api.post("/deposits", { amount: Number(amount), method: backendMethod, reference });
-      if (data.gateway === "paynow") {
-        // Always open the in-app drawer for PayNow — either shows the iframe (happy path)
-        // or a clean inline "gateway unavailable" message (blocked path).
+      if (data.gateway === "paynow" || data.gateway === "shpay") {
+        // Both gateways return either a checkout URL (happy path) or a
+        // gateway_ready:false response — open the same in-app drawer for both.
         setWaitDep(data);
         setWaitState(data.gateway_ready === false ? "unavailable" : "waiting");
         setVerifyRevealed(false);
@@ -283,6 +290,25 @@ export default function Deposit() {
                 </span>
               </div>
             )}
+            {shpayEnabled && (
+              <div className="relative">
+                <MethodBlock
+                  selected={isShpay}
+                  onClick={() => setMethod("shpay-pay")}
+                  tone={{ bg: "#8B5CF6", fg: "#FFFFFF" }}
+                  icon={<Zap className="w-5 h-5" />}
+                  label="Quick Pay"
+                  sub="Bank transfer"
+                  testid="deposit-method-shpay"
+                />
+                <span
+                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#8B5CF6] text-white shadow"
+                  data-testid="deposit-shpay-badge"
+                >
+                  Auto
+                </span>
+              </div>
+            )}
             {accounts.map((a) => {
               const brand = bankTint(a.bank_name);
               return (
@@ -303,7 +329,7 @@ export default function Deposit() {
       )}
 
       {/* Selected manual account detail */}
-      {selectedAcct && !isInstant && (
+      {selectedAcct && !isInstant && !isShpay && (
         <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-4" data-testid="deposit-selected-panel">
           <div className="flex items-center gap-3">
             <div
