@@ -129,9 +129,10 @@ class TestShpayWebhook:
                 "transStatus": "SUCCESS", "transAmt": "100", "sign": "DEADBEEF"}
         r = requests.post(f"{BASE_URL}/api/shpay/webhook", json=body)
         assert r.status_code == 200, r.text
-        # Response body is a bare string
-        txt = r.text.strip().strip('"')
-        assert txt == "SIGNATURE_INVALID", f"expected SIGNATURE_INVALID, got: {r.text!r}"
+        # STRICT: raw plain-text body, no JSON quoting
+        assert r.text == "SIGNATURE_INVALID", f"expected raw SIGNATURE_INVALID, got: {r.text!r}"
+        ct = r.headers.get("content-type", "").lower()
+        assert "text/plain" in ct, f"expected text/plain content-type, got: {ct}"
 
     def test_webhook_valid_sign_unknown_order(self):
         sign_key = os.environ.get("SHPAY_SIGN_KEY") or ""
@@ -145,8 +146,9 @@ class TestShpayWebhook:
         params["sign"] = shpay.sign(params, sign_key)
         r = requests.post(f"{BASE_URL}/api/shpay/webhook", json=params)
         assert r.status_code == 200, r.text
-        txt = r.text.strip().strip('"')
-        assert txt.upper() == "OK", f"expected OK, got: {r.text!r}"
+        assert r.text == "OK", f"expected raw OK, got: {r.text!r}"
+        ct = r.headers.get("content-type", "").lower()
+        assert "text/plain" in ct, f"expected text/plain content-type, got: {ct}"
 
 
 # ------------------------- Admin shpay-payout 404 -------------------------

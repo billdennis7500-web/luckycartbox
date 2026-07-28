@@ -18,6 +18,7 @@ import jwt
 from bson import ObjectId
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 
@@ -926,17 +927,20 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
     if shpay.enabled() and (payload.method or "").startswith("shpay"):
         res = await db.deposits.insert_one(doc)
         out_trade_no = f"S{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
+        # Defensive lookups — user record may be missing name / email in edge cases
+        # (registration-in-progress, admin-created placeholder, migrated data).
+        u_phone = (user.get("phone") or "").lstrip("+")
+        u_name  = user.get("name") or "User"
+        u_email = user.get("email") or f"{u_phone or 'user'}@naijainvest.local"
         try:
             sp = await shpay.create_payin(
                 out_trade_no,
                 float(payload.amount),
-                payer_name=user.get("name") or "User",
-                payer_mobile=(user.get("phone") or "").lstrip("+")[-10:],
-                # SHPAY requires an email; fall back to a synthesized one so users
-                # who signed up via phone-only can still transact.
-                payer_email=(user.get("email") or f"{user['phone'].lstrip('+')}@naijainvest.local"),
+                payer_name=u_name,
+                payer_mobile=u_phone[-10:] if u_phone else None,
+                payer_email=u_email,
                 subject="Wallet deposit",
-                body=f"NaijaInvest deposit for {user.get('name')}",
+                body=f"NaijaInvest deposit for {u_name}",
             )
         except Exception as e:
             logger.exception("SHPAY create_payin failed")
@@ -1931,13 +1935,15 @@ async def admin_shpay_health(admin: dict = Depends(get_admin_user)):
     }
 
 
-@api.post("/shpay/webhook")
+@api.post("/shpay/webhook", response_class=PlainTextResponse)
 async def shpay_webhook(request: Request):
     """Async callback endpoint SHPAY hits when a payin or payout settles.
 
-    Signature is verified via `shpay.verify_callback_signature`. Response must be
-    literally "OK" or "SUCCESS" (case-insensitive) — anything else triggers
-    SHPAY's retry schedule (60s / 600s / 3600s).
+    Signature is verified via `shpay.verify_callback_signature`. Response body
+    must be the literal string 'OK' or 'SUCCESS' (case-insensitive) — anything
+    else triggers SHPAY's retry schedule (60s / 600s / 3600s). We use
+    PlainTextResponse (not the default JSON) so the response body is the raw
+    string, not a JSON-quoted string.
 
     Idempotency: we key on `outTradeNo` and only credit / settle once. If the
     deposit is already `approved` or the withdrawal is already `approved` we
@@ -1946,10 +1952,8 @@ async def shpay_webhook(request: Request):
     body = await request.json()
     logger.info("SHPAY webhook received: %s", body)
     if not shpay.verify_callback_signature(body):
-        # Return 200 with a body that ISN'T OK/SUCCESS — SHPAY will retry which
-        # gives us a shot at recovering after a config fix.
         logger.warning("SHPAY webhook: signature mismatch, refusing to process")
-        return "SIGNATURE_INVALID"
+        return PlainTextResponse("SIGNATURE_INVALID", status_code=200)
 
     event = (body.get("event") or "").upper()
     out_trade_no = body.get("outTradeNo") or ""
