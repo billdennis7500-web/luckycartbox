@@ -137,6 +137,8 @@ export default function Deposit() {
   const [shpayReady, setShpayReady] = useState(true);
   const [onesspayEnabled, setOnesspayEnabled] = useState(false);
   const [onesspayReady, setOnesspayReady] = useState(true);
+  const [juntbestEnabled, setJuntbestEnabled] = useState(false);
+  const [juntbestReady, setJuntbestReady] = useState(true);
   const [initialLoad, setInitialLoad] = useState(true);
   const [quickAmounts, setQuickAmounts] = useState([500, 1000, 2000, 5000, 10000, 20000]);
 
@@ -166,6 +168,10 @@ export default function Deposit() {
       setOnesspayEnabled(!!r.data?.enabled);
       setOnesspayReady(r.data?.gateway_ready !== false);
     }).catch(() => { setOnesspayEnabled(false); setOnesspayReady(false); });
+    api.get("/juntbest/status").then((r) => {
+      setJuntbestEnabled(!!r.data?.enabled);
+      setJuntbestReady(r.data?.gateway_ready !== false);
+    }).catch(() => { setJuntbestEnabled(false); setJuntbestReady(false); });
     api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
@@ -196,8 +202,9 @@ export default function Deposit() {
   const isInstant = method === "instant-pay";
   const isShpay = method === "shpay-pay";
   const isOnesspay = method === "onesspay-pay";
+  const isJuntbest = method === "juntbest-pay";
   const selectedAcct = accounts.find((a) => a.id === method);
-  const hasAnyMethod = instantEnabled || shpayEnabled || onesspayEnabled || accounts.length > 0;
+  const hasAnyMethod = instantEnabled || shpayEnabled || onesspayEnabled || juntbestEnabled || accounts.length > 0;
 
   const copy = async (val) => {
     try { await navigator.clipboard.writeText(String(val)); toast.success("Copied"); }
@@ -209,7 +216,7 @@ export default function Deposit() {
     if (!method) return toast.error("Choose a payment option");
     setLoading(true);
     try {
-      const backendMethod = isInstant ? "paynow-auto" : (isShpay ? "shpay-auto" : (isOnesspay ? "onesspay-auto" : method));
+      const backendMethod = isInstant ? "paynow-auto" : (isShpay ? "shpay-auto" : (isOnesspay ? "onesspay-auto" : (isJuntbest ? "juntbest-auto" : method)));
       const { data } = await api.post("/deposits", { amount: Number(amount), method: backendMethod, reference });
       if (data.gateway === "paynow" || data.gateway === "shpay" || data.gateway === "onesspay") {
         // All auto-flow gateways return either a checkout URL (happy path) or a
@@ -352,6 +359,25 @@ export default function Deposit() {
                 </span>
               </div>
             )}
+            {juntbestEnabled && (
+              <div className="relative min-w-0">
+                <MethodBlock
+                  selected={isJuntbest}
+                  onClick={() => setMethod("juntbest-pay")}
+                  tone={{ bg: "#10B981", fg: "#FFFFFF" }}
+                  icon={<Zap className="w-5 h-5" />}
+                  label="Smart Pay"
+                  sub="Bank transfer"
+                  testid="deposit-method-juntbest"
+                />
+                <span
+                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#10B981] text-white shadow"
+                  data-testid="deposit-juntbest-badge"
+                >
+                  Auto
+                </span>
+              </div>
+            )}
             {accounts.map((a) => {
               const brand = bankTint(a.bank_name);
               return (
@@ -373,7 +399,7 @@ export default function Deposit() {
       )}
 
       {/* Selected manual account detail */}
-      {selectedAcct && !isInstant && !isShpay && !isOnesspay && (
+      {selectedAcct && !isInstant && !isShpay && !isOnesspay && !isJuntbest && (
         <div
           className="relative rounded-2xl overflow-hidden"
           data-testid="deposit-selected-panel"
@@ -460,7 +486,7 @@ export default function Deposit() {
               )}
             </div>
 
-            {!isInstant && !isShpay && !isOnesspay && selectedAcct && (
+            {!isInstant && !isShpay && !isOnesspay && !isJuntbest && selectedAcct && (
               <div>
                 <Label>Transaction reference <span className="text-[var(--nb-muted)]">(optional)</span></Label>
                 <Input
@@ -484,7 +510,7 @@ export default function Deposit() {
                 boxShadow: "0 10px 28px -8px rgba(245,197,24,0.55)",
               }}
             >
-              {loading ? "Processing…" : (isInstant || isShpay || isOnesspay) ? "Pay instantly" : "Submit for approval"}
+              {loading ? "Processing…" : (isInstant || isShpay || isOnesspay || isJuntbest) ? "Pay instantly" : "Submit for approval"}
               {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
           </form>

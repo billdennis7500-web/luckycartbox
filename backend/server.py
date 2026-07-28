@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 import paynow
 import shpay
 import onesspay
+import juntbest
 from nigerian_banks import filter_popular
 from pymongo import ReturnDocument
 
@@ -204,12 +205,13 @@ DEFAULT_SETTINGS = {
         "paynow":   {"payin": True, "payout": True},
         "shpay":    {"payin": True, "payout": True},
         "onesspay": {"payin": True, "payout": True},
+        "juntbest": {"payin": True, "payout": True},
     },
 }
 
 
 # Recognised gateway keys — used to validate admin toggle input.
-GATEWAY_KEYS = ("paynow", "shpay", "onesspay")
+GATEWAY_KEYS = ("paynow", "shpay", "onesspay", "juntbest")
 
 
 async def get_gateway_toggles() -> dict:
@@ -233,6 +235,7 @@ def _gateway_module_enabled(gateway: str) -> bool:
     if gateway == "paynow":   return paynow.enabled()
     if gateway == "shpay":    return shpay.enabled()
     if gateway == "onesspay": return onesspay.enabled()
+    if gateway == "juntbest": return juntbest.enabled()
     return False
 
 
@@ -268,11 +271,13 @@ def classify_gateway_error(gateway_name: str, raw_msg: str) -> str:
         "paynow":   "Instant Pay",
         "shpay":    "Quick Pay",
         "onesspay": "Fast Pay",
+        "juntbest": "Smart Pay",
     }.get(gateway_name, gateway_name)
     dashboard = {
         "paynow":   "PayNow",
         "shpay":    "SHPAY",
         "onesspay": "1SSPay",
+        "juntbest": "JuntBest",
     }.get(gateway_name, gateway_name)
 
     # Merchant status
@@ -320,9 +325,10 @@ def classify_gateway_error(gateway_name: str, raw_msg: str) -> str:
 # Bank code translation between gateways
 # ---------------------------------------------------------------------------
 # Each gateway uses its own bank code scheme:
-#   • PayNow  : NG0xxx  (e.g. OPay = NG0204)
-#   • SHPAY   : 6-digit (e.g. OPay = 100004)
-#   • 1SSPay  : NR0xxx  (e.g. OPay = NR0140)
+#   • PayNow   : NG0xxx    (e.g. OPay = NG0204)
+#   • SHPAY    : 6-digit   (e.g. OPay = 100004)
+#   • 1SSPay   : NR0xxx    (e.g. OPay = NR0140)
+#   • JuntBest : 80000xxx  (e.g. OPay = 80000030)
 # The user's bank_account is bound with ONE code (usually PayNow's). When we
 # route a payout through a different gateway, we translate by BANK NAME.
 
@@ -347,6 +353,8 @@ async def translate_bank_code(bank_name: str, target_gateway: str,
     if current_code:
         if target_gateway == "paynow"   and current_code.startswith("NG0"):  return current_code
         if target_gateway == "onesspay" and current_code.startswith("NR0"):  return current_code
+        if target_gateway == "juntbest" and current_code.startswith("80000") and len(current_code) == 8:
+            return current_code
         if target_gateway == "shpay"    and current_code.isdigit() and 4 <= len(current_code) <= 6:
             return current_code
     key = _normalize_bank_name(bank_name)
@@ -358,6 +366,16 @@ async def translate_bank_code(bank_name: str, target_gateway: str,
                 return b["code"]
         # fuzzy fallback — substring match either direction
         for b in onesspay.NIGERIAN_BANKS:
+            nb = _normalize_bank_name(b["name"])
+            if key in nb or nb in key:
+                return b["code"]
+        return None
+    if target_gateway == "juntbest":
+        for b in juntbest.NIGERIAN_BANKS:
+            if _normalize_bank_name(b["name"]) == key:
+                return b["code"]
+        # fuzzy fallback — substring match either direction
+        for b in juntbest.NIGERIAN_BANKS:
             nb = _normalize_bank_name(b["name"])
             if key in nb or nb in key:
                 return b["code"]
@@ -405,7 +423,7 @@ async def dispatch_payout_via_enabled_gateway(w: dict, note: str = "") -> dict:
     original_code = w.get("bank_code")
     bank_name = w.get("bank_name") or ""
 
-    priority = ["paynow", "shpay", "onesspay"]
+    priority = ["paynow", "shpay", "onesspay", "juntbest"]
     tried_any = False
     for gw in priority:
         if not await gateway_payout_allowed(gw):
@@ -426,6 +444,9 @@ async def dispatch_payout_via_enabled_gateway(w: dict, note: str = "") -> dict:
             if gw == "onesspay":
                 w_scoped["onesspay_bank_code"] = translated
                 return await _onesspay_payout_withdrawal(w_scoped, note=note)
+            if gw == "juntbest":
+                w_scoped["juntbest_bank_code"] = translated
+                return await _juntbest_payout_withdrawal(w_scoped, note=note)
         except HTTPException as e:
             errors.append(f"{gw}: {e.detail}")
             logger.info("Payout via %s failed for withdrawal %s: %s", gw, w["_id"], e.detail)
@@ -539,6 +560,7 @@ async def startup():
     asyncio.create_task(_paynow_reconcile_cron())
     asyncio.create_task(_shpay_reconcile_cron())
     asyncio.create_task(_onesspay_reconcile_cron())
+    asyncio.create_task(_juntbest_reconcile_cron())
 
 
 async def _paynow_reconcile_cron():
@@ -669,6 +691,111 @@ async def reconcile_pending_onesspay_withdrawals() -> int:
             await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
                                   "Withdrawal failed - refunded (1SSPay reconciled)",
                                   {"withdrawal_id": str(w["_id"]), "gateway": "onesspay"})
+    return settled
+
+
+# --- JuntBest reconciliation cron ---------------------------------------
+async def _juntbest_reconcile_cron():
+    """Every 5 minutes, poll JuntBest for pending payin/payout orders and settle
+    them. Safety net for missed JuntBest webhooks (same pattern as the other
+    gateways). Staggered start so we don't hammer the proxy on boot."""
+    await asyncio.sleep(105)
+    while True:
+        try:
+            if juntbest.enabled():
+                await reconcile_pending_juntbest_deposits()
+                await reconcile_pending_juntbest_withdrawals()
+        except Exception:
+            logger.exception("juntbest reconcile cron error")
+        await asyncio.sleep(5 * 60)
+
+
+async def reconcile_pending_juntbest_deposits() -> int:
+    """Query JuntBest for pending juntbest deposits and credit any that show status=1."""
+    pending = await db.deposits.find({"gateway": "juntbest", "status": "pending"}).to_list(200)
+    credited = 0
+    for dep in pending:
+        order_sn = dep.get("merchant_order_no")
+        if not order_sn:
+            continue
+        try:
+            resp = await juntbest.query_payin(order_sn)
+        except Exception:
+            logger.exception("JuntBest query_payin failed for %s", order_sn)
+            continue
+        if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
+            continue
+        data = resp.get("data") or {}
+        status = str(data.get("status") or "")
+        if status == "1":  # success
+            amount_real = float(data.get("amount") or dep["amount"] or 0)
+            updated = await db.deposits.find_one_and_update(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data,
+                          "settled_amount": amount_real,
+                          "reconciled": True}},
+                return_document=ReturnDocument.AFTER,
+            )
+            if not updated:
+                continue
+            credit_amount = amount_real if amount_real > 0 else float(dep["amount"])
+            await db.users.update_one({"_id": dep["user_id"]},
+                                      {"$inc": {"wallet_balance": credit_amount}})
+            await add_transaction(dep["user_id"], "deposit", credit_amount,
+                                  "Deposit auto-credited (JuntBest reconciled)",
+                                  {"deposit_id": str(dep["_id"]), "gateway": "juntbest"})
+            logger.info("JuntBest reconcile credited user=%s amount=₦%.2f dep=%s",
+                        dep["user_id"], credit_amount, dep["_id"])
+            credited += 1
+        elif status == "9":  # failed
+            await db.deposits.update_one(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data,
+                          "gateway_error": data.get("message") or "JuntBest reported failure"}},
+            )
+    return credited
+
+
+async def reconcile_pending_juntbest_withdrawals() -> int:
+    """Query JuntBest for withdrawals in `processing` and settle them."""
+    processing = await db.withdrawals.find({"gateway": "juntbest", "status": "processing"}).to_list(200)
+    settled = 0
+    for w in processing:
+        order_sn = w.get("merchant_order_no")
+        if not order_sn:
+            continue
+        try:
+            resp = await juntbest.query_payout(order_sn)
+        except Exception:
+            logger.exception("JuntBest query_payout failed for %s", order_sn)
+            continue
+        if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
+            continue
+        data = resp.get("data") or {}
+        status = str(data.get("status") or "")
+        if status == "1":  # success
+            await db.withdrawals.update_one(
+                {"_id": w["_id"], "status": "processing"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data, "reconciled": True}},
+            )
+            await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                          "Withdrawal paid out (JuntBest reconciled)")
+            settled += 1
+        elif status == "9":  # failed
+            await db.users.update_one({"_id": w["user_id"]},
+                                      {"$inc": {"wallet_balance": float(w["amount"])}})
+            await db.withdrawals.update_one(
+                {"_id": w["_id"], "status": "processing"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": data,
+                          "gateway_error": data.get("message") or "JuntBest reported failure"}},
+            )
+            await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
+                                  "Withdrawal failed - refunded (JuntBest reconciled)",
+                                  {"withdrawal_id": str(w["_id"]), "gateway": "juntbest"})
     return settled
 
 
@@ -1238,7 +1365,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
 
     # If a payment account id was chosen, enrich with bank details so the
     # admin table can show "which account did the user try to pay into".
-    if payload.method and not any(payload.method.startswith(p) for p in ("paynow", "shpay", "onesspay")):
+    if payload.method and not any(payload.method.startswith(p) for p in ("paynow", "shpay", "onesspay", "juntbest")):
         try:
             pa = await db.payment_accounts.find_one({"_id": oid(payload.method)})
         except Exception:
@@ -1471,6 +1598,68 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         d = await db.deposits.find_one({"_id": res.inserted_id})
         return clean(d) | {"user_id": str(d["user_id"])}
 
+    # JuntBest auto-flow — fourth gateway. Users pick method "juntbest-pay".
+    if juntbest.enabled() and (payload.method or "").startswith("juntbest"):
+        res = await db.deposits.insert_one(doc)
+        order_sn = f"JB{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
+        u_phone = (user.get("phone") or "").lstrip("+")
+        u_name  = user.get("name") or "User"
+        u_email = user.get("email") or f"{u_phone or 'user'}@naijainvest.local"
+        redirect_url = (os.environ.get("FRONTEND_URL") or "").rstrip("/") + "/deposit"
+        try:
+            resp = await juntbest.create_payin(
+                order_sn=order_sn,
+                amount=float(payload.amount),
+                name=u_name,
+                phone=u_phone[-10:] if u_phone else "0000000000",
+                email=u_email,
+                remark=f"NaijaInvest deposit for {u_name}",
+                redirect_url=redirect_url,
+            )
+        except Exception as e:
+            logger.exception("JuntBest create_payin failed")
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
+            raise HTTPException(400, "JuntBest is not reachable right now. Please try another payment option.")
+
+        # JuntBest success is code == 0. Anything else = declined.
+        if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
+            gateway_error = resp.get("message") or "JuntBest declined the order"
+            await db.deposits.update_one({"_id": res.inserted_id},
+                                         {"$set": {"status": "failed",
+                                                   "gateway_error": gateway_error,
+                                                   "gateway_response": resp}})
+            outbound_ip = "unknown"
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as _c:
+                    r = await _c.get("https://api.ipify.org")
+                    outbound_ip = r.text.strip() or "unknown"
+            except Exception:
+                pass
+            d = await db.deposits.find_one({"_id": res.inserted_id})
+            return clean(d) | {
+                "user_id": str(d["user_id"]),
+                "gateway": "juntbest",
+                "checkout_url": None,
+                "gateway_ready": False,
+                "outbound_ip": outbound_ip,
+                "gateway_message": classify_gateway_error("juntbest", gateway_error),
+            }
+
+        data = resp.get("data") or {}
+        checkout_url = data.get("pay_url") or data.get("url")
+        platform_osn = data.get("platform_osn")
+        await db.deposits.update_one(
+            {"_id": res.inserted_id},
+            {"$set": {"gateway": "juntbest",
+                      "merchant_order_no": order_sn,
+                      "platform_order_no": platform_osn,
+                      "checkout_url": checkout_url,
+                      "gateway_response": resp}},
+        )
+        d = await db.deposits.find_one({"_id": res.inserted_id})
+        return clean(d) | {"user_id": str(d["user_id"])}
+
     # Manual flow (existing behavior)
     res = await db.deposits.insert_one(doc)
     return clean(await db.deposits.find_one({"_id": res.inserted_id}))
@@ -1616,6 +1805,45 @@ async def _onesspay_payout_withdrawal(w: dict, note: str = "") -> dict:
             "gateway": "onesspay",
             "merchant_order_no": order_no,
             "platform_order_no": data.get("payNo"),
+            "gateway_response": resp,
+        }},
+    )
+    return resp
+
+
+async def _juntbest_payout_withdrawal(w: dict, note: str = "") -> dict:
+    """Trigger a JuntBest payout for a withdrawal (net of fee). Raises on gateway error.
+
+    JuntBest uses 8-digit `80000xxx` bank codes. When the withdrawal's stored
+    bank_code is in a different scheme, translate_bank_code() (in the dispatcher)
+    already resolved it to `w["juntbest_bank_code"]` before calling us.
+    """
+    payout_amount = float(w.get("payout_amount") or w.get("amount") or 0)
+    order_sn = f"JW{str(w['_id'])[-15:]}{int(datetime.now().timestamp())}"
+    bank_code = w.get("juntbest_bank_code") or w.get("bank_code") or ""
+    if not bank_code:
+        raise HTTPException(400, "This withdrawal has no bank code — user must re-bind their bank first.")
+    resp = await juntbest.create_payout(
+        order_sn=order_sn,
+        amount=payout_amount,
+        name=w["account_name"],
+        account=w["account_number"],
+        bank_code=bank_code,
+        remark=note or f"NaijaInvest payout for {w.get('user_name') or 'user'}",
+    )
+    # JuntBest returns {code: 0, message, data:{platform_osn,...}}. Success is 0.
+    if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
+        raise HTTPException(400, f"JuntBest declined: {resp.get('message') or 'unknown'}")
+    data = resp.get("data") or {}
+    await db.withdrawals.update_one(
+        {"_id": w["_id"]},
+        {"$set": {
+            "status": "processing",
+            "processed_at": now_utc().isoformat(),
+            "admin_note": note or "",
+            "gateway": "juntbest",
+            "merchant_order_no": order_sn,
+            "platform_order_no": data.get("platform_osn"),
             "gateway_response": resp,
         }},
     )
@@ -2631,6 +2859,35 @@ async def onesspay_status(user: dict = Depends(get_current_user)):
     }
 
 
+@api.get("/juntbest/status")
+async def juntbest_status(user: dict = Depends(get_current_user)):
+    """Lightweight probe used by the Deposit page to decide whether to render the
+    JuntBest Smart Pay tile."""
+    if not juntbest.enabled() or not await gateway_payin_allowed("juntbest"):
+        return {"enabled": False, "gateway_ready": False, "reason": "disabled"}
+    # Ping /balance as a cheap connectivity + auth check. code=0 → live.
+    try:
+        resp = await juntbest.get_balance()
+    except Exception:
+        return {"enabled": True, "gateway_ready": False, "reason": "unreachable"}
+    code = int(resp.get("code") if resp.get("code") is not None else -1)
+    return {
+        "enabled": True,
+        "gateway_ready": code == 0,
+        "message": resp.get("message") if code != 0 else None,
+        "code": code,
+    }
+
+
+@api.get("/juntbest/banks")
+async def juntbest_banks(user: dict = Depends(get_current_user)):
+    """Static bank list (80000xxx codes)."""
+    if not juntbest.enabled():
+        return {"enabled": False, "gateway_ready": False, "data": []}
+    return {"enabled": True, "gateway_ready": True, "data": juntbest.list_banks()}
+
+
+
 @api.get("/onesspay/banks")
 async def onesspay_banks(user: dict = Depends(get_current_user)):
     """Static bank list (NR0xxx codes) — the docs don't ship a /banks endpoint."""
@@ -2797,6 +3054,130 @@ async def onesspay_payout_webhook(request: Request):
                               "Withdrawal rejected - refunded (1SSPay)",
                               {"withdrawal_id": str(w["_id"]), "gateway": "onesspay"})
     return "success"
+
+
+# ---------------------------------------------------------------------------
+# JuntBest webhooks + admin balance
+# ---------------------------------------------------------------------------
+@api.get("/admin/juntbest-balance")
+async def admin_juntbest_balance(admin: dict = Depends(get_admin_user)):
+    outbound_ip = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            r = await c.get("https://api.ipify.org")
+            outbound_ip = r.text.strip() or "unknown"
+    except Exception:
+        pass
+    if not juntbest.enabled():
+        return {"enabled": False, "outbound_ip": outbound_ip, "reason": "not configured"}
+    try:
+        bal = await juntbest.get_balance()
+    except Exception as e:
+        return {"enabled": True, "outbound_ip": outbound_ip, "error": str(e)}
+    return {"enabled": True, "outbound_ip": outbound_ip, "balance_response": bal}
+
+
+@api.post("/juntbest/webhook/payin", response_class=PlainTextResponse)
+async def juntbest_payin_webhook(request: Request):
+    """JuntBest payin callback. JSON body. Response MUST be the literal string
+    `SUCCESS` (case-sensitive) — anything else triggers JuntBest's retry.
+
+    Signature: md5(ak + platform_osn + status + amount + sk).
+    Status codes: 0=pending, 1=success, 9=failed.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        # Some gateways POST form data on failure — try that too.
+        form = await request.form()
+        body = {k: str(v) for k, v in form.items()}
+    logger.info("JuntBest payin webhook received: %s", body)
+    if not juntbest.verify_payin_callback(body):
+        logger.warning("JuntBest payin webhook: signature mismatch")
+        return PlainTextResponse("signature_invalid", status_code=200)
+
+    order_sn = str(body.get("order_sn") or "")
+    status = str(body.get("status") or "").strip()
+    try:
+        amount = float(body.get("amount") or 0)
+    except Exception:
+        amount = 0.0
+
+    dep = await db.deposits.find_one({"merchant_order_no": order_sn, "gateway": "juntbest"})
+    if not dep:
+        logger.warning("JuntBest payin webhook: unknown order_sn=%s", order_sn)
+        return "SUCCESS"
+    if status == "1":  # success
+        if dep["status"] != "pending":
+            return "SUCCESS"
+        updated = await db.deposits.find_one_and_update(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body,
+                      "settled_amount": amount}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated:
+            return "SUCCESS"
+        credit_amount = amount if amount > 0 else float(dep["amount"])
+        await db.users.update_one({"_id": dep["user_id"]},
+                                  {"$inc": {"wallet_balance": credit_amount}})
+        await add_transaction(dep["user_id"], "deposit", credit_amount,
+                              "Deposit auto-credited (JuntBest)",
+                              {"deposit_id": str(dep["_id"]), "gateway": "juntbest"})
+        logger.info("JuntBest payin credited user=%s amount=₦%.2f dep=%s",
+                    dep["user_id"], credit_amount, dep["_id"])
+        return "SUCCESS"
+    if status == "9":  # failed
+        await db.deposits.update_one(
+            {"_id": dep["_id"], "status": "pending"},
+            {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                      "gateway_error": body.get("message") or "JuntBest reported failure",
+                      "gateway_callback": body}},
+        )
+    return "SUCCESS"
+
+
+@api.post("/juntbest/webhook/payout", response_class=PlainTextResponse)
+async def juntbest_payout_webhook(request: Request):
+    """JuntBest payout callback. JSON body. Response must be `SUCCESS`."""
+    try:
+        body = await request.json()
+    except Exception:
+        form = await request.form()
+        body = {k: str(v) for k, v in form.items()}
+    logger.info("JuntBest payout webhook received: %s", body)
+    if not juntbest.verify_payout_callback(body):
+        logger.warning("JuntBest payout webhook: signature mismatch")
+        return PlainTextResponse("signature_invalid", status_code=200)
+
+    order_sn = str(body.get("order_sn") or "")
+    status = str(body.get("status") or "").strip()
+    w = await db.withdrawals.find_one({"merchant_order_no": order_sn, "gateway": "juntbest"})
+    if not w:
+        logger.warning("JuntBest payout webhook: unknown order_sn=%s", order_sn)
+        return "SUCCESS"
+    if status == "1" and w["status"] not in {"approved"}:
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                      "gateway_callback": body}},
+        )
+        await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
+                                      "Withdrawal paid out (JuntBest)")
+    elif status == "9" and w["status"] not in {"approved", "rejected"}:
+        await db.withdrawals.update_one(
+            {"_id": w["_id"]},
+            {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                      "gateway_error": body.get("message") or "JuntBest reported failure",
+                      "gateway_callback": body}},
+        )
+        await db.users.update_one({"_id": w["user_id"]},
+                                  {"$inc": {"wallet_balance": float(w["amount"])}})
+        await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
+                              "Withdrawal rejected - refunded (JuntBest)",
+                              {"withdrawal_id": str(w["_id"]), "gateway": "juntbest"})
+    return "SUCCESS"
 
 
 class VerifyAccountIn(BaseModel):
@@ -3032,6 +3413,7 @@ class GatewayTogglesIn(BaseModel):
     paynow:   Optional[GatewayToggleIn] = None
     shpay:    Optional[GatewayToggleIn] = None
     onesspay: Optional[GatewayToggleIn] = None
+    juntbest: Optional[GatewayToggleIn] = None
 
 
 def _gateway_meta(gateway: str) -> dict:
@@ -3043,6 +3425,8 @@ def _gateway_meta(gateway: str) -> dict:
                      "configured": shpay.enabled()},
         "onesspay": {"label": "1SSPay — Fast Pay",      "color": "#F97316",
                      "configured": onesspay.enabled()},
+        "juntbest": {"label": "JuntBest — Smart Pay",   "color": "#10B981",
+                     "configured": juntbest.enabled()},
     }[gateway]
 
 

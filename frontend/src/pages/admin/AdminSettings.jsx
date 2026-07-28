@@ -283,7 +283,7 @@ function ServerIPCard() {
         <div>
           <h2 className="font-display text-lg font-600">Server IP for Merchant Whitelists</h2>
           <p className="text-xs text-[var(--nb-muted)] mt-1">
-            This is the single IP your payment gateways see. Whitelist it once at PayNow, SHPAY, and 1SSPay dashboards.
+            This is the single IP your payment gateways see. Whitelist it once at PayNow, SHPAY, 1SSPay, and JuntBest dashboards.
           </p>
         </div>
         <Button

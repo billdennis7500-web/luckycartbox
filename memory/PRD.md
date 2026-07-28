@@ -730,3 +730,51 @@ User asked to "create an app for the website" and replace the "Invest" quick act
 - Tile styled correctly in both dark (gold gradient icon on navy card) and light (gold gradient icon on white card) modes.
 - Fallback toast fires when browser has no deferred install event (verified in Chromium test env).
 
+
+## 2026-07-28 · JuntBest — fourth payment gateway (collections + payouts)
+
+User added a fourth payment gateway ("JuntBest — Smart Pay") with real merchant credentials. Integrated end-to-end for both collections and payouts, with an admin toggle for each.
+
+### Credentials (in `/app/backend/.env`)
+- `JUNTBEST_MERCHANT_SN=20260710-hywmu`
+- `JUNTBEST_ACCESS_KEY=b932d8ec105ca82e824bb73d20aaaf8c`
+- `JUNTBEST_SECRET_KEY=45b795a648df86fdab52b4e97e2eca0f`
+- `JUNTBEST_BASE_URL=https://ngn.junt.best`
+- `JUNTBEST_PAYIN_NOTIFY_URL=…/api/juntbest/webhook/payin`
+- `JUNTBEST_PAYOUT_NOTIFY_URL=…/api/juntbest/webhook/payout`
+- Note: initial ak/sk order in the user's message was reversed — verified against the merchant's live `/gateway/balance/` endpoint (returned `Bas Signature` until swapped, then `code:0 balance:1692.16`).
+
+### Files added
+- `/app/backend/juntbest.py` — new SDK following the `paynow.py` / `shpay.py` / `onesspay.py` pattern. MD5 signatures for `payin`, `payincheck`, `payout`, `payoutcheck`, `balance`, `ngnva`, plus `verify_payin_callback` / `verify_payout_callback` helpers. Includes the full 142-entry Nigerian bank list with JuntBest's own `80000xxx` scheme.
+
+### Files updated
+- `/app/backend/.env` — added the 6 JuntBest env keys.
+- `/app/backend/server.py` — added:
+  - `import juntbest`
+  - `GATEWAY_KEYS = (…, "juntbest")`
+  - `DEFAULT_SETTINGS.gateway_toggles.juntbest` = `{payin: True, payout: True}`
+  - `_gateway_module_enabled` + `_gateway_meta` — added "JuntBest — Smart Pay" (green `#10B981`).
+  - `classify_gateway_error` — added the `juntbest` label mapping.
+  - `translate_bank_code` — new `juntbest` branch that resolves bank names to `80000xxx` codes (with fuzzy fallback). Fast-path for codes that already look like `80000xxx`.
+  - Payout dispatcher (`payout_withdrawal_via_gateway`) — appended `juntbest` to the priority list + calls new `_juntbest_payout_withdrawal()` helper.
+  - `_juntbest_payout_withdrawal()` — creates payout, treats `code:0` as success, stores `platform_osn`.
+  - `create_deposit` POST `/api/deposits` — new branch for `method.startswith("juntbest")` that calls `juntbest.create_payin()` and stores `checkout_url` / `platform_order_no`.
+  - `/api/juntbest/status` — probe endpoint for the frontend Deposit page (pings `/balance` to check credentials + connectivity).
+  - `/api/juntbest/banks` — static bank list.
+  - `/api/admin/juntbest-balance` — admin health probe returning outbound IP + balance.
+  - `/api/juntbest/webhook/payin` and `/api/juntbest/webhook/payout` — both verify signature, are idempotent, and respond with the required literal `"SUCCESS"` string.
+  - `_juntbest_reconcile_cron` + `reconcile_pending_juntbest_deposits` + `reconcile_pending_juntbest_withdrawals` — background reconciliation cron every 5 minutes (105s stagger from other crons) that polls `/payincheck` and `/payoutcheck` for stuck orders and credits/rejects them, same pattern as SHPAY/1SSPay.
+  - `GatewayTogglesIn` model — added `juntbest: Optional[GatewayToggleIn]`.
+
+### Frontend
+- `/app/frontend/src/pages/user/Deposit.jsx` — added `juntbestEnabled` / `juntbestReady` state, `/api/juntbest/status` probe, and a fourth `MethodBlock` labelled "Smart Pay" with the green tone (`#10B981`) matching the admin badge. Also extended the drawer/submit gating conditions (`isJuntbest`) so the reference field / "Pay instantly" copy behave correctly for JuntBest.
+- `/app/frontend/src/pages/admin/AdminSettings.jsx` — the whitelist copy now lists all 4 gateways (PayNow, SHPAY, 1SSPay, JuntBest). The gateway-toggle rows are auto-populated from `/api/admin/gateways` which already returns 4 rows (no manual JSX needed).
+
+### Verified live
+- `GET /api/juntbest/status` → `{enabled:true, gateway_ready:true, code:0}` (signature + credentials confirmed against live merchant).
+- `GET /api/admin/gateways` → returns 4 rows including `{key:"juntbest", payin:true, payout:true, configured:true, label:"JuntBest — Smart Pay"}`.
+- `POST /api/deposits {amount:500, method:"juntbest-pay"}` reached the JuntBest gateway; response was `9001: Gateway under maintenance` — this is a **merchant-side status** on JuntBest's dashboard, not a code bug (their `/balance` returns success with ₦1,692.16 available). The classifier surfaces a friendly "Smart Pay is momentarily unavailable (Gateway under maintenance…)" message.
+- Admin `/admin/settings` → Payments tab shows the 4th row `JU · JuntBest — Smart Pay · Configured` with both Collection and Payout toggles ON.
+- Deposit page (both themes) now shows 4 method tiles (Instant / Quick / Fast / **Smart**).
+- Outbound IP JuntBest sees is `46.20.101.18` (the IPRoyal static proxy). Whitelist that on the JuntBest merchant dashboard if they require IP restriction.
+
