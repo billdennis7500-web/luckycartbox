@@ -381,3 +381,19 @@ Deferred / follow-ups (from code review comments in iteration_14):
 - `server.py` is now >1900 lines — split into modules (auth, deposits, admin, shpay, paynow).
 - Consider `hmac.compare_digest` for the callback signature check.
 - Auto-reconciliation cron for stuck SHPAY transactions >30 min.
+
+
+## 2026-07-28 · IP whitelist follow-up + PayNow proactive re-probe
+
+### Context
+User whitelisted the pod's outbound IP (`34.16.56.64`) on **SHPAY** — Quick Pay is now fully live end-to-end (verified via live `POST /api/deposits {method:"shpay-auto"}` → real `cdncashierv2.ipays.world` checkout link + 92 banks visible via `/api/shpay/banks`). PayNow whitelist is still pending on the user's `merchant.paynow.money` dashboard.
+
+### Delivered
+- **PayNow `list_banks_cached()` accepts `force_probe=True`** — bypasses both the bank-list cache AND the 5-minute IP-block short-circuit.
+- **`GET /api/paynow/banks`** now proactively re-probes whenever the IP-block flag is set. Result: the instant the merchant whitelists their IP on PayNow, the very next deposit-page load flips Instant Pay to `gateway_ready: true` without waiting for the TTL to expire.
+- No frontend changes needed — Deposit page already calls `/paynow/banks` on mount, and the drawer's "Try again" button hits the same route.
+
+### Verified
+- Restart + fresh probe still correctly reports `gateway_ready: false, reason: gateway_ip_blocked` (PayNow's IP whitelist still pending).
+- `/api/shpay/status` returns `gateway_ready: true, bank_count: 92`.
+- Live `/api/deposits` with `method:"shpay-auto"` returns a real SHPAY cashier link with a virtual account issued.

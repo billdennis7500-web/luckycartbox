@@ -226,9 +226,14 @@ async def list_banks() -> Dict[str, Any]:
 _BANK_CACHE: Dict[str, Any] = {"data": None, "expires_at": 0.0}
 
 
-async def list_banks_cached(ttl_seconds: int = 300) -> Dict[str, Any]:
+async def list_banks_cached(ttl_seconds: int = 300, force_probe: bool = False) -> Dict[str, Any]:
+    """Return the cached banks list. If `force_probe=True`, bypass the cache and
+    also bypass the IP-block short-circuit — used by the /paynow/banks endpoint
+    so that as soon as the user whitelists their IP on the PayNow dashboard,
+    the very next dashboard refresh triggers a real call which clears the block
+    flag automatically (instead of waiting for the 5-minute TTL)."""
     now = time.time()
-    if _BANK_CACHE["data"] and _BANK_CACHE["expires_at"] > now:
+    if not force_probe and _BANK_CACHE["data"] and _BANK_CACHE["expires_at"] > now:
         return _BANK_CACHE["data"]
     fresh = await list_banks()
     if fresh.get("code") == 0 and fresh.get("data"):

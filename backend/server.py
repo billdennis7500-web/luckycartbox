@@ -1853,17 +1853,13 @@ async def user_paynow_banks(user: dict = Depends(get_current_user), all: bool = 
     # transient errors confuses users (they think the feature was removed).
     if not paynow.enabled():
         return {"enabled": False, "reason": "disabled", "gateway_ready": False, "data": []}
+    # If we previously flagged the IP as blocked, DO a real probe anyway so the
+    # dashboard recovers instantly the moment the merchant whitelists this pod's
+    # IP — waiting for the 5-min TTL felt broken to users. `force_probe=True`
+    # bypasses both the block short-circuit and the bank-list cache.
+    force = paynow.ip_blocked()
+    resp = await paynow.list_banks_cached(force_probe=force)
     if paynow.ip_blocked():
-        return {
-            "enabled": True,
-            "gateway_ready": False,
-            "reason": "gateway_ip_blocked",
-            "note": paynow.ip_block_note() or "Payment gateway is verifying server access.",
-            "data": [],
-        }
-    resp = await paynow.list_banks_cached()
-    if paynow.ip_blocked():
-        # The call we just made may have flipped the block state
         return {
             "enabled": True,
             "gateway_ready": False,
