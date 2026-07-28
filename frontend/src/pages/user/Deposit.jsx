@@ -32,60 +32,74 @@ function initials(s = "") {
   return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "BK";
 }
 
-/* -------------- payment method block -------------- */
+/* -------------- payment method block — gold ambient tile -------------- */
 function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
   return (
     <button
       type="button"
       onClick={onClick}
       data-testid={testid}
-      className={`relative rounded-xl px-2 py-2.5 border transition-all overflow-hidden text-left flex flex-col justify-between min-h-[92px] ${
-        selected
-          ? "border-[#0055FF] ring-2 ring-[#0055FF]/40 bg-[var(--nb-card)]"
-          : "border-[var(--nb-border)] bg-[var(--nb-card)] hover:border-[#0055FF]/50"
-      }`}
+      className={`relative rounded-xl overflow-hidden text-left flex flex-col justify-between min-h-[98px] transition-all card-hover`}
+      style={{
+        background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 55%,#0B0906 100%)",
+        boxShadow: selected
+          ? `0 6px 24px -8px ${tone.bg}bb, 0 0 0 2px ${tone.bg}`
+          : `0 4px 14px -6px ${tone.bg}55, 0 0 0 1px ${tone.bg}25`,
+      }}
     >
-      {/* ambient tint */}
-      <div
-        className="absolute -top-6 -right-6 w-20 h-20 rounded-full opacity-25 blur-2xl pointer-events-none"
-        style={{ background: tone.bg }}
-      />
-      <div className="relative flex items-start justify-between">
+      {/* Dashed accent line top */}
+      <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+           style={{ background: `repeating-linear-gradient(90deg, ${tone.bg} 0 6px, transparent 6px 12px)`, opacity: selected ? 0.9 : 0.5 }} />
+      {/* radial glow */}
+      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full opacity-25 blur-xl pointer-events-none"
+           style={{ background: tone.bg }} />
+      <div className="relative p-2.5 flex items-start justify-between">
         <div
-          className="w-8 h-8 rounded-lg grid place-items-center font-display font-800 text-[10px] shrink-0"
+          className="w-9 h-9 rounded-lg grid place-items-center font-display font-800 text-[11px] shrink-0 shadow-inner"
           style={{ background: tone.bg, color: tone.fg }}
         >
           {icon}
         </div>
         <span
-          className={`w-3.5 h-3.5 rounded-full border grid place-items-center shrink-0 ${
-            selected ? "bg-[#0055FF] border-[#0055FF]" : "border-[var(--nb-border)]"
-          }`}
+          className="w-4 h-4 rounded-full grid place-items-center shrink-0 transition-colors"
+          style={{
+            background: selected ? tone.bg : "transparent",
+            border: `1.5px solid ${selected ? tone.bg : "var(--nb-border)"}`,
+          }}
           aria-hidden
         >
-          {selected && <CheckCircle2 className="w-3 h-3 text-white" />}
+          {selected && <CheckCircle2 className="w-3 h-3" style={{ color: tone.fg }} />}
         </span>
       </div>
-      <div className="relative mt-1.5">
-        <div className="font-display font-700 text-[13px] leading-tight truncate">{label}</div>
+      <div className="relative px-2.5 pb-2.5 mt-1">
+        <div className="font-display font-800 text-[13px] leading-tight text-white truncate">{label}</div>
         <div className="text-[10px] text-[var(--nb-muted)] mt-0.5 truncate tabular">{sub}</div>
       </div>
     </button>
   );
 }
 
-/* -------------- quick amount chip -------------- */
+/* -------------- quick amount chip — gold aesthetic -------------- */
 function QuickAmount({ value, selected, onClick }) {
   return (
     <button
       type="button"
       onClick={() => onClick(value)}
       data-testid={`deposit-quick-${value}`}
-      className={`h-10 rounded-lg text-xs font-display font-700 tabular border transition-colors ${
+      className="h-11 rounded-full text-xs font-display font-800 tabular transition-all active:scale-[0.97]"
+      style={
         selected
-          ? "bg-[#0055FF] text-white border-[#0055FF]"
-          : "bg-[var(--nb-card)] border-[var(--nb-border)] text-white hover:border-[#0055FF]/40"
-      }`}
+          ? {
+              background: "linear-gradient(135deg,#FFE580,#F5C518)",
+              color: "#1A1508",
+              boxShadow: "0 6px 18px -4px rgba(245,197,24,0.55)",
+            }
+          : {
+              background: "var(--nb-card)",
+              color: "white",
+              border: "1px solid rgba(245,197,24,0.28)",
+            }
+      }
     >
       ₦{value.toLocaleString()}
     </button>
