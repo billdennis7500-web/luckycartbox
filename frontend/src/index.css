@@ -5,11 +5,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
 
 /* ---------------------------------------------------------------------------
-   Theme surface tokens (dark-only)
+   Theme surface tokens (dark default + opt-in light overrides)
    ---------------------------------------------------------------------------
    Every hardcoded hex used across the app (bg-[#0B1524], text-[#94A3B8], etc.)
    has been rewritten to bg-[var(--nb-card)] / text-[var(--nb-muted)] so future
-   theming is one place. Light mode was rolled back per user feedback.
+   theming is one place. Light overrides live under `html.theme-light` and are
+   toggled from `context/ThemeContext.jsx` via the sun/moon icon in the header.
+   The dark-gold ambient cards (linear-gradient(#1E1B0A → #0B0906)) stay dark
+   in both themes on purpose — that gold aesthetic IS the brand and reads best
+   on either surface. Only page/surface tokens flip.
    -------------------------------------------------------------------------- */
 :root {
     --nb-page:   #020813;
@@ -22,6 +26,21 @@
     --nb-scroll-thumb: #1A2B44;
     --nb-scroll-thumb-hover: #26406a;
     color-scheme: dark;
+}
+
+html.theme-light {
+    /* Warm neutral light palette — cream/parchment vibe that pairs with the
+       dark-gold ambient cards without white-on-white glare. */
+    --nb-page:   #FBF7EE;
+    --nb-card:   #FFFFFF;
+    --nb-card2:  #F5EFDF;
+    --nb-border: #E5D9B8;
+    --nb-text:   #1A1508;
+    --nb-muted:  #6B5E42;
+    --nb-scroll-track: #F5EFDF;
+    --nb-scroll-thumb: #E5D9B8;
+    --nb-scroll-thumb-hover: #C9BB93;
+    color-scheme: light;
 }
 
 @layer base {
@@ -120,4 +139,39 @@ h1, h2, h3, h4, h5, h6 {
 .card-hover:hover {
     transform: translateY(-2px);
     border-color: #0055FF;
+}
+
+/* ---------------------------------------------------------------------------
+   Light-mode overrides — only kick in when `html.theme-light` is set.
+   ---------------------------------------------------------------------------
+   Strategy:
+   1. Flip page-level `text-white` to the dark parchment text token.
+   2. Preserve `text-white` inside every dark-gold AmbientCard by matching the
+      React-converted inline gradient string (React lowercases and converts
+      hex → rgb, so we match `rgb(30, 27, 10)` = #1E1B0A used by every card).
+   3. Nudge muted-text contrast so the light theme meets AA.
+   -------------------------------------------------------------------------- */
+html.theme-light .text-white {
+    color: var(--nb-text) !important;
+}
+html.theme-light [style*="rgb(30, 27, 10)"] .text-white,
+html.theme-light [style*="rgb(30, 27, 10)"] h1,
+html.theme-light [style*="rgb(30, 27, 10)"] h2,
+html.theme-light [style*="rgb(30, 27, 10)"] h3,
+html.theme-light [data-nb-ambient="gold"] .text-white,
+html.theme-light [data-nb-ambient="gold"] h1,
+html.theme-light [data-nb-ambient="gold"] h2,
+html.theme-light [data-nb-ambient="gold"] h3 {
+    color: #F8FAFC !important;
+}
+/* Dialog / drawer overlays that use plain black background — soften in light */
+html.theme-light input,
+html.theme-light textarea,
+html.theme-light select {
+    color: var(--nb-text);
+}
+/* Card hover accent — flip to gold in light mode so the blue outline doesn't
+   clash with the parchment surface. */
+html.theme-light .card-hover:hover {
+    border-color: #F5C518;
 }

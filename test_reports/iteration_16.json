@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 16 tested (a) UI redesign for Deposit, Referrals, Marketplace confirm-invest drawer, Investments list, and UserLayout header/bottom-nav (b) polished Light Mode toggle from both the user-side header AND the admin header, and (c) the /api/investments backend enrichment (product_image_url + product_tier). All redesign items landed correctly. Light mode toggle works from both surfaces — html.theme-light class, parchment body bg (rgb(251,247,238)), and localStorage nb-theme='light' persist across reloads. Text inside dark-gold ambient cards correctly stays white while page-level text-white flips to dark parchment. One design issue found in ADMIN panel light mode: stat-card values and payment-gateway list content are nearly invisible (very low contrast) — the user-side dashboard light mode is fine because it uses AmbientCards that remain dark, but the admin panel uses plain nb-card surfaces whose inline/child text colors are not fully covered by the current light-mode overrides in index.css.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Admin panel (/admin) in Light Mode",
+        "issues": [
+          "Stat card values (Total Users: 14, Invested Users: 2, Pending Deposits: 13, Total Deposited ₦3,000, etc.) render in a near-white color on the parchment background — practically invisible / fails AA contrast. Root cause: KPI numbers are wrapped in elements that use color tokens other than plain `text-white` (likely `text-[var(--nb-text)]` with a color still tuned for dark bg, or hardcoded hex). The existing `html.theme-light .text-white` rule does not catch them.",
+          "'Payment gateway' row (PayNow · Merchant 10205), gateway balance, and Quick-action tile labels are also washed out in light mode for the same reason.",
+          "The gateway icon glyph (bolt) becomes invisible white-on-white."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_investments_enrichment.py",
+    "/app/test_reports/pytest/investments_enrich_iter16.xml"
+  ],
+  "action_items": [
+    "Fix admin panel light-mode contrast: add explicit light-mode overrides in index.css for the admin stat cards / gateway rows / quick-action tiles. Suggested approach: broaden the light-mode text override beyond `.text-white` (e.g. also flip elements colored with `text-[#F8FAFC]` and any inline `color: rgb(248,250,252)`), OR restyle Admin KPI/list surfaces to use `text-[var(--nb-text)]` so they follow the variable flip automatically. Optionally give the admin content surface (`AdminLayout` main area) a `data-nb-admin-surface` marker and add a scoped rule.",
+    "(Optional low-priority) The Deposit page's MethodBlock + amount card visually match the dark-gold ambient treatment (verified via screenshot — dashed gold accents, dark gradient bg, gold submit pill), but they do NOT carry the `data-nb-ambient='gold'` attribute. If those two blocks ever need to preserve white text in light mode they should either be switched to <AmbientCard> or receive the attribute so the light-mode CSS rule applies. Not urgent — Deposit is not currently affected because inputs there are visible in both themes."
+  ],
+  "critical_code_review_comments": [
+    "Light-mode strategy relies on matching the React-rendered inline string `rgb(30, 27, 10)` for #1E1B0A. That is fragile — a future refactor that changes the gradient by 1 pixel-hex or switches to a class-based bg would silently break the white-text preservation. The `data-nb-ambient='gold'` attribute on AmbientCard is the robust selector; the CSS should preferentially use that and only keep the rgb() selector as a legacy fallback.",
+    "server.py `/api/investments` enrichment batch-loads product docs — good for N+1 avoidance. Response now safely returns `product_image_url: null` and `product_tier: null` when the product was deleted, no crash. Verified on the regression user."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_investments_enrichment.py"
+  ],
+  "success_rate": {
+    "backend": "100% (1/1 new enrichment test)",
+    "frontend": "~92% — all 8 review items functionally verified; 1 design contrast issue in admin light mode remains"
+  },
+  "test_credentials": "Regression user +2348099887711 / pass1234 (from /app/memory/test_credentials.md). Admin billdennis750@gmail.com / djscan30.",
+  "seed_data_creation": "None — reused existing UI Tester regression user.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend /api/investments enrichment is covered by /app/backend/tests/test_investments_enrichment.py (1 test, PASSED). Frontend verifications executed (viewport 428x900): (1) UserLayout — theme-toggle testid present, gold brand icon, bottom-nav active color rgb(245,197,24). (2) Deposit — submit button bg is linear-gradient gold 255,229,128→245,197,24 (NOT blue). Amount card + method blocks visually match dark-gold ambient (screenshot confirms) but lack `data-nb-ambient='gold'` attribute. (3) Referrals — 'Your network' has 2 ambient-gold cards, tabs use purple. (4) Investments — inv-thumb-* and inv-tier-* testids present, one active Starter Plan card with EPIC purple badge + thumbnail + daily earnings + next-payout countdown. (5) Marketplace drawer — all 5 required testids present (tier/thumb/stake/total-return/confirm), confirm-invest-button uses gold gradient. (6) Light mode user-side — html.theme-light, body bg rgb(251,247,238), dashboard-heading rgb(26,21,8) (dark), wallet-amount rgb(248,250,252) (still white inside ambient card) — PERFECT. Persistence via localStorage nb-theme confirmed after reload. (7) Admin theme toggle — works after allowing the 'Signed in as admin' toast (~4s) to clear (it visually overlaps the toggle at first). Screenshots saved to /app/.screenshots/iter16/.",
+  "rca of the issue": "Admin light-mode contrast bug: the light-mode override in index.css only catches `.text-white` and elements inside `[style*='rgb(30, 27, 10)']` / `[data-nb-ambient='gold']`. Admin panel KPI values and gateway rows use non-`.text-white` classes (likely `text-[var(--nb-text)]` or hardcoded near-white hex) that don't flip. Mitigation options: (1) refactor admin cards to consistently use `text-[var(--nb-text)]`; (2) add explicit selectors in index.css for the admin panel container; (3) wrap AdminLayout content in a `data-nb-admin-surface` div and scope color overrides to it."
+}

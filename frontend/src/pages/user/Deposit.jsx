@@ -372,7 +372,17 @@ export default function Deposit() {
 
       {/* Selected manual account detail */}
       {selectedAcct && !isInstant && !isShpay && !isOnesspay && (
-        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-2xl p-4" data-testid="deposit-selected-panel">
+        <div
+          className="relative rounded-2xl overflow-hidden"
+          data-testid="deposit-selected-panel"
+          style={{ boxShadow: `0 6px 24px -8px ${bankTint(selectedAcct.bank_name).bg}55, 0 0 0 1px ${bankTint(selectedAcct.bank_name).bg}25` }}
+        >
+          <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+               style={{ background: `repeating-linear-gradient(90deg,${bankTint(selectedAcct.bank_name).bg} 0 8px,transparent 8px 14px)`, opacity: 0.55 }} />
+          <Card
+            className="relative border-0 rounded-2xl p-4"
+            style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+          >
           <div className="flex items-center gap-3">
             <div
               className="w-11 h-11 rounded-xl grid place-items-center font-display font-800 text-xs shrink-0"
@@ -381,8 +391,8 @@ export default function Deposit() {
               {initials(selectedAcct.bank_name)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Transfer to</div>
-              <div className="font-display font-600 truncate">{selectedAcct.bank_name}</div>
+              <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80">Transfer to</div>
+              <div className="font-display font-600 truncate text-white">{selectedAcct.bank_name}</div>
               <div className="text-xs text-[var(--nb-muted)] truncate">{selectedAcct.account_name}</div>
               <div className="mt-1 flex items-center gap-2">
                 <span className="font-display font-700 tabular tracking-wider text-lg text-white">
@@ -392,7 +402,7 @@ export default function Deposit() {
                   type="button"
                   onClick={() => copy(selectedAcct.account_number)}
                   data-testid="deposit-copy-selected"
-                  className="w-7 h-7 rounded-md grid place-items-center border border-[var(--nb-border)] text-[var(--nb-muted)] hover:text-white hover:border-[#0055FF]/40 shrink-0"
+                  className="w-7 h-7 rounded-md grid place-items-center border border-[#F5C518]/30 text-[#F5C518] hover:text-white hover:border-[#F5C518]/60 shrink-0"
                   aria-label="Copy account number"
                 >
                   <Copy className="w-3 h-3" />
@@ -400,15 +410,29 @@ export default function Deposit() {
               </div>
             </div>
           </div>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {/* Amount + reference */}
       {hasAnyMethod && (
-        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-5 rounded-2xl">
+        <div
+          className="relative rounded-2xl overflow-hidden"
+          style={{ boxShadow: "0 6px 32px -8px #F5C51855, 0 0 0 1px #F5C51820" }}
+        >
+          <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+               style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
+          <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
+               style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
+          <Card
+            className="relative border-0 rounded-2xl p-5"
+            style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+          >
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <Label>Amount (₦)</Label>
+              <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/85 font-display font-700">
+                Amount (₦)
+              </div>
               <Input
                 type="number" min="1"
                 value={amount}
@@ -416,7 +440,7 @@ export default function Deposit() {
                 required
                 disabled={!method}
                 data-testid="deposit-amount-input"
-                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-12 tabular text-lg"
+                className="mt-2 bg-[var(--nb-card2)] border-[#F5C518]/30 focus:border-[#F5C518]/60 text-white h-12 tabular text-lg"
               />
               {/* Quick amount chips (admin-configurable) */}
               <div className="mt-3 grid grid-cols-3 gap-2" data-testid="deposit-quick-amounts">
@@ -449,16 +473,23 @@ export default function Deposit() {
               </div>
             )}
 
-            <Button
+            <button
               type="submit"
               disabled={loading || !method}
               data-testid="deposit-submit-button"
-              className="w-full h-12 bg-[#0055FF] hover:bg-[#3377FF] rounded-xl glow-primary"
+              className="w-full h-12 rounded-full font-display font-800 text-[15px] transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+              style={{
+                background: "linear-gradient(135deg,#FFE580 0%,#F5C518 100%)",
+                color: "#1A1508",
+                boxShadow: "0 10px 28px -8px rgba(245,197,24,0.55)",
+              }}
             >
               {loading ? "Processing…" : (isInstant || isShpay || isOnesspay) ? "Pay instantly" : "Submit for approval"}
-            </Button>
+              {!loading && <ArrowRight className="w-4 h-4" />}
+            </button>
           </form>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {/* Full-screen checkout — no swipe-down, no gesture dismiss.

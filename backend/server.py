@@ -1191,11 +1191,20 @@ async def invest(payload: InvestIn, user: dict = Depends(get_current_user)):
 async def my_investments(user: dict = Depends(get_current_user)):
     user = await process_profit_drops(user)
     docs = await db.investments.find({"user_id": user["_id"]}).sort("created_at", -1).to_list(500)
+    # Batch-load product images + tiers so the UI can show thumbnails + tier badges.
+    prod_ids = list({d["product_id"] for d in docs})
+    prods = {}
+    if prod_ids:
+        async for p in db.products.find({"_id": {"$in": prod_ids}}):
+            prods[p["_id"]] = p
     out = []
     for d in docs:
+        p = prods.get(d["product_id"], {})
         d["id"] = str(d.pop("_id"))
         d["user_id"] = str(d["user_id"])
         d["product_id"] = str(d["product_id"])
+        d["product_image_url"] = p.get("image_url") or None
+        d["product_tier"] = p.get("tier") or None
         out.append(d)
     return out
 

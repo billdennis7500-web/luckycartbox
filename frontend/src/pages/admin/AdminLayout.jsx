@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
 import {
   LayoutDashboard, Users, PackageOpen, ArrowDownToLine, ArrowUpFromLine,
-  Percent, Ticket, Landmark, Settings, LogOut, Shield, Menu, X, ExternalLink,
+  Percent, Ticket, Landmark, Settings, LogOut, Shield, Menu, X, ExternalLink, Sun, Moon,
 } from "lucide-react";
 
 const NAV = [
@@ -21,6 +22,7 @@ const NAV = [
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
+  const { theme, toggle } = useTheme();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [stats, setStats] = useState({});
@@ -104,6 +106,20 @@ export default function AdminLayout() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggle}
+                data-testid="admin-theme-toggle"
+                aria-label="Toggle theme"
+                className="w-9 h-9 rounded-full grid place-items-center border transition-colors"
+                style={{
+                  borderColor: "rgba(245,197,24,0.35)",
+                  background: "rgba(245,197,24,0.10)",
+                  color: "#F5C518",
+                }}
+              >
+                {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+              </button>
               <div className="text-right">
                 <div className="text-sm font-medium">{user?.name}</div>
                 <div className="text-xs text-[var(--nb-muted)]">{user?.phone}</div>

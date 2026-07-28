@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api, formatNaira } from "@/lib/api";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Copy, Share2, Users, TrendingUp, Check, MessageCircle, Send, Twitter, Facebook } from "lucide-react";
 import { toast } from "sonner";
@@ -196,26 +195,35 @@ export default function Referrals() {
       {/* Referral list with tabs + search + load more */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-lg font-600">Your network</h2>
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-6 rounded-sm bg-[#A855F7]" />
+            <h2 className="font-display text-lg font-800 tracking-tight text-white">Your network</h2>
+          </div>
           <div className="text-xs text-[var(--nb-muted)]">
-            <span className="text-[#10B981]">{activeCount}</span> / {currentTab.users.length} active
+            <span className="text-[#10B981] font-display font-700">{activeCount}</span>
+            <span className="mx-1">/</span>
+            <span className="tabular">{currentTab.users.length}</span> active
           </div>
         </div>
 
         <div
           data-testid="referral-tabs"
-          className="grid grid-cols-3 rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card)] p-1 mb-3"
+          className="grid grid-cols-3 rounded-full border border-[#A855F7]/25 bg-[var(--nb-card)] p-1 mb-3"
         >
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setGen(t.key)}
               data-testid={`gen-tab-${t.key}`}
-              className={`py-2 rounded-md text-xs font-display font-700 transition-colors ${
+              className={`py-2 rounded-full text-xs font-display font-700 transition-all ${
                 gen === t.key
-                  ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30"
+                  ? "text-white shadow-lg"
                   : "text-[var(--nb-muted)] hover:text-white"
               }`}
+              style={gen === t.key ? {
+                background: "linear-gradient(135deg,#A855F7,#7C3AED)",
+                boxShadow: "0 6px 18px -4px rgba(124,58,237,0.55)",
+              } : {}}
             >
               {t.label} <span className="opacity-70">·</span> {t.pct}%
             </button>
@@ -228,48 +236,89 @@ export default function Referrals() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name…"
             data-testid="referral-search"
-            className="w-full mb-3 h-10 px-3 rounded-md bg-[var(--nb-card2)] border border-[var(--nb-border)] text-sm text-white placeholder:text-[var(--nb-muted)]/60 focus:outline-none focus:border-[#0055FF]/50"
+            className="w-full mb-3 h-10 px-3 rounded-full bg-[var(--nb-card2)] border border-[#A855F7]/25 text-sm text-white placeholder:text-[var(--nb-muted)]/60 focus:outline-none focus:border-[#A855F7]/60"
           />
         )}
 
-        <Card className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card)] overflow-hidden">
-          {filteredUsers.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[var(--nb-muted)]" data-testid={`no-${gen}`}>
-              {search ? "No matches" : `No ${currentTab.label} referrals yet. Share your link to grow this generation.`}
+        {/* Network list — dark-gold ambient container with dashed gold accent lines */}
+        {filteredUsers.length === 0 ? (
+          <div className="relative rounded-2xl overflow-hidden"
+               style={{ boxShadow: "0 6px 24px -8px #F5C51844, 0 0 0 1px #F5C51820" }}>
+            <div className="absolute inset-x-0 top-0 h-[2px] z-10 pointer-events-none"
+                 style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
+            <div className="absolute inset-x-0 bottom-0 h-[2px] z-10 pointer-events-none"
+                 style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
+            <div className="relative p-8 text-center"
+                 style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
+                 data-testid={`no-${gen}`}>
+              <div className="mx-auto w-12 h-12 rounded-2xl grid place-items-center mb-2"
+                   style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                            boxShadow: "0 4px 20px rgba(245,197,24,0.35)" }}>
+                <Users className="w-5 h-5 text-[#1A1508]" />
+              </div>
+              <div className="text-sm text-[var(--nb-muted)]">
+                {search ? "No matches" : `No ${currentTab.label} referrals yet. Share your link to grow this generation.`}
+              </div>
             </div>
-          ) : (
-            <>
-              <div className="divide-y divide-[var(--nb-border)]">
-                {filteredUsers.slice(0, visible).map((u, idx) => (
-                  <div key={u.id} className="flex items-center gap-3 px-4 py-3" data-testid={`ref-user-${u.id}`}>
-                    <div className="w-9 h-9 rounded-full bg-[#0055FF]/20 border border-[#0055FF]/40 grid place-items-center text-xs font-display font-800">
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2.5" data-testid="referral-list">
+              {filteredUsers.slice(0, visible).map((u) => (
+                <div
+                  key={u.id}
+                  data-testid={`ref-user-${u.id}`}
+                  className="relative rounded-xl overflow-hidden"
+                  style={{ boxShadow: `0 4px 18px -6px ${u.has_invested ? "#10B98155" : "#F5C51833"}, 0 0 0 1px ${u.has_invested ? "#10B98130" : "#F5C51820"}` }}
+                >
+                  <div className="absolute inset-x-0 top-0 h-[2px] z-10 pointer-events-none"
+                       style={{ background: `repeating-linear-gradient(90deg,${u.has_invested ? "#10B981" : "#F5C518"} 0 8px,transparent 8px 14px)`, opacity: 0.5 }} />
+                  <div className="relative flex items-center gap-3 px-4 py-3"
+                       style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 60%,#0B0906 100%)" }}>
+                    <div
+                      className="w-10 h-10 rounded-xl grid place-items-center text-sm font-display font-800 shrink-0"
+                      style={{
+                        background: u.has_invested
+                          ? "linear-gradient(135deg,#10B981,#065F46)"
+                          : "linear-gradient(135deg,#FFE580,#F5C518)",
+                        color: u.has_invested ? "#FFFFFF" : "#1A1508",
+                        boxShadow: u.has_invested
+                          ? "0 4px 14px rgba(16,185,129,0.45)"
+                          : "0 4px 14px rgba(245,197,24,0.45)",
+                      }}
+                    >
                       {(u.name || "?").slice(0, 1).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{u.name}</div>
-                      <div className="text-xs text-[var(--nb-muted)] tabular truncate">{u.phone}</div>
+                      <div className="text-sm font-display font-700 text-white truncate">{u.name}</div>
+                      <div className="text-[11px] text-[var(--nb-muted)] tabular truncate">{u.phone}</div>
                     </div>
                     <span
-                      className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full border ${
-                        u.has_invested
-                          ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                          : "bg-[var(--nb-border)] text-[var(--nb-muted)] border-[var(--nb-border)]"
-                      }`}
+                      className="shrink-0 text-[10px] font-display font-700 uppercase tracking-wider px-2 py-1 rounded-full"
+                      style={u.has_invested ? {
+                        background: "#10B98118",
+                        color: "#10B981",
+                        border: "1px solid #10B98140",
+                      } : {
+                        background: "#F5C51818",
+                        color: "#F5C518",
+                        border: "1px solid #F5C51840",
+                      }}
                     >
                       {u.has_invested ? "Active" : "Pending"}
                     </span>
                   </div>
-                ))}
-              </div>
-              <LoadMore
-                shown={Math.min(visible, filteredUsers.length)}
-                total={filteredUsers.length}
-                onMore={setVisible}
-                testid={`load-more-${gen}`}
-              />
-            </>
-          )}
-        </Card>
+                </div>
+              ))}
+            </div>
+            <LoadMore
+              shown={Math.min(visible, filteredUsers.length)}
+              total={filteredUsers.length}
+              onMore={setVisible}
+              testid={`load-more-${gen}`}
+            />
+          </>
+        )}
 
         {currentTab.users.length === 0 && (
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-[var(--nb-muted)]">

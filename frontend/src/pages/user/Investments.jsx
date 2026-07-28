@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { TrendingUp, CheckCircle2, Sparkles, Timer, Calendar, ChevronRight } from "lucide-react";
-import { AmbientCard, SectionHeader, MicroLabel, PillCTA } from "@/components/design";
+import { TrendingUp, CheckCircle2, Sparkles, Timer, Calendar, ChevronRight, Coins } from "lucide-react";
+import { AmbientCard, SectionHeader, MicroLabel, PillCTA, TIER_TOKENS } from "@/components/design";
 
 /* -------------- helpers -------------- */
 function nextPayoutText(inv) {
@@ -20,24 +19,24 @@ function nextPayoutText(inv) {
   if (m > 0) return `${m}m ${pad(s)}s`;
   return `${s}s`;
 }
-function tint(name = "") {
-  const palette = [
-    { bg: "#0055FF", to: "#0A2A6C" },
-    { bg: "#10B981", to: "#064E3B" },
-    { bg: "#F59E0B", to: "#78350F" },
-    { bg: "#8B5CF6", to: "#3B1E7E" },
-    { bg: "#EF4444", to: "#7F1D1D" },
-  ];
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
-  return palette[h % palette.length];
+/* Tier auto-derivation mirrors Marketplace.jsx so the badge stays consistent */
+function tierForInv(inv) {
+  const key = inv.product_tier || (
+    (inv.daily_profit_pct || 0) >= 10 ? "legendary"
+    : (inv.daily_profit_pct || 0) >= 7  ? "epic"
+    : (inv.daily_profit_pct || 0) >= 5  ? "hot"
+    : "gold"
+  );
+  const tokens = TIER_TOKENS[key] || TIER_TOKENS.gold;
+  const labels = { legendary: "Legendary", epic: "Epic", hot: "Hot", newcomer: "Newcomer", tech: "Tech", fashion: "Fashion", gold: "Standard" };
+  return { key, label: labels[key] || "Standard", ...tokens };
 }
 function initials(s = "") {
   return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "IN";
 }
 
 /* -------------- ring progress -------------- */
-function Ring({ pct = 0, tone = "#0055FF", size = 56 }) {
+function Ring({ pct = 0, tone = "#F5C518", size = 56 }) {
   const r = (size - 6) / 2;
   const c = 2 * Math.PI * r;
   const off = c - (pct / 100) * c;
@@ -60,101 +59,147 @@ function Ring({ pct = 0, tone = "#0055FF", size = 56 }) {
   );
 }
 
-/* -------------- plan row -------------- */
+/* -------------- plan row — dark-gold ambient horizontal card w/ thumbnail -------------- */
 function InvestmentCard({ inv }) {
-  const brand = tint(inv.product_name);
+  const tier = tierForInv(inv);
   const done = inv.status === "completed";
   const progress = Math.min(100, Math.round((inv.drops_done / inv.duration_days) * 100));
   const roiPct = inv.price ? (inv.total_earned / inv.price) * 100 : 0;
   const dailyEarn = (inv.price || 0) * ((inv.daily_profit_pct || 0) / 100);
   const projected = dailyEarn * (inv.duration_days || 0);
   const remaining = Math.max(0, projected - inv.total_earned);
+  const glow = done ? "#94A3B8" : tier.glow;
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden border border-[var(--nb-border)] bg-[var(--nb-card)]"
+      className="relative rounded-2xl overflow-hidden"
       data-testid={`inv-row-${inv.id}`}
+      style={{ boxShadow: `0 6px 32px -8px ${glow}55, 0 0 0 1px ${glow}25` }}
     >
-      {/* header strip */}
+      {/* Dashed accent lines top + bottom */}
+      <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+           style={{ background: `repeating-linear-gradient(90deg,${glow} 0 8px,transparent 8px 14px)`, opacity: 0.55 }} />
+      <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
+           style={{ background: `repeating-linear-gradient(90deg,${glow} 0 8px,transparent 8px 14px)`, opacity: 0.55 }} />
+
       <div
-        className="relative p-4 flex items-center gap-3 overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${brand.bg}, ${brand.to})` }}
+        className="relative"
+        style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}
       >
-        <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-        <div className="relative w-12 h-12 rounded-xl bg-white/15 grid place-items-center font-display font-800 text-white shrink-0">
-          {initials(inv.product_name)}
-        </div>
-        <div className="relative flex-1 min-w-0">
-          <div className="font-display font-800 text-white truncate">{inv.product_name}</div>
-          <div className="text-xs text-white/80 tabular">
-            {formatNaira(inv.price)} · {inv.daily_profit_pct}% / day · {inv.duration_days} days
-          </div>
-        </div>
-        <span className={`relative text-[10px] px-2 py-0.5 rounded-full border shrink-0 backdrop-blur-sm ${
-          done
-            ? "bg-white/10 text-white/80 border-white/20"
-            : "bg-[#10B981]/25 text-white border-[#10B981]/50"
-        }`}>
-          {done ? (
-            <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/>Completed</span>
-          ) : "Active"}
-        </span>
-      </div>
-
-      {/* body */}
-      <div className="p-4">
-        {/* Daily earning strip */}
-        <div className="mb-4 rounded-xl border border-[#10B981]/30 bg-[#10B981]/10 px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#10B981]/90">
-            <Timer className="w-3 h-3" /> Daily earnings
-          </div>
-          <div className="font-display font-800 tabular text-[#10B981]" data-testid={`inv-daily-${inv.id}`}>
-            +{formatNaira(dailyEarn)}
-            <span className="text-[10px] text-[#10B981]/70 font-500 ml-1">/ day</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <Ring pct={progress} tone={done ? "#94A3B8" : brand.bg} />
-          <div className="flex-1 grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Earned</div>
-              <div className="mt-0.5 tabular font-display font-700 text-[#10B981]">
-                {formatNaira(inv.total_earned)}
-              </div>
-              <div className="text-[10px] text-[var(--nb-muted)] tabular">ROI {roiPct.toFixed(1)}%</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Remaining</div>
-              <div className="mt-0.5 tabular font-display font-700 text-white">
-                {formatNaira(remaining)}
-              </div>
-              <div className="text-[10px] text-[var(--nb-muted)] tabular">
-                {Math.max(0, inv.duration_days - inv.drops_done)} days left
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between text-xs">
-          <span className="inline-flex items-center gap-1.5 text-[var(--nb-muted)]">
-            <Timer className="w-3 h-3" />
-            Next payout <span className="text-white tabular ml-1">{nextPayoutText(inv)}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-[var(--nb-muted)]">
-            <Calendar className="w-3 h-3" />
-            <span className="tabular">{inv.drops_done} / {inv.duration_days}</span>
-          </span>
-        </div>
-
-        <div className="mt-3 h-1.5 rounded-full bg-[var(--nb-border)] overflow-hidden">
+        {/* Top row: thumbnail + name + status */}
+        <div className="p-4 flex items-center gap-3">
+          {/* 60x60 thumbnail with tier glow */}
           <div
-            className="h-full transition-all"
+            className="relative w-16 h-16 rounded-xl grid place-items-center shrink-0 overflow-hidden"
             style={{
-              width: `${progress}%`,
-              background: done ? "#94A3B8" : `linear-gradient(90deg, ${brand.bg}, ${brand.to})`,
+              background: `radial-gradient(circle at center,${tier.glow}44,${tier.glow}10 55%,transparent 80%),linear-gradient(135deg,#1E1B0A,#0B0906)`,
+              border: `1px solid ${glow}40`,
             }}
-          />
+          >
+            {inv.product_image_url ? (
+              <img
+                src={inv.product_image_url}
+                alt=""
+                className="relative w-full h-full object-cover"
+                data-testid={`inv-thumb-${inv.id}`}
+              />
+            ) : (
+              <div
+                className="font-display font-800 text-lg"
+                style={{ color: tier.glow }}
+              >
+                {initials(inv.product_name)}
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-display font-700 uppercase tracking-wider text-[9px]"
+                style={{ background: tier.chipBg, color: tier.chipFg }}
+                data-testid={`inv-tier-${inv.id}`}
+              >
+                <Sparkles className="w-2.5 h-2.5" />
+                {tier.label}
+              </span>
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-display font-700 shrink-0"
+                style={done ? {
+                  background: "#94A3B818", color: "#94A3B8", border: "1px solid #94A3B840",
+                } : {
+                  background: "#10B98118", color: "#10B981", border: "1px solid #10B98140",
+                }}
+              >
+                {done ? (
+                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" />Completed</span>
+                ) : "Active"}
+              </span>
+            </div>
+            <div className="font-display font-800 text-white truncate leading-tight">{inv.product_name}</div>
+            <div className="text-[11px] text-[var(--nb-muted)] tabular truncate mt-0.5">
+              {formatNaira(inv.price)} · {inv.daily_profit_pct}% / day · {inv.duration_days} days
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-4 pb-4">
+          {/* Daily earning strip — gold accent */}
+          <div className="mb-4 rounded-xl px-3 py-2 flex items-center justify-between"
+               style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)" }}>
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#10B981]/85 font-display font-700">
+              <Coins className="w-3 h-3" /> Daily earnings
+            </div>
+            <div className="font-display font-800 tabular text-[#10B981]" data-testid={`inv-daily-${inv.id}`}>
+              +{formatNaira(dailyEarn)}
+              <span className="text-[10px] text-[#10B981]/70 font-500 ml-1">/ day</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Ring pct={progress} tone={glow} />
+            <div className="flex-1 grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80 font-display font-700">Earned</div>
+                <div className="mt-0.5 tabular font-display font-800 text-[#10B981]">
+                  {formatNaira(inv.total_earned)}
+                </div>
+                <div className="text-[10px] text-[var(--nb-muted)] tabular">ROI {roiPct.toFixed(1)}%</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80 font-display font-700">Remaining</div>
+                <div className="mt-0.5 tabular font-display font-800 text-white">
+                  {formatNaira(remaining)}
+                </div>
+                <div className="text-[10px] text-[var(--nb-muted)] tabular">
+                  {Math.max(0, inv.duration_days - inv.drops_done)} days left
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-xs">
+            <span className="inline-flex items-center gap-1.5 text-[var(--nb-muted)]">
+              <Timer className="w-3 h-3" />
+              Next payout <span className="text-white tabular ml-1">{nextPayoutText(inv)}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[var(--nb-muted)]">
+              <Calendar className="w-3 h-3" />
+              <span className="tabular">{inv.drops_done} / {inv.duration_days}</span>
+            </span>
+          </div>
+
+          <div className="mt-3 h-1.5 rounded-full overflow-hidden"
+               style={{ background: "rgba(245,197,24,0.12)" }}>
+            <div
+              className="h-full transition-all"
+              style={{
+                width: `${progress}%`,
+                background: done ? "#94A3B8" : `linear-gradient(90deg,${glow},${glow}80)`,
+                boxShadow: done ? "none" : `0 0 12px ${glow}80`,
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -259,20 +304,35 @@ export default function Investments() {
           Loading investments…
         </div>
       ) : shown.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-8 text-center space-y-3" data-testid="inv-empty">
-          <Sparkles className="w-6 h-6 text-[#0055FF] mx-auto" />
-          <div className="text-sm text-[var(--nb-muted)]">
-            {tab === "active"
-              ? "No active investments yet."
-              : tab === "completed"
-              ? "No completed investments yet."
-              : "You haven't started any investment plan."}
+        <div className="relative rounded-2xl overflow-hidden"
+             style={{ boxShadow: "0 6px 24px -8px #F5C51844, 0 0 0 1px #F5C51820" }}
+             data-testid="inv-empty">
+          <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+               style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
+          <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
+               style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 8px,transparent 8px 14px)", opacity: 0.55 }} />
+          <div className="relative p-8 text-center space-y-3"
+               style={{ background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)" }}>
+            <div className="mx-auto w-14 h-14 rounded-2xl grid place-items-center"
+                 style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                          boxShadow: "0 4px 20px rgba(245,197,24,0.35)" }}>
+              <TrendingUp className="w-6 h-6 text-[#1A1508]" />
+            </div>
+            <div className="text-sm text-[var(--nb-muted)]">
+              {tab === "active"
+                ? "No active investments yet."
+                : tab === "completed"
+                ? "No completed investments yet."
+                : "You haven't started any investment plan."}
+            </div>
+            <div className="flex justify-center pt-1">
+              <Link to="/marketplace">
+                <PillCTA tone="purple" size="md" icon={TrendingUp} testid="inv-empty-cta">
+                  Browse plans
+                </PillCTA>
+              </Link>
+            </div>
           </div>
-          <Link to="/marketplace">
-            <Button className="h-10 bg-[#0055FF] hover:bg-[#3377FF]" data-testid="inv-empty-cta">
-              <TrendingUp className="w-4 h-4 mr-1.5" /> Browse plans
-            </Button>
-          </Link>
         </div>
       ) : (
         <div className="grid gap-3">

@@ -135,72 +135,133 @@ export default function Marketplace() {
         testid="load-more-products"
       />
 
-      {/* Slide-up confirm drawer */}
+      {/* Slide-up confirm drawer — dark-gold ambient aesthetic */}
       <Drawer open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <DrawerContent
           data-testid="invest-drawer"
-          className="bg-[var(--nb-card)] border-t border-[var(--nb-border)] text-white max-w-lg mx-auto rounded-t-2xl"
+          className="border-0 text-white max-w-lg mx-auto rounded-t-2xl overflow-hidden p-0"
+          style={{
+            background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 45%,#0B0906 100%)",
+            boxShadow: "0 -24px 80px -20px rgba(245,197,24,0.45), 0 0 0 1px rgba(245,197,24,0.25)",
+          }}
         >
-          <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-[var(--nb-border)]" />
-          <DrawerHeader>
-            <DrawerTitle className="font-display text-xl">Confirm your investment</DrawerTitle>
-            <DrawerDescription className="text-[var(--nb-muted)]">
+          {/* Dashed gold accent line at the very top */}
+          <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+               style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.65 }} />
+          {/* Grabber handle */}
+          <div className="mx-auto mt-3 h-1 w-12 rounded-full" style={{ background: "#F5C51840" }} />
+
+          <DrawerHeader className="pb-1">
+            {selected && (
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full font-display font-700 uppercase tracking-wider text-[10px]"
+                  style={{
+                    background: tierFor(selected).chipBg,
+                    color: tierFor(selected).chipFg,
+                  }}
+                  data-testid="invest-drawer-tier"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  {tierFor(selected).label}
+                </span>
+              </div>
+            )}
+            <DrawerTitle className="font-display text-xl text-white">Confirm your investment</DrawerTitle>
+            <DrawerDescription className="text-[var(--nb-muted)] text-xs">
               We'll deduct the stake from your wallet and start dropping daily profits in 24 hours.
             </DrawerDescription>
           </DrawerHeader>
           {selected && (
             <div className="px-4 pb-2 space-y-4">
-              <Card className="bg-[var(--nb-page)] border-[var(--nb-border)] rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Plan</div>
-                    <div className="mt-1 font-display font-800 text-lg">{selected.name}</div>
+              {/* Plan + Stake — gold-tinted card */}
+              <div
+                className="relative rounded-xl overflow-hidden"
+                style={{
+                  background: "rgba(245,197,24,0.08)",
+                  border: "1px solid rgba(245,197,24,0.30)",
+                }}
+              >
+                <div className="flex items-center justify-between p-4">
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80">Plan</div>
+                    <div className="mt-1 font-display font-800 text-lg text-white truncate flex items-center gap-2">
+                      {selected.image_url && (
+                        <img
+                          src={selected.image_url}
+                          alt=""
+                          className="w-8 h-8 rounded-md object-cover shrink-0"
+                          data-testid="invest-drawer-thumb"
+                        />
+                      )}
+                      {selected.name}
+                    </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Stake</div>
-                    <div className="mt-1 font-display font-800 text-lg tabular">{formatNaira(selected.price)}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80">Stake</div>
+                    <div className="mt-1 font-display font-800 text-lg tabular text-[#F5C518]"
+                         data-testid="invest-drawer-stake">
+                      {formatNaira(selected.price)}
+                    </div>
                   </div>
                 </div>
-              </Card>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl border border-[#10B981]/30 bg-[#10B981]/10 p-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[#10B981]/80 flex items-center gap-1">
+                <div className="rounded-xl p-3"
+                     style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)" }}>
+                  <div className="text-[10px] uppercase tracking-widest text-[#10B981]/85 flex items-center gap-1 font-display font-700">
                     <Coins className="w-3 h-3" /> Daily earn
                   </div>
                   <div className="mt-1 font-display font-800 tabular text-[#10B981]">
                     {formatNaira(selected.price * (selected.daily_profit_pct / 100))}
                   </div>
                 </div>
-                <div className="rounded-xl border border-[var(--nb-border)] p-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)] flex items-center gap-1">
+                <div className="rounded-xl p-3"
+                     style={{ background: "rgba(245,197,24,0.06)", border: "1px solid rgba(245,197,24,0.28)" }}>
+                  <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/85 flex items-center gap-1 font-display font-700">
                     <Timer className="w-3 h-3" /> Runs for
                   </div>
-                  <div className="mt-1 font-display font-800 tabular">{selected.duration_days} days</div>
+                  <div className="mt-1 font-display font-800 tabular text-white">{selected.duration_days} days</div>
                 </div>
-                <div className="col-span-2 rounded-xl border border-[#0055FF]/40 bg-[#0055FF]/10 p-3">
-                  <div className="text-[10px] uppercase tracking-widest text-[#0055FF]">Total you'll get back</div>
-                  <div className="mt-1 font-display font-800 text-xl tabular text-[#0055FF]">
+                {/* Total return — purple hero chip */}
+                <div className="col-span-2 rounded-xl p-3.5"
+                     style={{ background: "linear-gradient(135deg,rgba(168,85,247,0.15),rgba(124,58,237,0.20))",
+                              border: "1px solid rgba(168,85,247,0.40)",
+                              boxShadow: "0 8px 24px -8px rgba(124,58,237,0.45)" }}>
+                  <div className="text-[10px] uppercase tracking-widest text-[#A855F7] flex items-center gap-1 font-display font-700">
+                    <TrendingUp className="w-3 h-3" /> Total you'll get back
+                  </div>
+                  <div className="mt-1 font-display font-800 text-2xl tabular text-white"
+                       data-testid="invest-drawer-total-return">
                     {formatNaira(selected.price * (selected.daily_profit_pct / 100) * selected.duration_days)}
                   </div>
                 </div>
-                <div className="col-span-2 flex items-center justify-between text-xs text-[var(--nb-muted)] px-1">
+                <div className="col-span-2 flex items-center justify-between text-xs text-[var(--nb-muted)] px-1 pt-1">
                   <span className="flex items-center gap-1"><Wallet className="w-3 h-3"/> Your wallet</span>
-                  <span className="tabular">{formatNaira(user?.wallet_balance)}</span>
+                  <span className="tabular font-display font-700 text-white">{formatNaira(user?.wallet_balance)}</span>
                 </div>
               </div>
             </div>
           )}
-          <DrawerFooter className="pt-2">
-            <Button
+          <DrawerFooter className="pt-2 pb-4">
+            <button
+              type="button"
               onClick={invest}
               disabled={loading}
               data-testid="confirm-invest-button"
-              className="bg-[#0055FF] hover:bg-[#3377FF] h-12 rounded-xl"
+              className="h-12 rounded-full font-display font-800 text-[15px] transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+              style={{
+                background: "linear-gradient(135deg,#FFE580 0%,#F5C518 100%)",
+                color: "#1A1508",
+                boxShadow: "0 10px 28px -8px rgba(245,197,24,0.55)",
+              }}
             >
               {loading ? "Processing…" : "Confirm & invest"}
-            </Button>
+              {!loading && <ChevronRight className="w-4 h-4" />}
+            </button>
             <DrawerClose asChild>
-              <Button variant="outline" className="border-[var(--nb-border)] bg-transparent text-white h-11 rounded-xl">
+              <Button variant="outline" className="border-[#F5C518]/25 bg-transparent text-white h-11 rounded-full hover:bg-[#F5C518]/8">
                 Cancel
               </Button>
             </DrawerClose>
