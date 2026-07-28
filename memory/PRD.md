@@ -465,3 +465,29 @@ Our `shpay.verify_callback_signature()` was signing **all** fields in the callba
 
 ### ⚠️ Deploy pre-req
 Merchant must provide their real 1SSPay `MerchantId` + `Key` in `.env` (currently seeded with the docs' sample credentials, which have `code=1007 "channel authority not open"` for Nigeria). Additionally, 1SSPay likely requires IP whitelisting — the current outbound IP is visible via `GET /api/admin/onesspay/health`.
+
+
+## 2026-07-28 · Payout dispatcher rewrite — smart multi-gateway routing (P0 bugfix)
+
+### The bug
+User reported: *"I requested a withdrawal using SHPAY — it's nowhere to be found in SHPAY merchant, but admin dashboard shows processing."*
+
+Root cause: `POST /api/withdrawals` (user submits withdrawal) had auto-payout **hard-coded to PayNow only** (`_paynow_payout_withdrawal(w)`), ignoring the admin's SHPAY / 1SSPay toggles. The admin's default "Approve" button did the same. Additionally, bank codes are per-gateway (PayNow `NG0204` OPay ≠ SHPAY `100004` ≠ 1SSPay `NR0140`), so even trying to route through a different gateway would fail with "invalid bank code" because the user's bound bank_code was in PayNow format.
+
+### Delivered
+1. **New `translate_bank_code(bank_name, target_gateway, current_code)`** in `server.py` — looks up the target gateway's bank code by fuzzy bank-NAME match against `onesspay.NIGERIAN_BANKS` (static), `shpay.list_banks_cached()`, or `paynow.list_banks_cached()`. Fast-path detects when the current code is already in the target's format (`NG0…`, `NR0…`, digit-only) and returns it unchanged. Live test verified: `OPay` → `paynow=NG0204, onesspay=NR0140, shpay=<code>` (SHPAY requires IP whitelist to fetch banks).
+2. **New `dispatch_payout_via_enabled_gateway(w, note)`** — priority list `[paynow, shpay, onesspay]`; for each gateway, if its payout toggle is ON, translate the bank_code and call `_paynow/_shpay/_onesspay_payout_withdrawal`. First success wins; if all fail, HTTP 400 with a combined error message ("paynow: … | shpay: … | onesspay: …") so admin can see exactly what each gateway said.
+3. **Wired into 3 places**:
+   - `POST /api/withdrawals` auto-payout — now uses the dispatcher instead of hard-coded PayNow.
+   - `POST /api/admin/withdrawals/{wid}/approve` — same. Response now reports which gateway actually settled (`{"ok":true, "gateway": <actual>, "status":"processing"}`).
+   - `POST /api/admin/withdrawals/bulk-approve` — same, so bulk approve also benefits.
+4. **Small bug fix**: `_paynow_payout_withdrawal` now stores `platform_order_no = pn_data.get("orderNo")` from PayNow's response, so the DB row includes PayNow's `PT…` order reference for admin traceability.
+
+### Verified (live backend)
+- Bank code translator: OPay → PayNow NG0204 (fast-path), OPay → 1SSPay NR0140 (static match). Unknown bank returns None.
+- Dispatcher priority: with paynow-payout OFF and shpay+onesspay ON, dispatcher tried shpay + onesspay (both rejected — SHPAY IP not whitelisted, 1SSPay channel not open); returned 400 with combined errors. Turning paynow back on → dispatcher accepted via PayNow (`gateway:paynow, platform_order_no:PT178523612272098827`).
+- All toggles restored to ON.
+- `yarn build` compiles clean.
+
+### ⚠️ Note about the user's original ₦1,000 withdrawal
+The withdrawal `Wcab22dd7c94527451785235517` (₦1,000 CASHFLOW VIP 10 → OPay 8054563130) is currently in PayNow's dashboard as order `PT178523612272098827`. It never reached SHPAY because the auto-payout was hard-coded to PayNow at submission time (now fixed). If you want it to appear in SHPAY instead, you'd need to reject the PayNow one first, then use the new SHPAY payout button on the admin panel — the dispatcher will translate the bank code and dispatch to SHPAY.

@@ -252,6 +252,128 @@ async def gateway_payout_allowed(gateway: str) -> bool:
     return bool(t.get(gateway, {}).get("payout"))
 
 
+# ---------------------------------------------------------------------------
+# Bank code translation between gateways
+# ---------------------------------------------------------------------------
+# Each gateway uses its own bank code scheme:
+#   • PayNow  : NG0xxx  (e.g. OPay = NG0204)
+#   • SHPAY   : 6-digit (e.g. OPay = 100004)
+#   • 1SSPay  : NR0xxx  (e.g. OPay = NR0140)
+# The user's bank_account is bound with ONE code (usually PayNow's). When we
+# route a payout through a different gateway, we translate by BANK NAME.
+
+def _normalize_bank_name(name: str) -> str:
+    """Lowercase, strip punctuation & extra whitespace so 'OPAY (PAYCOM)' matches
+    'Opay' matches 'OPay (Paycom)'."""
+    if not name: return ""
+    n = name.lower()
+    for ch in "()[]-.,·":
+        n = n.replace(ch, " ")
+    return " ".join(n.split())
+
+
+async def translate_bank_code(bank_name: str, target_gateway: str,
+                              *, current_code: Optional[str] = None) -> Optional[str]:
+    """Given a bank NAME (e.g. 'OPay'), return the target gateway's bank code.
+    Returns None if no match is found. If `current_code` is already in the target
+    gateway's format (heuristic prefix check) we return it unchanged."""
+    if not bank_name:
+        return current_code
+    # Fast-path: current_code already looks like target's format
+    if current_code:
+        if target_gateway == "paynow"   and current_code.startswith("NG0"):  return current_code
+        if target_gateway == "onesspay" and current_code.startswith("NR0"):  return current_code
+        if target_gateway == "shpay"    and current_code.isdigit() and 4 <= len(current_code) <= 6:
+            return current_code
+    key = _normalize_bank_name(bank_name)
+    if not key:
+        return None
+    if target_gateway == "onesspay":
+        for b in onesspay.NIGERIAN_BANKS:
+            if _normalize_bank_name(b["name"]) == key:
+                return b["code"]
+        # fuzzy fallback — substring match either direction
+        for b in onesspay.NIGERIAN_BANKS:
+            nb = _normalize_bank_name(b["name"])
+            if key in nb or nb in key:
+                return b["code"]
+        return None
+    if target_gateway == "shpay":
+        try:
+            resp = await shpay.list_banks_cached()
+        except Exception:
+            return None
+        rows = (resp.get("result") or []) if resp.get("success") else []
+        for r in rows:
+            if _normalize_bank_name(r.get("bankName", "")) == key:
+                return r.get("bankCode")
+        for r in rows:
+            nb = _normalize_bank_name(r.get("bankName", ""))
+            if key in nb or nb in key:
+                return r.get("bankCode")
+        return None
+    if target_gateway == "paynow":
+        try:
+            resp = await paynow.list_banks_cached()
+        except Exception:
+            return None
+        rows = (resp.get("data") or []) if resp.get("code") == 0 else []
+        for r in rows:
+            if _normalize_bank_name(r.get("bankName", "")) == key:
+                return r.get("bankCode")
+        for r in rows:
+            nb = _normalize_bank_name(r.get("bankName", ""))
+            if key in nb or nb in key:
+                return r.get("bankCode")
+        return None
+    return None
+
+
+async def dispatch_payout_via_enabled_gateway(w: dict, note: str = "") -> dict:
+    """Try to pay out a withdrawal through each admin-enabled payout gateway,
+    in priority order (paynow → shpay → onesspay). Bank codes are translated
+    by bank name so a user's PayNow-format code still works via SHPAY/1SSPay.
+
+    Returns the first successful gateway's response. Raises HTTPException(400)
+    with a combined error message if all enabled gateways refuse.
+    """
+    errors: List[str] = []
+    original_code = w.get("bank_code")
+    bank_name = w.get("bank_name") or ""
+
+    priority = ["paynow", "shpay", "onesspay"]
+    tried_any = False
+    for gw in priority:
+        if not await gateway_payout_allowed(gw):
+            continue
+        # Translate bank_code for the target gateway; fall through if we can't
+        # produce a valid code (missing bank name / no match in the target's list).
+        translated = await translate_bank_code(bank_name, gw, current_code=original_code)
+        if not translated:
+            errors.append(f"{gw}: no matching bank code for '{bank_name}'")
+            continue
+        tried_any = True
+        w_scoped = {**w, "bank_code": translated}
+        try:
+            if gw == "paynow":
+                return await _paynow_payout_withdrawal(w_scoped, note=note)
+            if gw == "shpay":
+                return await _shpay_payout_withdrawal(w_scoped, note=note)
+            if gw == "onesspay":
+                w_scoped["onesspay_bank_code"] = translated
+                return await _onesspay_payout_withdrawal(w_scoped, note=note)
+        except HTTPException as e:
+            errors.append(f"{gw}: {e.detail}")
+            logger.info("Payout via %s failed for withdrawal %s: %s", gw, w["_id"], e.detail)
+        except Exception as e:
+            errors.append(f"{gw}: {str(e)}")
+            logger.exception("Payout via %s crashed for withdrawal %s", gw, w["_id"])
+
+    if not tried_any and not errors:
+        raise HTTPException(400, "No payout gateways are currently enabled. Enable one from Admin → Payment Gateways.")
+    raise HTTPException(400, "All enabled payout gateways refused this withdrawal: " + " | ".join(errors))
+
+
 async def get_settings() -> dict:
     s = await db.settings.find_one({"_id": "global"})
     if not s:
@@ -1342,6 +1464,7 @@ async def _paynow_payout_withdrawal(w: dict, note: str = "") -> dict:
     )
     if pn.get("code") != 0:
         raise HTTPException(400, f"Gateway declined: {pn.get('msg') or 'unknown'}")
+    pn_data = pn.get("data") or {}
     await db.withdrawals.update_one(
         {"_id": w["_id"]},
         {"$set": {
@@ -1350,6 +1473,7 @@ async def _paynow_payout_withdrawal(w: dict, note: str = "") -> dict:
             "admin_note": note or "",
             "gateway": "paynow",
             "merchant_order_no": merchant_order_no,
+            "platform_order_no": pn_data.get("orderNo"),
             "gateway_response": pn,
         }},
     )
@@ -1480,12 +1604,19 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
                           f"Withdrawal requested (fee ₦{fee:.0f}, payout ₦{payout_amount:.0f})",
                           {"withdrawal_id": str(res.inserted_id), "fee": fee, "payout_amount": payout_amount})
 
-    # Auto-payout when admin has enabled it AND PayNow is live AND we have a bank_code.
-    auto_ok = bool(settings.get("auto_payout_enabled")) and paynow.enabled() and bool(bank_code)
+    # Auto-payout when admin has enabled it AND we have a bank_code AND at least one
+    # payout gateway toggle is on. The dispatcher tries paynow → shpay → onesspay
+    # and translates bank codes across gateway formats by bank name.
+    toggles = await get_gateway_toggles()
+    any_payout_gateway_on = any(
+        _gateway_module_enabled(g) and toggles.get(g, {}).get("payout")
+        for g in GATEWAY_KEYS
+    )
+    auto_ok = bool(settings.get("auto_payout_enabled")) and any_payout_gateway_on and bool(bank_code)
     if auto_ok:
         w = await db.withdrawals.find_one({"_id": res.inserted_id})
         try:
-            await _paynow_payout_withdrawal(w, note="Auto-payout")
+            await dispatch_payout_via_enabled_gateway(w, note="Auto-payout")
         except HTTPException as e:
             # Log the failure but leave withdrawal pending so admin can retry manually
             logger.warning(f"Auto-payout failed for withdrawal {res.inserted_id}: {e.detail}")
@@ -2037,18 +2168,30 @@ async def approve_withdrawal(wid: str, payload: ApprovalIn, admin: dict = Depend
     if w["status"] != "pending":
         raise HTTPException(400, f"Already {w['status']}")
 
-    # PayNow automatic payout if enabled AND admin toggle allows AND withdrawal has bank_code
-    if paynow.enabled() and await gateway_payout_allowed("paynow") and w.get("bank_code"):
-        try:
-            await _paynow_payout_withdrawal(w, note=payload.note or "")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception("PayNow payout failed")
-            raise HTTPException(502, f"Payment gateway error: {e}")
-        return {"ok": True, "gateway": "paynow", "status": "processing"}
+    # Try to auto-dispatch through the first enabled payout gateway (paynow →
+    # shpay → onesspay). Bank code is translated by bank name so a user's
+    # PayNow-format code (NG0xxx) still works if we route through SHPAY/1SSPay.
+    # Only requires a bank_code on the withdrawal — the dispatcher handles
+    # every gateway's format internally.
+    if w.get("bank_code") or w.get("bank_name"):
+        toggles = await get_gateway_toggles()
+        any_payout_gateway_on = any(
+            _gateway_module_enabled(g) and toggles.get(g, {}).get("payout")
+            for g in GATEWAY_KEYS
+        )
+        if any_payout_gateway_on:
+            try:
+                await dispatch_payout_via_enabled_gateway(w, note=payload.note or "")
+                # Which gateway actually settled is reflected in the DB row.
+                fresh = await db.withdrawals.find_one({"_id": w["_id"]})
+                return {"ok": True, "gateway": fresh.get("gateway"), "status": "processing"}
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.exception("Auto-dispatch payout failed")
+                raise HTTPException(502, f"Payment gateway error: {e}")
 
-    # Manual flow
+    # Manual flow — no gateway enabled OR no bank info OR user asked for manual.
     await db.withdrawals.update_one({"_id": w["_id"]},
                                     {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                                               "admin_note": payload.note or ""}})
@@ -2128,14 +2271,14 @@ async def bulk_approve_withdrawals(payload: BulkApprovalIn, admin: dict = Depend
         if w["status"] != "pending":
             results["skipped"] += 1; continue
 
-        if paynow.enabled() and w.get("bank_code"):
+        if w.get("bank_code") or w.get("bank_name"):
             try:
-                await _paynow_payout_withdrawal(w, note=payload.note or "")
+                await dispatch_payout_via_enabled_gateway(w, note=payload.note or "")
                 results["processing"] += 1
             except HTTPException as e:
                 results["errors"].append({"id": wid, "error": e.detail}); results["skipped"] += 1
             except Exception as e:
-                logger.exception("PayNow payout failed in bulk")
+                logger.exception("Bulk payout failed")
                 results["errors"].append({"id": wid, "error": str(e)}); results["skipped"] += 1
         else:
             await db.withdrawals.update_one(
