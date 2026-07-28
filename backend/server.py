@@ -2590,6 +2590,47 @@ async def admin_onesspay_health(admin: dict = Depends(get_admin_user)):
     return {"enabled": True, "outbound_ip": outbound_ip, "balance_response": bal}
 
 
+@api.get("/admin/server-ip")
+async def admin_server_ip(admin: dict = Depends(get_admin_user)):
+    """Return the outbound egress IP that payment merchants will see on ALL
+    server→gateway calls. This is the IP to whitelist at PayNow / SHPAY / 1SSPay.
+
+    When a static-IP proxy is configured (HTTPS_PROXY env var), the returned IP
+    is the proxy's static IP. When no proxy is set, it's the pod's ephemeral IP
+    (which rotates across restarts on non-static hosting).
+    """
+    proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or ""
+    proxied = bool(proxy_url)
+    # Redact credentials from the proxy URL for display
+    display_proxy = None
+    if proxy_url:
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(proxy_url)
+            display_proxy = f"{p.scheme}://***@{p.hostname}:{p.port}"
+        except Exception:
+            display_proxy = "configured"
+    outbound_ip = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            r = await c.get("https://api.ipify.org")
+            outbound_ip = r.text.strip() or "unknown"
+    except Exception:
+        pass
+    return {
+        "outbound_ip": outbound_ip,
+        "static_proxy_configured": proxied,
+        "proxy": display_proxy,
+        "instructions": (
+            "Whitelist this IP on your PayNow, SHPAY, and 1SSPay merchant dashboards. "
+            "With a static proxy configured, this IP stays permanent."
+            if proxied
+            else "This IP may rotate on pod restarts. Configure a static-IP proxy (HTTPS_PROXY env) or "
+                 "request a static egress IP from Emergent Support."
+        ),
+    }
+
+
 @api.post("/onesspay/webhook/payin", response_class=PlainTextResponse)
 async def onesspay_payin_webhook(request: Request):
     """1SSPay payin callback. Form-urlencoded body. Response MUST be the literal

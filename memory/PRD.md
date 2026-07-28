@@ -491,3 +491,37 @@ Root cause: `POST /api/withdrawals` (user submits withdrawal) had auto-payout **
 
 ### ⚠️ Note about the user's original ₦1,000 withdrawal
 The withdrawal `Wcab22dd7c94527451785235517` (₦1,000 CASHFLOW VIP 10 → OPay 8054563130) is currently in PayNow's dashboard as order `PT178523612272098827`. It never reached SHPAY because the auto-payout was hard-coded to PayNow at submission time (now fixed). If you want it to appear in SHPAY instead, you'd need to reject the PayNow one first, then use the new SHPAY payout button on the admin panel — the dispatcher will translate the bank code and dispatch to SHPAY.
+
+## 2026-07-28 · Static outbound IP via IPRoyal proxy (P0 infrastructure fix)
+
+### Problem
+Emergent's standard deployment does not provide a static outbound egress IP — it rotated 3+ times (`34.170.12.145 → 34.16.56.64 → 104.198.214.223`) during this session alone. Payment merchants (PayNow, SHPAY, 1SSPay) all require IP whitelisting, so every rotation broke live payments and forced manual re-whitelisting at three dashboards.
+
+### Delivered
+User purchased an **IPRoyal static-IP proxy** (`46.20.101.18:12323`, HTTP basic auth). Wired into the backend via env vars only — zero code changes required because `httpx.AsyncClient` auto-detects `HTTPS_PROXY` when `trust_env=True` (default).
+
+1. **`/app/backend/.env`** — added:
+   ```
+   HTTP_PROXY="http://<user>:<pass>@46.20.101.18:12323"
+   HTTPS_PROXY="http://<user>:<pass>@46.20.101.18:12323"
+   ```
+2. **New endpoint `GET /api/admin/server-ip`** — returns `{outbound_ip, static_proxy_configured, proxy (redacted), instructions}`. Used by the admin UI to show the IP that merchants see, without hunting through logs.
+3. **New `ServerIPCard`** in Admin Settings — top of the page, above Gateway Toggles. Big monospaced IP display (green if static proxy configured, orange if rotating), Copy button, live "Refresh" button, credential-redacted proxy readout for debugging.
+
+### Verified live
+- Direct httpx call: outbound IP = `46.20.101.18` (3× consecutive calls confirmed stable).
+- PayNow: `code=10000039 "The IP address fails to pass the whitelist check"` — request reached PayNow, just needs `46.20.101.18` added to whitelist.
+- SHPAY: `"Please use the ip you whitelist"` — same story.
+- 1SSPay: `code=1007 "channel authority not open"` — sample credentials issue, unrelated.
+- `/api/admin/server-ip` returns `{"outbound_ip":"46.20.101.18","static_proxy_configured":true, ...}`.
+- `/api/admin/onesspay/health` correctly reports `46.20.101.18`.
+- Frontend `yarn build` clean.
+
+### What user needs to do next (one-time only)
+Whitelist **`46.20.101.18`** on:
+1. **PayNow** (`merchant.paynow.money` → Settings → API/Security → IP Whitelist)
+2. **SHPAY** (`dashboard.shpays.com` → Merchant Settings → API Config → IP Whitelist)
+3. **1SSPay** (`h786.1sspay.biz` → Merchant Settings → IP Whitelist)
+
+After this, container restarts / redeploys / IP rotations no longer matter — IPRoyal's IP stays permanent.
+

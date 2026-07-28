@@ -203,10 +203,110 @@ export default function AdminSettings() {
         </Card>
       )}
 
+      <ServerIPCard />
+
       <GatewayTogglesCard />
 
       <DangerZoneCard />
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Server IP card — shows the outbound egress IP the payment merchants see.   */
+/*  With HTTPS_PROXY configured, this IP is stable forever.                     */
+/* -------------------------------------------------------------------------- */
+
+function ServerIPCard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/admin/server-ip")
+      .then((r) => setData(r.data))
+      .catch(() => toast.error("Failed to fetch server IP"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const copyIp = async () => {
+    if (!data?.outbound_ip || data.outbound_ip === "unknown") return;
+    try {
+      await navigator.clipboard.writeText(data.outbound_ip);
+      toast.success(`Copied ${data.outbound_ip}`);
+    } catch {
+      toast.error("Copy failed — select the text and copy manually");
+    }
+  };
+
+  return (
+    <Card
+      className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4"
+      data-testid="admin-server-ip-card"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-600">Server IP for Merchant Whitelists</h2>
+          <p className="text-xs text-[var(--nb-muted)] mt-1">
+            This is the single IP your payment gateways see. Whitelist it once at PayNow, SHPAY, and 1SSPay dashboards.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={load}
+          className="h-8 text-xs border-[var(--nb-border)]"
+          data-testid="server-ip-refresh-btn"
+        >
+          Refresh
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-[var(--nb-muted)]">Checking outbound IP…</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div
+              className={`px-4 py-3 rounded-xl font-mono font-700 text-2xl tracking-wider flex-1 truncate ${
+                data?.static_proxy_configured
+                  ? "bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30"
+                  : "bg-[#F97316]/10 text-[#F97316] border border-[#F97316]/30"
+              }`}
+              data-testid="server-ip-value"
+            >
+              {data?.outbound_ip || "unknown"}
+            </div>
+            <Button
+              onClick={copyIp}
+              className="h-12 px-4 bg-[var(--nb-card2)] hover:bg-[var(--nb-border)] text-white border border-[var(--nb-border)]"
+              data-testid="server-ip-copy-btn"
+            >
+              Copy
+            </Button>
+          </div>
+          <div className="flex items-start gap-2 text-xs text-[var(--nb-muted)]">
+            <div
+              className={`px-2 py-0.5 rounded font-display font-700 uppercase tracking-wider text-[10px] shrink-0 ${
+                data?.static_proxy_configured
+                  ? "bg-[#10B981]/20 text-[#10B981]"
+                  : "bg-[#F97316]/20 text-[#F97316]"
+              }`}
+              data-testid="server-ip-status-badge"
+            >
+              {data?.static_proxy_configured ? "Static" : "Rotating"}
+            </div>
+            <div className="leading-relaxed">{data?.instructions}</div>
+          </div>
+          {data?.static_proxy_configured && data?.proxy && (
+            <div className="text-[11px] text-[var(--nb-muted)] pt-2 border-t border-[var(--nb-border)]">
+              Routed via: <span className="font-mono">{data.proxy}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
