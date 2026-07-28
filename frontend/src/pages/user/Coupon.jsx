@@ -1,19 +1,18 @@
 import React, { useState } from "react";
 import { api, formatApiError, formatNaira } from "@/lib/api";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Ticket, Lock, Sparkles, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Ticket, Lock, Sparkles, ArrowRight, CheckCircle2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
+import { AmbientCard, SoftCard, SectionHeader, MicroLabel, PillCTA, StackChip } from "@/components/design";
 
 export default function Coupon() {
   const { user, refresh } = useAuth();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [lastReward, setLastReward] = useState(null); // {amount, code}
+  const [lastReward, setLastReward] = useState(null);
 
   const redeem = async (e) => {
     e.preventDefault();
@@ -33,56 +32,43 @@ export default function Coupon() {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto" data-testid="coupon-page">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6">
-        <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#F59E0B]/30 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-40 h-40 rounded-full bg-[#0055FF]/20 blur-3xl pointer-events-none" />
-        <div className="relative flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#F59E0B]/15 border border-[#F59E0B]/30 grid place-items-center shrink-0">
-            <Ticket className="w-6 h-6 text-[#F59E0B]" />
-          </div>
-          <div>
-            <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="coupon-heading">
-              Redeem a bonus code
-            </h1>
-            <p className="text-sm text-[var(--nb-muted)] mt-1">
-              Instant naira credited straight to your wallet.
-            </p>
-          </div>
-        </div>
-      </div>
+      <SectionHeader
+        title="Redeem a bonus code"
+        subtitle="Instant naira credited straight to your wallet."
+        testid="coupon-heading"
+      />
 
-      {locked && (
-        <div className="rounded-xl border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-4 flex items-start gap-3" data-testid="coupon-locked-banner">
-          <Lock className="w-5 h-5 text-[#F59E0B] mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <div className="font-display font-600 text-sm">Redemption locked</div>
-            <div className="text-xs text-[var(--nb-muted)] mt-1">You must invest before redeeming coupon codes.</div>
-          </div>
-          <Link to="/marketplace" className="shrink-0">
-            <Button size="sm" className="bg-[#F59E0B] hover:bg-[#d97706] text-white">
-              Invest <ArrowRight className="w-3 h-3 ml-1" />
-            </Button>
-          </Link>
-        </div>
-      )}
+      {/* Hero ticket — with notches, matches physical-ticket aesthetic */}
+      <AmbientCard tone="gold" testid="coupon-hero">
+        <div className="relative">
+          {/* Ticket punch notches on the sides */}
+          <div className="absolute -left-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[var(--nb-page)] border-r border-[#F5C518]/30" />
+          <div className="absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[var(--nb-page)] border-l border-[#F5C518]/30" />
 
-      {/* Ticket-styled form */}
-      <div className="relative" data-testid="coupon-ticket">
-        <div
-          className="relative rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6 overflow-hidden"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 0 50%, transparent 12px, transparent 12px, transparent 100%), radial-gradient(circle at 100% 50%, transparent 12px, transparent 12px, transparent 100%)",
-          }}
-        >
-          {/* Notches */}
-          <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[var(--nb-page)] border border-[var(--nb-border)]" />
-          <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[var(--nb-page)] border border-[var(--nb-border)]" />
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl grid place-items-center shrink-0"
+                 style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                          boxShadow: "0 8px 26px -6px rgba(245,197,24,0.55)" }}>
+              <Ticket className="w-8 h-8 text-[#1A1508]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <MicroLabel tone="gold">Coupon</MicroLabel>
+              <div className="mt-1 font-display font-800 text-lg text-white">
+                Enter a promo code
+              </div>
+              <div className="text-xs text-[var(--nb-muted)] mt-0.5">
+                Get instant wallet credit — no waiting for approval.
+              </div>
+            </div>
+          </div>
+
+          {/* Dashed divider mid-ticket */}
+          <div className="my-5 h-[2px]"
+               style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 6px,transparent 6px 12px)", opacity: 0.45 }} />
 
           <form onSubmit={redeem} className="space-y-4">
             <div>
-              <Label>Coupon code</Label>
+              <MicroLabel tone="gold">Coupon code</MicroLabel>
               <Input
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -90,50 +76,95 @@ export default function Coupon() {
                 placeholder="ENTER-CODE"
                 disabled={locked}
                 data-testid="coupon-code-input"
-                className="mt-2 bg-[var(--nb-page)] border-[var(--nb-border)] text-white h-14 tracking-[0.35em] uppercase font-display font-700 text-xl text-center"
+                className="mt-2 bg-[var(--nb-card2)] border-[#F5C518]/30 text-white h-16 tracking-[0.35em] uppercase font-display font-800 text-2xl text-center rounded-xl focus:border-[#F5C518]/60 focus:ring-0"
               />
               <p className="text-[10px] text-[var(--nb-muted)] tabular mt-2 text-center">
                 Codes are case-insensitive. Paste-friendly.
               </p>
             </div>
 
-            <Button
+            <button
               type="submit"
               disabled={loading || locked}
               data-testid="coupon-redeem-button"
-              className="w-full h-12 bg-[#F59E0B] hover:bg-[#d97706] rounded-xl text-white font-display font-700"
+              className="w-full h-12 rounded-full font-display font-800 text-sm text-[#1A1508] disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:brightness-110 active:scale-[0.98] flex items-center justify-center gap-2"
+              style={{
+                background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                boxShadow: "0 8px 24px -6px rgba(245,197,24,0.55)",
+              }}
             >
-              <Sparkles className="w-4 h-4 mr-2" />
+              <Sparkles className="w-4 h-4" />
               {loading ? "Redeeming…" : "Redeem code"}
-            </Button>
+            </button>
           </form>
         </div>
-      </div>
+      </AmbientCard>
+
+      {/* Locked banner */}
+      {locked && (
+        <SoftCard testid="coupon-locked-banner">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg grid place-items-center shrink-0"
+                 style={{ background: "#F59E0B18", border: "1px solid #F59E0B40", color: "#F59E0B" }}>
+              <Lock className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-700 text-sm text-white">Redemption locked</div>
+              <div className="text-[11px] text-[var(--nb-muted)] mt-0.5">
+                You must invest before redeeming coupon codes.
+              </div>
+            </div>
+            <Link to="/marketplace" className="shrink-0">
+              <PillCTA tone="purple" size="sm" testid="coupon-locked-invest-btn">
+                Invest
+              </PillCTA>
+            </Link>
+          </div>
+        </SoftCard>
+      )}
 
       {/* Success chip */}
       {lastReward && (
-        <div className="rounded-xl border border-[#10B981]/40 bg-[#10B981]/10 p-4 flex items-center gap-3" data-testid="coupon-success">
-          <CheckCircle2 className="w-5 h-5 text-[#10B981] shrink-0" />
-          <div className="flex-1">
-            <div className="font-display font-600 text-sm">Wallet credited</div>
-            <div className="text-xs text-[var(--nb-muted)] mt-0.5">
-              Code <code className="text-white">{lastReward.code}</code> added{" "}
-              <span className="text-[#10B981] tabular">{formatNaira(lastReward.amount)}</span>
+        <AmbientCard tone="success" testid="coupon-success">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0"
+                 style={{ background: "linear-gradient(135deg,#34D399,#10B981)",
+                          boxShadow: "0 6px 20px rgba(16,185,129,0.45)" }}>
+              <CheckCircle2 className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <MicroLabel tone="success">Wallet credited</MicroLabel>
+              <div className="mt-1 font-display font-800 text-xl tabular text-[#10B981]">
+                +{formatNaira(lastReward.amount)}
+              </div>
+              <div className="text-[11px] text-[var(--nb-muted)] tabular mt-0.5">
+                Code <code className="text-white">{lastReward.code}</code>
+              </div>
             </div>
           </div>
-        </div>
+        </AmbientCard>
       )}
 
-      {/* Balance card */}
-      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] rounded-xl p-4 flex items-center justify-between">
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Current wallet</div>
-          <div className="mt-1 font-display font-800 tabular text-lg" data-testid="coupon-wallet-balance">
-            {formatNaira(user?.wallet_balance)}
+      {/* Balance */}
+      <SoftCard testid="coupon-wallet-card">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg grid place-items-center"
+                 style={{ background: "#0055FF18", border: "1px solid #0055FF40", color: "#0055FF" }}>
+              <Wallet className="w-4 h-4" />
+            </div>
+            <div>
+              <MicroLabel>Current wallet</MicroLabel>
+              <div className="mt-1 font-display font-800 tabular text-lg text-white" data-testid="coupon-wallet-balance">
+                {formatNaira(user?.wallet_balance)}
+              </div>
+            </div>
           </div>
+          <Link to="/deposit" className="text-xs text-[#0055FF] hover:underline flex items-center gap-1">
+            Top up <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
-        <Link to="/deposit" className="text-xs text-[#0055FF] hover:underline">Top up →</Link>
-      </Card>
+      </SoftCard>
     </div>
   );
 }

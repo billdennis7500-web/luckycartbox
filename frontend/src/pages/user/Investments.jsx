@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, CheckCircle2, Sparkles, Timer, Calendar, ChevronRight } from "lucide-react";
+import { AmbientCard, SectionHeader, MicroLabel, PillCTA } from "@/components/design";
 
 /* -------------- helpers -------------- */
 function nextPayoutText(inv) {
@@ -192,14 +193,12 @@ export default function Investments() {
 
   return (
     <div className="space-y-6" data-testid="investments-page">
-      {/* Hero */}
-      <div className="relative rounded-2xl p-5 overflow-hidden border border-[var(--nb-border)]"
-           style={{ background: "linear-gradient(135deg,#0B1524 0%, #0A2A6C 100%)" }}>
-        <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-[#0055FF]/25 blur-3xl pointer-events-none" />
-        <div className="relative">
-          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Portfolio value</div>
+      {/* Portfolio hero — gold ambient card */}
+      <AmbientCard tone="gold" testid="investments-hero">
+        <div>
+          <MicroLabel tone="gold">Portfolio value</MicroLabel>
           <div className="mt-1 flex items-baseline gap-2">
-            <div className="font-display font-800 text-3xl tabular text-white" data-testid="inv-total-active">
+            <div className="font-display font-800 text-4xl tabular text-white tracking-tight" data-testid="inv-total-active">
               {formatNaira(totalActive)}
             </div>
             <span className="text-[11px] text-[var(--nb-muted)]">
@@ -207,30 +206,33 @@ export default function Investments() {
             </span>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <div className="uppercase tracking-widest text-[var(--nb-muted)]">Earned so far</div>
-              <div className="mt-1 tabular font-display font-700 text-[#10B981]" data-testid="inv-total-earned">
+            <div className="rounded-xl p-3"
+                 style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)" }}>
+              <MicroLabel><span className="text-[#10B981]">Earned so far</span></MicroLabel>
+              <div className="mt-1 tabular font-display font-800 text-[#10B981]" data-testid="inv-total-earned">
                 {formatNaira(totalEarned)}
               </div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <div className="uppercase tracking-widest text-[var(--nb-muted)]">Projected remaining</div>
-              <div className="mt-1 tabular font-display font-700 text-white" data-testid="inv-projected-remaining">
+            <div className="rounded-xl p-3"
+                 style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.28)" }}>
+              <MicroLabel tone="gold">Projected remaining</MicroLabel>
+              <div className="mt-1 tabular font-display font-800 text-white" data-testid="inv-projected-remaining">
                 {formatNaira(projectedRemaining)}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </AmbientCard>
 
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-xl font-800 tracking-tight" data-testid="investments-heading">
-          My investments
-        </h1>
-        <Link to="/marketplace" className="text-xs text-[#0055FF] hover:underline flex items-center gap-1">
-          Browse plans <ChevronRight className="w-3 h-3" />
-        </Link>
-      </div>
+      <SectionHeader
+        title="My investments"
+        testid="investments-heading"
+        right={
+          <Link to="/marketplace" className="text-xs text-[#F5C518] hover:underline flex items-center gap-1 shrink-0 font-display font-700">
+            Browse plans <ChevronRight className="w-3 h-3" />
+          </Link>
+        }
+      />
 
       {/* Tabs */}
       <div className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)]">
@@ -243,8 +245,8 @@ export default function Investments() {
             key={k}
             onClick={() => setTab(k)}
             data-testid={tid}
-            className={`h-9 text-xs rounded-lg font-medium transition-colors ${
-              tab === k ? "bg-[#0055FF] text-white" : "text-[var(--nb-muted)] hover:text-white"
+            className={`h-9 text-xs rounded-lg font-display font-700 transition-colors ${
+              tab === k ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30" : "text-[var(--nb-muted)] hover:text-white"
             }`}
           >
             {label}

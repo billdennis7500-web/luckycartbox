@@ -4,6 +4,7 @@ import { api, formatNaira } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Search, Receipt, ArrowUpFromLine, Clock, CheckCircle2, XCircle, Landmark } from "lucide-react";
 import LoadMore from "@/components/LoadMore";
+import { SectionHeader } from "@/components/design";
 
 const TABS = [
   { k: "all", label: "All" },
@@ -97,14 +98,19 @@ export default function WithdrawHistory() {
     <div className="space-y-5" data-testid="withdraw-history-page">
       <div className="flex items-center gap-3">
         <Link to="/withdraw" data-testid="whist-back-link"
-              className="w-9 h-9 rounded-lg border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-white">
+              className="w-9 h-9 rounded-lg border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-white shrink-0">
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div className="flex-1">
-          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="whist-heading">Withdrawal history</h1>
-          <p className="text-xs text-[var(--nb-muted)] mt-1">
-            {items.length} withdrawal{items.length === 1 ? "" : "s"} · <span className="text-[#10B981] tabular">{formatNaira(totalApproved)}</span> paid out
-          </p>
+          <SectionHeader
+            title="Withdrawal history"
+            subtitle={
+              <>
+                {items.length} withdrawal{items.length === 1 ? "" : "s"} · <span className="text-[#10B981] tabular">{formatNaira(totalApproved)}</span> paid out
+              </>
+            }
+            testid="whist-heading"
+          />
         </div>
       </div>
 
@@ -114,8 +120,8 @@ export default function WithdrawHistory() {
             key={k}
             onClick={() => setTab(k)}
             data-testid={`whist-tab-${k}`}
-            className={`h-9 text-xs rounded-lg font-medium transition-colors ${
-              tab === k ? "bg-[#0055FF] text-white" : "text-[var(--nb-muted)] hover:text-white"
+            className={`h-9 text-xs rounded-lg font-display font-700 transition-colors ${
+              tab === k ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30" : "text-[var(--nb-muted)] hover:text-white"
             }`}
           >
             {label} <span className="opacity-60 tabular">({counts[k]})</span>

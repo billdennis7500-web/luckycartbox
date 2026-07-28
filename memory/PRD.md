@@ -583,3 +583,50 @@ Complete rewrite. Now renders one horizontal card per product matching the refer
 ### ⚠️ Storage note
 Images are stored as base64 data-URLs directly in MongoDB `products` collection. A 640px JPEG at 82% quality is typically 40-100 KB base64. For the current handful of products (< 30) total footprint is <5 MB. If the catalog grows to 100+ or needs richer imagery, migrate `image_url` to Emergent Object Storage (integration playbook exists) — the field is a plain URL so the frontend won't need changes.
 
+
+## 2026-07-28 · Full app-wide visual redesign — dark-gold aesthetic (P0 UX)
+
+Applied the Marketplace "product card" visual language (dark-gold gradient background, tier-colored ambient glow, dashed gold accent lines, purple pill CTAs, chip badges, big tabular numbers) consistently across the entire user surface + reorganized Admin Settings into tabs.
+
+### New shared design system (`frontend/src/components/design.jsx`)
+Extracted 10 reusable primitives so future style tweaks land in one place:
+- **`AmbientCard`** — flagship dark-gold gradient card with tier-colored `box-shadow` glow + optional dashed gold accent lines top/bottom.
+- **`SoftCard`** — lighter variant for secondary sections.
+- **`SectionHeader`** — yellow vertical bar + heading + subtitle.
+- **`PillCTA`** — purple pill-shaped button with icon + arrow.
+- **`BigStat`** / **`StatChip`** / **`StackChip`** / **`MicroLabel`** — the money-display + label primitives.
+- **`TierBadge`** — corner badge (Legendary/Epic/Hot/Newcomer/Tech/Fashion + info/success/danger/gold/purple).
+- **`RowItem`** — reusable list-row for tx/history/referrals.
+- **`EmptyState`** — treasure-chest empty-state.
+- **`TIER_TOKENS`** — 12 named tier/color palette exported for one-off use.
+
+### Redesigned pages (full rewrite)
+- **`Dashboard.jsx`** — gold ambient wallet hero with hide/show + 3-stat grid; tier-colored quick-action tiles; purple referral card; welcome pop-up rebuilt with matching gold aesthetic (2 dashed gold accent lines, radial orbs, big party icon).
+- **`Withdraw.jsx`** — SectionHeader + gold available-to-withdraw card + purple ambient form card + gold gradient submit button.
+- **`Profile.jsx`** — gold header card with avatar + purple referral chip inline; menu links use tier-colored icon squares (referrals=purple, tx=cyan, deposit=green, withdraw=blue, bank=blue, coupon=gold, admin=hot); red sign-out with danger tone.
+- **`Coupon.jsx`** — physical-ticket aesthetic (gold card with punch-notches on the sides, dashed mid-divider, 2xl tracked code input, gradient redeem button); success celebration card in success tone.
+- **`Marketplace.jsx`** — already done in previous session, unchanged.
+
+### Redesigned pages (surgical updates)
+- **`Deposit.jsx`** — SectionHeader.
+- **`Investments.jsx`** — gold portfolio hero card + purple active tabs.
+- **`Referrals.jsx`** — epic hero card + gold total-earnings card + purple gen tabs.
+- **`BindAccount.jsx`** — gold "Currently bound" card + SectionHeader.
+- **`DepositHistory.jsx`** / **`WithdrawHistory.jsx`** / **`Transactions.jsx`** — SectionHeader (gold vertical bar) + purple active tabs (was blue).
+
+### Admin Settings reorganization (`AdminSettings.jsx`)
+Converted from a long scrolling page into a 4-tab UI with sticky tab bar:
+1. **General** — site name, welcome bonus, deposit/withdrawal min, quick amounts, batch limit, community URL, welcome message.
+2. **Payments** — Gateway Toggles + PayNow webhook URLs.
+3. **Server** — Server IP card (copy button + Static badge).
+4. **Danger** — Danger Zone.
+Tab active color unified to purple (`#7C3AED`) across the whole app.
+
+### What was explicitly NOT done in this pass
+- **Light mode** — deliberately skipped. The handoff summary from a previous session noted the user asked for light mode and then disliked it, so it was fully removed. If you want it back, I can add a proper light theme + toggle in Profile in a follow-up (would swap CSS variables via a `data-theme` attribute on `<html>`, keep the gold/purple accents, and give it a serious accessibility pass — high contrast, WCAG-AA text).
+
+### Verified
+- `yarn build` compiles clean (194.72 KB main.js gzipped, +2.14 KB vs previous).
+- 5 route screenshots (dashboard, deposit, withdraw, profile, admin/settings) all navigated without errors.
+- All 10 design-system primitives exported and imported across 13 pages.
+

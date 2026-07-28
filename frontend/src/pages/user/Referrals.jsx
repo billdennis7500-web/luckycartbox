@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Share2, Users, TrendingUp, Check, MessageCircle, Send, Twitter, Facebook } from "lucide-react";
 import { toast } from "sonner";
 import LoadMore from "@/components/LoadMore";
+import { AmbientCard, SectionHeader, MicroLabel } from "@/components/design";
 
 export default function Referrals() {
   const [data, setData] = useState(null);
@@ -94,20 +95,14 @@ export default function Referrals() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="referrals-heading">
-          Refer & earn
-        </h1>
-        <p className="text-sm text-[var(--nb-muted)] mt-1">3-generation commissions across every invite you make.</p>
-      </div>
+      <SectionHeader
+        title="Refer & earn"
+        subtitle="3-generation commissions across every invite you make."
+        testid="referrals-heading"
+      />
 
-      {/* Hero card */}
-      <Card
-        data-testid="referral-hero-card"
-        className="relative overflow-hidden rounded-2xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-6"
-      >
-        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[#0055FF]/25 blur-[100px] pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full bg-[#0055FF]/15 blur-[100px] pointer-events-none" />
+      {/* Hero card — purple/epic tone */}
+      <AmbientCard tone="epic" testid="referral-hero-card">
 
         <div className="relative space-y-5">
           <div>
@@ -167,34 +162,36 @@ export default function Referrals() {
             </div>
           </div>
         </div>
-      </Card>
+      </AmbientCard>
 
-      {/* Total earnings */}
-      <Card
-        data-testid="total-earnings-card"
-        className="rounded-2xl border border-[#0055FF]/40 bg-gradient-to-br from-[#0055FF] via-[#003ec7] to-[var(--nb-card)] p-6 text-white"
-      >
+      {/* Total earnings — gold tone */}
+      <AmbientCard tone="gold" testid="total-earnings-card">
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-white/70">Total commissions</div>
-            <div className="mt-2 font-display font-800 text-3xl sm:text-4xl tabular" data-testid="total-commissions">
+            <MicroLabel tone="gold">Total commissions</MicroLabel>
+            <div className="mt-2 font-display font-800 text-3xl sm:text-4xl tabular text-white" data-testid="total-commissions">
               {formatNaira(data.earnings.total)}
             </div>
           </div>
-          <div className="w-11 h-11 rounded-lg bg-white/10 border border-white/20 grid place-items-center">
-            <TrendingUp className="w-5 h-5" />
+          <div className="w-11 h-11 rounded-xl grid place-items-center"
+               style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                        boxShadow: "0 6px 20px rgba(245,197,24,0.45)" }}>
+            <TrendingUp className="w-5 h-5 text-[#1A1508]" />
           </div>
         </div>
         <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
           {tabs.map((t) => (
-            <div key={t.key} className="rounded-lg bg-white/5 border border-white/10 p-3">
-              <div className="text-white/70 uppercase tracking-wider text-[10px]">{t.label} · {t.pct}%</div>
-              <div className="mt-1 tabular font-display font-800">{formatNaira(t.earn)}</div>
-              <div className="mt-0.5 tabular text-white/70">{t.users.length} people</div>
+            <div key={t.key} className="rounded-lg p-3"
+                 style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.28)" }}>
+              <div className="uppercase tracking-wider text-[10px]" style={{ color: "#F5C518", opacity: 0.85 }}>
+                {t.label} · {t.pct}%
+              </div>
+              <div className="mt-1 tabular font-display font-800 text-white">{formatNaira(t.earn)}</div>
+              <div className="mt-0.5 tabular text-[var(--nb-muted)]">{t.users.length} people</div>
             </div>
           ))}
         </div>
-      </Card>
+      </AmbientCard>
 
       {/* Referral list with tabs + search + load more */}
       <section>
@@ -214,9 +211,9 @@ export default function Referrals() {
               key={t.key}
               onClick={() => setGen(t.key)}
               data-testid={`gen-tab-${t.key}`}
-              className={`py-2 rounded-md text-xs font-medium transition-colors ${
+              className={`py-2 rounded-md text-xs font-display font-700 transition-colors ${
                 gen === t.key
-                  ? "bg-[#0055FF] text-white"
+                  ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30"
                   : "text-[var(--nb-muted)] hover:text-white"
               }`}
             >

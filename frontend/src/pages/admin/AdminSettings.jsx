@@ -8,11 +8,20 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy, AlertTriangle, Trash2, Loader2 } from "lucide-react";
+import { Copy, AlertTriangle, Trash2, Loader2, Settings, CreditCard, Server, ShieldAlert } from "lucide-react";
+import { SectionHeader } from "@/components/design";
+
+const TABS = [
+  { key: "general",  label: "General",  icon: Settings },
+  { key: "payments", label: "Payments", icon: CreditCard },
+  { key: "infra",    label: "Server",   icon: Server },
+  { key: "danger",   label: "Danger",   icon: ShieldAlert },
+];
 
 export default function AdminSettings() {
   const [s, setS] = useState(null);
   const [pn, setPn] = useState(null);
+  const [tab, setTab] = useState("general");
 
   useEffect(() => {
     api.get("/admin/settings").then((r) => setS(r.data));
@@ -57,11 +66,33 @@ export default function AdminSettings() {
   if (!s) return <div className="text-[var(--nb-muted)]">Loading…</div>;
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="font-display text-3xl lg:text-4xl font-800 tracking-tight" data-testid="admin-settings-heading">Platform settings</h1>
-        <p className="text-[var(--nb-muted)] mt-2">Welcome bonus, limits, branding, gateway webhook URLs.</p>
+    <div className="space-y-5 max-w-3xl">
+      <SectionHeader
+        title="Platform settings"
+        subtitle="Branding, limits, payment gateways, infrastructure and danger zone."
+        testid="admin-settings-heading"
+      />
+
+      {/* Tab bar */}
+      <div className="grid grid-cols-4 gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)] sticky top-2 z-30 backdrop-blur">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            data-testid={`admin-settings-tab-${key}`}
+            className={`h-10 rounded-lg text-xs font-display font-700 transition-colors flex items-center justify-center gap-1.5 ${
+              tab === key
+                ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30"
+                : "text-[var(--nb-muted)] hover:text-white"
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span>{label}</span>
+          </button>
+        ))}
       </div>
+
+      {tab === "general" && (
       <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4">
         <div>
           <Label>Site name</Label>
@@ -175,43 +206,46 @@ export default function AdminSettings() {
 
         <Button onClick={save} data-testid="setting-save-btn" className="bg-[#0055FF] hover:bg-[#3377FF]">Save</Button>
       </Card>
-
-      {pn?.enabled && (
-        <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4">
-          <div>
-            <h2 className="font-display text-lg font-600">PayNow webhook URLs</h2>
-            <p className="text-xs text-[var(--nb-muted)] mt-1">Paste these in your PayNow merchant dashboard to enable auto-crediting and payout callbacks.</p>
-          </div>
-          {[
-            ["Payin (deposit) callback URL", payinHook, "payin-webhook"],
-            ["Payout (withdrawal) callback URL", payoutHook, "payout-webhook"],
-          ].map(([label, url, tid]) => (
-            <div key={label}>
-              <Label>{label}</Label>
-              <div className="mt-2 flex items-center gap-2">
-                <Input readOnly value={url} data-testid={tid}
-                       className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
-                <Button variant="outline" onClick={() => copy(url)} className="border-[var(--nb-border)] bg-transparent text-white">
-                  <Copy className="w-3 h-3 mr-1" /> Copy
-                </Button>
-              </div>
-            </div>
-          ))}
-          <div className="text-xs text-[var(--nb-muted)] pt-2 border-t border-[var(--nb-border)]">
-            Configure a server IP whitelist in the PayNow dashboard for the payout, statement and balance endpoints (required by PayNow).
-          </div>
-        </Card>
       )}
 
-      <ServerIPCard />
+      {tab === "payments" && (
+      <div className="space-y-5">
+        <GatewayTogglesCard />
+        {pn?.enabled && (
+          <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4">
+            <div>
+              <h2 className="font-display text-lg font-600">PayNow webhook URLs</h2>
+              <p className="text-xs text-[var(--nb-muted)] mt-1">Paste these in your PayNow merchant dashboard to enable auto-crediting and payout callbacks.</p>
+            </div>
+            {[
+              ["Payin (deposit) callback URL", payinHook, "payin-webhook"],
+              ["Payout (withdrawal) callback URL", payoutHook, "payout-webhook"],
+            ].map(([label, url, tid]) => (
+              <div key={label}>
+                <Label>{label}</Label>
+                <div className="mt-2 flex items-center gap-2">
+                  <Input readOnly value={url} data-testid={tid}
+                         className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
+                  <Button variant="outline" onClick={() => copy(url)} className="border-[var(--nb-border)] bg-transparent text-white">
+                    <Copy className="w-3 h-3 mr-1" /> Copy
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="text-xs text-[var(--nb-muted)] pt-2 border-t border-[var(--nb-border)]">
+              Configure a server IP whitelist in the PayNow dashboard for the payout, statement and balance endpoints (required by PayNow).
+            </div>
+          </Card>
+        )}
+      </div>
+      )}
 
-      <GatewayTogglesCard />
+      {tab === "infra" && <ServerIPCard />}
 
-      <DangerZoneCard />
+      {tab === "danger" && <DangerZoneCard />}
     </div>
   );
 }
-
 /* -------------------------------------------------------------------------- */
 /*  Server IP card — shows the outbound egress IP the payment merchants see.   */
 /*  With HTTPS_PROXY configured, this IP is stable forever.                     */

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { SectionHeader } from "@/components/design";
 
 /* -------------- helpers -------------- */
 function bankTint(name = "") {
@@ -252,16 +253,17 @@ export default function Deposit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="deposit-heading">Deposit funds</h1>
-          <p className="text-sm text-[var(--nb-muted)] mt-1">Pick a payment option and add the amount you want to fund.</p>
-        </div>
-        <Link to="/deposit-history" data-testid="deposit-history-link"
-              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card)] text-xs text-[var(--nb-muted)] hover:text-white hover:border-[#0055FF]/40 transition-colors">
-          <Receipt className="w-3.5 h-3.5" /> History
-        </Link>
-      </div>
+      <SectionHeader
+        title="Deposit funds"
+        subtitle="Pick a payment option and add the amount you want to fund."
+        testid="deposit-heading"
+        right={
+          <Link to="/deposit-history" data-testid="deposit-history-link"
+                className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-[#F5C518]/40 bg-[#F5C518]/10 text-[#F5C518] text-xs font-display font-700 hover:bg-[#F5C518]/20 transition-colors">
+            <Receipt className="w-3.5 h-3.5" /> History
+          </Link>
+        }
+      />
 
       {/* Payment options — small equal blocks */}
       {initialLoad ? (

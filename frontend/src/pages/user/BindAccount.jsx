@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import {
   Search, Check, ChevronRight, Loader2, Trash2, ArrowLeft, AlertTriangle,
 } from "lucide-react";
+import { SectionHeader, AmbientCard, MicroLabel } from "@/components/design";
 
 function BankLogo({ brand, size = "md" }) {
   const dim = size === "sm" ? "w-8 h-8 text-[10px]" : "w-10 h-10 text-xs";
@@ -141,41 +142,39 @@ export default function BindAccount() {
         <button
           onClick={() => nav(-1)}
           data-testid="bind-back-btn"
-          className="w-9 h-9 rounded-lg border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-white"
+          className="w-9 h-9 rounded-lg border border-[var(--nb-border)] grid place-items-center text-[var(--nb-muted)] hover:text-white shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div>
-          <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="bind-account-heading">
-            {existing ? "Edit bank account" : "Bind bank account"}
-          </h1>
-          <p className="text-xs text-[var(--nb-muted)] mt-1">
-            One saved account keeps withdrawals a one-tap flow.
-          </p>
+        <div className="flex-1">
+          <SectionHeader
+            title={existing ? "Edit bank account" : "Bind bank account"}
+            subtitle="One saved account keeps withdrawals a one-tap flow."
+            testid="bind-account-heading"
+          />
         </div>
       </div>
 
       {existing && (
-        <Card
-          data-testid="current-bank-card"
-          className="bg-[#0055FF]/10 border border-[#0055FF]/30 rounded-2xl p-4 flex items-center gap-3"
-        >
-          <BankLogo brand={existing.brand} />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Currently bound</div>
-            <div className="font-display font-600 truncate">{existing.bank_name}</div>
-            <div className="text-xs text-[var(--nb-muted)] tabular truncate">
-              {existing.account_number} · {existing.account_name}
+        <AmbientCard tone="gold" testid="current-bank-card">
+          <div className="flex items-center gap-3">
+            <BankLogo brand={existing.brand} />
+            <div className="flex-1 min-w-0">
+              <MicroLabel tone="gold">Currently bound</MicroLabel>
+              <div className="font-display font-700 text-white truncate mt-0.5">{existing.bank_name}</div>
+              <div className="text-xs text-[var(--nb-muted)] tabular truncate">
+                {existing.account_number} · {existing.account_name}
+              </div>
             </div>
+            <button
+              onClick={removeAccount}
+              data-testid="bind-remove-btn"
+              className="w-9 h-9 rounded-lg border border-[#EF4444]/30 text-[#EF4444] hover:bg-[#EF4444]/10 grid place-items-center shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            onClick={removeAccount}
-            data-testid="bind-remove-btn"
-            className="w-9 h-9 rounded-lg border border-[#EF4444]/30 text-[#EF4444] hover:bg-[#EF4444]/10 grid place-items-center"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </Card>
+        </AmbientCard>
       )}
 
       <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-5 rounded-2xl">
