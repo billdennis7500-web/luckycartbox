@@ -851,6 +851,8 @@ class ProductIn(BaseModel):
     duration_days: int
     description: Optional[str] = ""
     active: bool = True
+    image_url: Optional[str] = None  # data-URL (data:image/…;base64,…) or absolute URL
+    tier: Optional[str] = None       # legendary | epic | hot | newcomer | tech | fashion — used for the badge color
 
 
 class InvestIn(BaseModel):

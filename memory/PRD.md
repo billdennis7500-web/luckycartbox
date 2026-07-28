@@ -549,3 +549,37 @@ New helper `classify_gateway_error(gateway_name, raw_msg)` in `backend/server.py
 - IP-whitelist patterns still produce the correct whitelist hint.
 - All 7 patterns verified via python direct test.
 - `yarn build` clean; UI still shows the `Server IP: 46.20.101.18` copy chip.
+
+## 2026-07-28 · Products page redesign — horizontal cards with images (feature)
+
+### Product model changes (`backend/server.py`)
+- Added two Optional fields to `ProductIn`:
+  - `image_url`: base64 data-URL or absolute URL of the product image.
+  - `tier`: one of `legendary|epic|hot|newcomer|tech|fashion` for the corner badge color. If unset, auto-derived from `daily_profit_pct` (>=10% → legendary, >=7% → epic, >=5% → hot, else standard).
+- `GET/POST/PUT /api/products` unchanged in shape — the two new fields flow through automatically via `p.model_dump()`.
+
+### User Marketplace page (`frontend/src/pages/user/Marketplace.jsx`)
+Complete rewrite. Now renders one horizontal card per product matching the reference mystery-box layout:
+- Left ~38%: image area with `linear-gradient(#1E1B0A → #2A2410 → #0B0906)` dark-gold background + radial glow behind image. If no image, a treasure-chest illustration falls back in.
+- Left top-left: tier badge chip (colored per tier).
+- Right: name, daily-profit chip with fire icon, "Total return ₦X" chip (mimics the "Resale ₦110-₦350" chip in the reference), big price, trust icons, and a purple "Invest Now →" CTA button.
+- Card has ambient tier-colored glow via `box-shadow` + dashed accent line top/bottom for the treasure/legendary aesthetic.
+- New horizontal tier-filter scrollable chip row (All / Legendary / Epic / Hot / etc.) shown only when >1 tier exists.
+- Kept existing invest confirmation drawer identical to before.
+
+### Admin Products page (`frontend/src/pages/admin/AdminProducts.jsx`)
+- Product cards now show a compact 80×80 image thumbnail on the left with the name/status on the right.
+- Edit dialog adds:
+  - **Image uploader** — file input hidden behind an "Upload image" button. Uses `FileReader.readAsDataURL` + a canvas resize to 640px max edge + JPEG-82% (or PNG if small & original was PNG). Result is a data-URL stored directly in `product.image_url`. Max raw upload 8 MB.
+  - **Preview** — 96×96 preview swatch beside the upload button; "Remove" button clears the image.
+  - **Tier dropdown** — 7 options (Auto + 6 tiers). Empty → auto-derive.
+- No server upload endpoint needed — data-URL round-trips through the existing `POST/PUT /admin/products` payload.
+
+### Verified
+- Backend PUT with a synthetic 1×1 PNG data-URL round-trips correctly (product returns with `tier=legendary` and full base64 image_url intact).
+- All lucide-react icons resolve.
+- `yarn build` compiles clean (194.72 KB main.js gzipped, +0.3 KB vs previous).
+
+### ⚠️ Storage note
+Images are stored as base64 data-URLs directly in MongoDB `products` collection. A 640px JPEG at 82% quality is typically 40-100 KB base64. For the current handful of products (< 30) total footprint is <5 MB. If the catalog grows to 100+ or needs richer imagery, migrate `image_url` to Emergent Object Storage (integration playbook exists) — the field is a plain URL so the frontend won't need changes.
+
