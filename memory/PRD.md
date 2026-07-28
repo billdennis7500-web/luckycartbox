@@ -397,3 +397,30 @@ User whitelisted the pod's outbound IP (`34.16.56.64`) on **SHPAY** — Quick Pa
 - Restart + fresh probe still correctly reports `gateway_ready: false, reason: gateway_ip_blocked` (PayNow's IP whitelist still pending).
 - `/api/shpay/status` returns `gateway_ready: true, bank_count: 92`.
 - Live `/api/deposits` with `method:"shpay-auto"` returns a real SHPAY cashier link with a virtual account issued.
+
+
+## 2026-07-28 · SHPAY webhook signature bug + reconcile cron (P0)
+
+### The bug
+User reported: "I made a deposit via SHPAY, money entered the merchant account but the user was NOT credited."
+
+Root cause found in backend log:
+```
+SHPAY webhook received: {'event': 'PAYIN', 'sign': '7C3AC6316AD3A226D63743C4A1244333', 'outTradeNo': 'S43d6e1c1207788d71785228662', 'transStatus': 'SUCCESS', 'transAmt': '1000', 'paymentTransNo': '…', 'reference': '…', 'completionTime': '…'}
+SHPAY webhook: signature mismatch, refusing to process
+```
+Our `shpay.verify_callback_signature()` was signing **all** fields in the callback body. Empirically verified against the real production callback: SHPAY signs only the transactional subset `{completionTime, event, outTradeNo, transAmt, transNo, transStatus}` and leaves `paymentTransNo` / `reference` as informational (unsigned) fields. Every callback therefore failed verification and we returned `SIGNATURE_INVALID`, never crediting the user.
+
+### Delivered
+1. **`shpay.verify_callback_signature()` rewritten** to try two strategies and accept if either matches:
+   - Strategy 1: canonical signed subset `{completionTime, event, outTradeNo, transAmt, transNo, transStatus}` (production-verified).
+   - Strategy 2: full-body signing (forward-compat safety net if SHPAY adds fields later).
+   - Empty / missing / tampered signatures still rejected.
+2. **New `reconcile_pending_shpay_deposits()` function** + `_shpay_reconcile_cron()` — mirrors PayNow. Every 5 min, queries SHPAY `/v1/trans/payQuery` for all pending SHPAY deposits and credits any that returned `transStatus=SUCCESS` (marks the deposit `reconciled=True`). Rejects any that returned `FAIL`. This is a safety net for missed webhooks.
+3. **Immediate retroactive credit** — ran reconcile once by hand. User `CASHFLOW VIP 10` (`+2348054563131`) credited ₦1,000 for order `S43d6e1c1207788d71785228662`. Wallet went from ₦5,300 → ₦6,300.
+
+### Verified
+- 5-point signature test suite (real callback / tampered amount / bogus sig / missing sign / full-body variant) — all pass correctly.
+- Live: user's wallet balance and transaction feed both show the credit.
+- Cron logs: `SHPAY reconcile credited user=… amount=₦1000.00 dep=…` printed on first run.
+- Deposits DB: outstanding order flipped `pending → approved` with `reconciled: true`.

@@ -297,6 +297,7 @@ async def startup():
     # Kick off background profit-drop cron
     asyncio.create_task(_profit_drop_cron())
     asyncio.create_task(_paynow_reconcile_cron())
+    asyncio.create_task(_shpay_reconcile_cron())
 
 
 async def _paynow_reconcile_cron():
@@ -310,6 +311,71 @@ async def _paynow_reconcile_cron():
         except Exception:
             logger.exception("paynow reconcile cron error")
         await asyncio.sleep(5 * 60)
+
+
+async def _shpay_reconcile_cron():
+    """Every 5 minutes, poll SHPAY for pending payin/payout orders and settle them.
+    This is a safety net for missed webhooks — the primary settlement path is the
+    SHPAY webhook, but if we ever miss one (e.g. signature bug, network flap,
+    downtime), the cron catches up within 5 minutes so users don't chase support."""
+    await asyncio.sleep(60)  # stagger from paynow cron
+    while True:
+        try:
+            if shpay.enabled():
+                await reconcile_pending_shpay_deposits()
+        except Exception:
+            logger.exception("shpay reconcile cron error")
+        await asyncio.sleep(5 * 60)
+
+
+async def reconcile_pending_shpay_deposits() -> int:
+    """Query SHPAY for all pending SHPAY deposits and credit the ones that paid.
+    Returns number of deposits credited. Uses `shpay.query_trans(out_trade_no=…)`
+    per order because SHPAY does not expose a bulk query endpoint."""
+    pending = await db.deposits.find({"gateway": "shpay", "status": "pending"}).to_list(200)
+    credited = 0
+    for dep in pending:
+        mon = dep.get("merchant_order_no")
+        if not mon:
+            continue
+        try:
+            resp = await shpay.query_trans(out_trade_no=mon)
+        except Exception:
+            logger.exception("SHPAY query_trans failed for %s", mon)
+            continue
+        if not resp.get("success"):
+            continue
+        result = resp.get("result") or {}
+        status = (result.get("transStatus") or "").upper()
+        if status == "SUCCESS":
+            trans_amt = float(result.get("transAmt") or dep["amount"] or 0)
+            updated = await db.deposits.find_one_and_update(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
+                          "gateway_query": result,
+                          "settled_amount": trans_amt,
+                          "reconciled": True}},
+                return_document=ReturnDocument.AFTER,
+            )
+            if not updated:
+                continue  # someone else settled it first
+            credit_amount = trans_amt if trans_amt > 0 else float(dep["amount"])
+            await db.users.update_one({"_id": dep["user_id"]},
+                                      {"$inc": {"wallet_balance": credit_amount}})
+            await add_transaction(dep["user_id"], "deposit", credit_amount,
+                                  "Deposit auto-credited (SHPAY reconciled)",
+                                  {"deposit_id": str(dep["_id"]), "gateway": "shpay"})
+            logger.info("SHPAY reconcile credited user=%s amount=₦%.2f dep=%s",
+                        dep["user_id"], credit_amount, dep["_id"])
+            credited += 1
+        elif status == "FAIL":
+            await db.deposits.update_one(
+                {"_id": dep["_id"], "status": "pending"},
+                {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
+                          "gateway_query": result,
+                          "gateway_error": result.get("message") or "SHPAY reported failure"}},
+            )
+    return credited
 
 
 async def reconcile_pending_paynow_deposits() -> int:

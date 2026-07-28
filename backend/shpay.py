@@ -101,18 +101,48 @@ def sign_payload(biz: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def verify_callback_signature(body: Dict[str, Any]) -> bool:
-    """SHPAY webhook signature check: recompute MD5(sorted params + signKey).upper()
-    and compare with body['sign'] (case-insensitive)."""
+    """SHPAY webhook signature check.
+
+    ⚠️ IMPORTANT: SHPAY's PAYIN callbacks include informational fields
+    (`paymentTransNo`, `reference`, `payType`, etc.) that are NOT part of the
+    signature. Signing the entire body always fails.
+
+    Empirically verified against a real production callback: PAYIN signatures
+    cover exactly `{completionTime, event, outTradeNo, transAmt, transNo,
+    transStatus}`. Sort A-Z, concatenate `key=value&…`, append signKey (no `&`),
+    MD5, uppercase.
+
+    We try TWO strategies and accept if either matches:
+      1) SHPAY's canonical signed subset (defensively — matches production).
+      2) The "all body fields except sign" fallback (in case SHPAY updates the
+         spec to include more fields in a future event type).
+    """
     cfg = _config()
-    provided = str(body.get("sign") or "")
-    expected = sign(body, cfg["sign_key"])
-    ok = provided.upper() == expected
-    if not ok:
-        logger.warning(
-            "SHPAY callback signature mismatch. provided=%s expected=%s digest_keys=%s",
-            provided, expected, sorted(k for k in body.keys() if k != "sign"),
-        )
-    return ok
+    provided = str(body.get("sign") or "").upper()
+    if not provided:
+        return False
+
+    # Strategy 1: known-signed subset (production-verified)
+    SIGNED_FIELDS = {"completionTime", "event", "outTradeNo",
+                     "transAmt", "transNo", "transStatus"}
+    subset = {k: v for k, v in body.items() if k in SIGNED_FIELDS}
+    expected_subset = sign(subset, cfg["sign_key"])
+    if provided == expected_subset:
+        return True
+
+    # Strategy 2: full body (fallback for other event types)
+    expected_full = sign(body, cfg["sign_key"])
+    if provided == expected_full:
+        return True
+
+    logger.warning(
+        "SHPAY callback signature mismatch. provided=%s expected_subset=%s expected_full=%s "
+        "digest_keys_subset=%s digest_keys_full=%s",
+        provided, expected_subset, expected_full,
+        sorted(subset.keys()),
+        sorted(k for k in body.keys() if k != "sign"),
+    )
+    return False
 
 
 # ---------------------------------------------------------------------------
