@@ -630,3 +630,38 @@ Tab active color unified to purple (`#7C3AED`) across the whole app.
 - 5 route screenshots (dashboard, deposit, withdraw, profile, admin/settings) all navigated without errors.
 - All 10 design-system primitives exported and imported across 13 pages.
 
+
+
+## 2026-07-28 · Redesign polish (missed spots) + Light Mode (v2) + investments enrichment
+
+### Delivered
+- **Deposit page** (`/deposit`) — amount input card + selected-manual-account panel converted to dark-gold ambient (dashed gold accent lines top+bottom, radial glow, `#1E1B0A → #0B0906` gradient bg). Submit button flipped from solid blue (`#0055FF`) to gold gradient pill (`#FFE580 → #F5C518`, dark text) with a right-arrow icon on non-loading state.
+- **Referrals** (`/referrals`) — 'Your network' section rebuilt: rows are now individual dark-gold ambient cards with dashed gold accent lines, gradient avatar chips (gold for pending, green for active), pill status badges, and a new empty state using a gold treasure-chest icon. Gen tabs use purple-gradient active state.
+- **Marketplace confirm-invest drawer** — completely restyled to dark-gold gradient with: tier badge chip on top (`invest-drawer-tier`), plan card with product thumbnail (`invest-drawer-thumb`) + gold stake chip (`invest-drawer-stake`), Daily earn (green tint) + Runs-for (gold tint) grid, purple hero 'Total you'll get back' chip (`invest-drawer-total-return`), and a gold gradient 'Confirm & invest' pill button.
+- **Investments** (`/investments`) — InvestmentCard fully rebuilt as horizontal dark-gold ambient card: 60×60 thumbnail (from new `product_image_url` field) with radial tier glow, initials fallback, tier badge chip auto-derived from `product_tier` or `daily_profit_pct`, live-ticking next-payout countdown, gold-tinted progress bar. Empty state redesigned to match. Backend `/api/investments` batch-loads product docs and enriches every row with `product_image_url` + `product_tier` (no N+1).
+- **UserLayout** — brand icon + user avatar switched from blue (`#0055FF`) to gold gradient (`#FFE580 → #F5C518`). Bottom nav active indicator flipped from blue to gold with subtle box-shadow glow. Theme toggle button (`[data-testid=theme-toggle]`) added between admin-link and avatar.
+- **AdminLayout** — admin theme toggle button (`[data-testid=admin-theme-toggle]`) added in header.
+
+### Light Mode (v2) — polished second attempt
+- New `ThemeContext.jsx` (`src/context/`) with `useTheme()` hook; persists in `localStorage.nb-theme`; applies `theme-light` class to `<html>`.
+- Wrapped `<AuthProvider>` in `<ThemeProvider>` in `App.js`.
+- Sun/Moon toggle button in both `UserLayout` (top-right, gold-tinted) and `AdminLayout` header.
+- CSS overrides in `index.css`:
+  - `html.theme-light` flips every `--nb-*` token to a warm parchment palette (`--nb-page:#FBF7EE`, `--nb-card:#FFFFFF`, `--nb-text:#1A1508`, `--nb-muted:#6B5E42`, etc.).
+  - **Also flips the Tailwind/shadcn HSL tokens** (`--background`, `--foreground`, `--card`, `--card-foreground`, `--muted`, `--primary`, etc.) so shadcn `<Card>`, `<Popover>`, `<Dialog>` etc. render dark text on light surface. This was the fix for the admin panel light-mode contrast bug where KPI values were invisible.
+  - Preserves white text INSIDE dark-gold AmbientCards via two selectors: `[style*='rgb(30, 27, 10)']` (matches the React-converted #1E1B0A inline gradient) AND `[data-nb-ambient='gold']` (attribute added to AmbientCard's inner `<Card>` in `design.jsx`). Both selectors keep `.text-white` white inside the dark-gold surface.
+- Verified live: `document.documentElement.className === 'theme-light'`, `getComputedStyle(document.body).backgroundColor === 'rgb(251, 247, 238)'`, dashboard-heading color flips to `rgb(26, 21, 8)`, wallet-amount stays `rgb(248, 250, 252)`, `localStorage.nb-theme === 'light'` after reload.
+
+### Backend
+- **`GET /api/investments`** — enriched with `product_image_url` and `product_tier` (both optional, safe null if product was deleted). Batch-loads product docs to avoid N+1. New pytest at `/app/backend/tests/test_investments_enrichment.py`, PASSED.
+
+### Verified by testing_agent (iteration_16)
+- All 8 UI + light-mode assertions pass on user-side.
+- 1 admin light-mode contrast issue found → fixed in follow-up commit by extending light-mode CSS to override the Tailwind/shadcn HSL tokens (see above). Verified via screenshot — KPI cards, gateway rows, and quick-action tiles now render dark parchment text on white background.
+
+### Deferred / next iterations
+- Optionally give the `Deposit.jsx` amount card + MethodBlock the `data-nb-ambient='gold'` attribute for robustness (currently they rely on the `rgb(30, 27, 10)` inline-style selector).
+- Product logo icon upload (waiting on user's asset).
+- SMS OTP for phone verification.
+- Split `server.py` (~3,100 lines) into `/backend/routers/*` (auth, deposits, admin, gateways, webhooks).
+- Auto-reconciliation cron for stuck 1SSPay deposits >30 min (already have SHPAY + PayNow crons).

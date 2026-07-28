@@ -41,6 +41,26 @@ html.theme-light {
     --nb-scroll-thumb: #E5D9B8;
     --nb-scroll-thumb-hover: #C9BB93;
     color-scheme: light;
+    /* Also flip Tailwind/shadcn HSL tokens so shadcn Card, Popover, etc.
+       don't render near-white foreground on a light background. Same warm
+       parchment values as --nb-*. */
+    --background: 40 55% 95%;
+    --foreground: 34 55% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 34 55% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 34 55% 10%;
+    --primary: 45 92% 53%;
+    --primary-foreground: 34 55% 10%;
+    --secondary: 44 45% 92%;
+    --secondary-foreground: 34 55% 10%;
+    --muted: 44 45% 92%;
+    --muted-foreground: 39 22% 34%;
+    --accent: 44 45% 88%;
+    --accent-foreground: 34 55% 10%;
+    --border: 42 45% 80%;
+    --input: 42 45% 88%;
+    --ring: 45 92% 53%;
 }
 
 @layer base {
