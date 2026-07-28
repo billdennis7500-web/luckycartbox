@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, Zap, Landmark, Receipt, ArrowDownToLine, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Search, Zap, Landmark, Inbox, ArrowDownToLine, Clock, CheckCircle2, XCircle } from "lucide-react";
 import LoadMore from "@/components/LoadMore";
 import { SectionHeader } from "@/components/design";
 
@@ -142,7 +142,7 @@ export default function DepositHistory() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-8 text-center space-y-2" data-testid="hist-empty">
-          <Receipt className="w-6 h-6 text-[#0055FF] mx-auto" />
+          <Inbox className="w-6 h-6 text-[#0055FF] mx-auto" />
           <div className="text-sm text-[var(--nb-muted)]">
             {tab === "all" ? "You haven't made any deposits yet." : `No ${tab} deposits.`}
           </div>

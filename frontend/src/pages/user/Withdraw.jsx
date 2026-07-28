@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { Lock, Zap, Landmark, ArrowRight, Receipt, Wallet, Coins } from "lucide-react";
+import { Lock, Zap, Landmark, ArrowRight, ScrollText, Wallet, Coins } from "lucide-react";
 import { AmbientCard, SoftCard, SectionHeader, MicroLabel, PillCTA, StatChip, StackChip } from "@/components/design";
 
 function BankLogo({ brand }) {
@@ -76,7 +76,7 @@ export default function Withdraw() {
             data-testid="withdraw-history-link"
             className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-[#F5C518]/40 bg-[#F5C518]/10 text-[#F5C518] text-xs font-display font-700 hover:bg-[#F5C518]/20 transition-colors"
           >
-            <Receipt className="w-3.5 h-3.5" /> History
+            <ScrollText className="w-3.5 h-3.5" /> History
           </Link>
         }
       />

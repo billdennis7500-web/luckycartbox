@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Receipt, RefreshCw,
+  Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Inbox, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -39,12 +39,14 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       type="button"
       onClick={onClick}
       data-testid={testid}
-      className={`relative rounded-xl overflow-hidden text-left flex flex-col justify-between min-h-[98px] transition-all card-hover`}
+      className={`relative rounded-xl overflow-hidden text-left flex flex-col justify-between w-full min-w-0 min-h-[98px] transition-all card-hover`}
       style={{
         background: "linear-gradient(135deg,#1E1B0A 0%,#231F0F 55%,#0B0906 100%)",
+        // Uniform 1.5px border for both states — selected shows a stronger tinted ring
+        // via inner glow only, so all 3 method tiles stay the same visual size.
         boxShadow: selected
-          ? `0 6px 24px -8px ${tone.bg}bb, 0 0 0 2px ${tone.bg}`
-          : `0 4px 14px -6px ${tone.bg}55, 0 0 0 1px ${tone.bg}25`,
+          ? `0 6px 24px -8px ${tone.bg}bb, inset 0 0 0 1.5px ${tone.bg}, 0 0 0 1.5px ${tone.bg}55`
+          : `0 4px 14px -6px ${tone.bg}55, inset 0 0 0 1.5px ${tone.bg}30, 0 0 0 1.5px transparent`,
       }}
     >
       {/* Dashed accent line top */}
@@ -73,13 +75,13 @@ function MethodBlock({ selected, onClick, tone, icon, label, sub, testid }) {
       </div>
       <div className="relative px-2.5 pb-2.5 mt-1">
         <div className="font-display font-800 text-[13px] leading-tight text-white truncate">{label}</div>
-        <div className="text-[10px] text-[var(--nb-muted)] mt-0.5 truncate tabular">{sub}</div>
+        <div className="text-[10px] text-white/70 mt-0.5 truncate tabular">{sub}</div>
       </div>
     </button>
   );
 }
 
-/* -------------- quick amount chip — gold aesthetic -------------- */
+/* -------------- quick amount chip — gold aesthetic, theme-aware -------------- */
 function QuickAmount({ value, selected, onClick }) {
   return (
     <button
@@ -96,8 +98,8 @@ function QuickAmount({ value, selected, onClick }) {
             }
           : {
               background: "var(--nb-card)",
-              color: "white",
-              border: "1px solid rgba(245,197,24,0.28)",
+              color: "var(--nb-text)",
+              border: "1px solid rgba(245,197,24,0.35)",
             }
       }
     >
@@ -274,7 +276,7 @@ export default function Deposit() {
         right={
           <Link to="/deposit-history" data-testid="deposit-history-link"
                 className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-[#F5C518]/40 bg-[#F5C518]/10 text-[#F5C518] text-xs font-display font-700 hover:bg-[#F5C518]/20 transition-colors">
-            <Receipt className="w-3.5 h-3.5" /> History
+            <Inbox className="w-3.5 h-3.5" /> History
           </Link>
         }
       />
@@ -295,7 +297,7 @@ export default function Deposit() {
           </h2>
           <div className="grid grid-cols-3 gap-3" data-testid="deposit-methods-grid">
             {instantEnabled && (
-              <div className="relative">
+              <div className="relative min-w-0">
                 <MethodBlock
                   selected={isInstant}
                   onClick={() => setMethod("instant-pay")}
@@ -314,7 +316,7 @@ export default function Deposit() {
               </div>
             )}
             {shpayEnabled && (
-              <div className="relative">
+              <div className="relative min-w-0">
                 <MethodBlock
                   selected={isShpay}
                   onClick={() => setMethod("shpay-pay")}
@@ -333,7 +335,7 @@ export default function Deposit() {
               </div>
             )}
             {onesspayEnabled && (
-              <div className="relative">
+              <div className="relative min-w-0">
                 <MethodBlock
                   selected={isOnesspay}
                   onClick={() => setMethod("onesspay-pay")}
@@ -354,16 +356,17 @@ export default function Deposit() {
             {accounts.map((a) => {
               const brand = bankTint(a.bank_name);
               return (
-                <MethodBlock
-                  key={a.id}
-                  selected={method === a.id}
-                  onClick={() => setMethod(a.id)}
-                  tone={brand}
-                  icon={initials(a.bank_name)}
-                  label={a.bank_name}
-                  sub={a.account_number}
-                  testid={`deposit-method-${a.id}`}
-                />
+                <div key={a.id} className="min-w-0">
+                  <MethodBlock
+                    selected={method === a.id}
+                    onClick={() => setMethod(a.id)}
+                    tone={brand}
+                    icon={initials(a.bank_name)}
+                    label={a.bank_name}
+                    sub={a.account_number}
+                    testid={`deposit-method-${a.id}`}
+                  />
+                </div>
               );
             })}
           </div>

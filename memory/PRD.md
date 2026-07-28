@@ -665,3 +665,16 @@ Tab active color unified to purple (`#7C3AED`) across the whole app.
 - SMS OTP for phone verification.
 - Split `server.py` (~3,100 lines) into `/backend/routers/*` (auth, deposits, admin, gateways, webhooks).
 - Auto-reconciliation cron for stuck 1SSPay deposits >30 min (already have SHPAY + PayNow crons).
+
+
+## 2026-07-28 · Post-review polish (light-mode + icons + drawer)
+
+User-reported fixes after the initial redesign:
+
+### Delivered
+- **Deposit quick-amount chips** in light mode — `QuickAmount` had `color: "white"` hardcoded on the unselected state, invisible on the white light-mode surface. Switched to `color: var(--nb-text)` and strengthened the gold border to 0.35 alpha.
+- **Method blocks uniform size** — measurements before fix: Instant 115px, Quick Pay 81px, Fast Pay 81px (width mismatch because the button lacked `w-full` so the wider "Fast · Recommended" sub-label made column 1 wider under `grid-cols-3`). Added `w-full min-w-0` to the button + wrapped every grid item in a `min-w-0` div. All 3 tiles now measure **121×104** identical.
+- **Unique history icons** — Deposit history & Withdrawal history both used `Receipt`. Split into `Inbox` (Deposit history — arrow-into-box = received) and `ScrollText` (Withdrawal history — record scroll). Updated Profile.jsx menu entries, Deposit.jsx `/deposit-history` link, Withdraw.jsx `/withdraw-history` link, DepositHistory.jsx empty-state icon, WithdrawHistory.jsx empty-state icon.
+- **Confirm invest drawer theme-aware** — the Marketplace bottom drawer now consumes `useTheme()` and swaps the base gradient + text colors based on `theme === "light"`. In light mode: cream gradient bg (`#FFFDF6 → #FBF3D9 → #F5EFDF`), dark parchment title/description, subtly gold-tinted plan card, dark-gold stake text, purple-tinted "Total return" hero, and a transparent bordered Cancel button. Dark mode unchanged. `data-testid=invest-drawer` bg now flips correctly (verified via computed style).
+
+Compilation clean; all three method blocks measure identical widths post-fix.

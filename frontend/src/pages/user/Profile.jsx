@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   ArrowDownToLine, ArrowUpFromLine, Users as UsersIcon, LogOut,
-  Shield, Copy, ChevronRight, Ticket, Landmark, Receipt, History,
+  Shield, Copy, ChevronRight, Ticket, Landmark, Inbox, ScrollText, History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AmbientCard, SoftCard, MicroLabel } from "@/components/design";
@@ -105,9 +105,9 @@ export default function Profile() {
           <ProfileLink to="/referrals" icon={UsersIcon} label="Referrals" hint="Invite & earn 3-gen commissions" tone="purple" testid="profile-link-referrals" />
           <ProfileLink to="/transactions" icon={History} label="Transaction history" hint="Every wallet movement" tone="cyan" testid="profile-link-transactions" />
           <ProfileLink to="/deposit" icon={ArrowDownToLine} label="Deposit" hint="Fund your wallet" tone="success" testid="profile-link-deposit" />
-          <ProfileLink to="/deposit-history" icon={Receipt} label="Deposit history" hint="Every top-up you've made" tone="info" testid="profile-link-deposit-history" />
+          <ProfileLink to="/deposit-history" icon={Inbox} label="Deposit history" hint="Every top-up you've made" tone="success" testid="profile-link-deposit-history" />
           <ProfileLink to="/withdraw" icon={ArrowUpFromLine} label="Withdraw" hint="Cash out to bank" tone="info" testid="profile-link-withdraw" />
-          <ProfileLink to="/withdraw-history" icon={Receipt} label="Withdrawal history" hint="Every payout you've requested" tone="gold" testid="profile-link-withdraw-history" />
+          <ProfileLink to="/withdraw-history" icon={ScrollText} label="Withdrawal history" hint="Every payout you've requested" tone="gold" testid="profile-link-withdraw-history" />
           <ProfileLink to="/bank-account" icon={Landmark} label="Bank account" hint="Bind or update your payout account" tone="info" testid="profile-link-bank" />
           <ProfileLink to="/coupon" icon={Ticket} label="Redeem coupon" hint="Use a promo code" tone="gold" testid="profile-link-coupon" />
           {user?.role === "admin" && (

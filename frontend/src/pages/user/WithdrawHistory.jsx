@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, Receipt, ArrowUpFromLine, Clock, CheckCircle2, XCircle, Landmark } from "lucide-react";
+import { ArrowLeft, Search, ScrollText, ArrowUpFromLine, Clock, CheckCircle2, XCircle, Landmark } from "lucide-react";
 import LoadMore from "@/components/LoadMore";
 import { SectionHeader } from "@/components/design";
 
@@ -142,7 +142,7 @@ export default function WithdrawHistory() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-8 text-center space-y-2" data-testid="whist-empty">
-          <Receipt className="w-6 h-6 text-[#0055FF] mx-auto" />
+          <ScrollText className="w-6 h-6 text-[#0055FF] mx-auto" />
           <div className="text-sm text-[var(--nb-muted)]">
             {tab === "all" ? "You haven't requested any withdrawals yet." : `No ${tab} withdrawals.`}
           </div>
