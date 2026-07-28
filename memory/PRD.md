@@ -359,3 +359,25 @@ Verified via Playwright: amber warning card renders, all three auto-verify testi
 - Also updated the transactions daily-summary loop to count `welcome_bonus` as a real wallet movement (previously skipped).
 - Migrated 1 legacy user with `bonus_balance > 0` — moved into `wallet_balance`.
 - **Verified by testing_agent** (iteration_12.json): 4/4 backend tests green — fresh registration returns wallet_balance == welcome_bonus, bonus_balance == 0, welcome_bonus_given == true, exactly one welcome_bonus transaction with meta.credits_wallet == true, and the withdrawal gate (`has_invested = false → 400 "must invest first"`) still triggers.
+
+## 2026-07-28 · SHPAY payment gateway integration
+
+### Delivered
+- **New backend module** `/app/backend/shpay.py` — full SHPAY OpenAPI client (base https://transapi.shpays.com). MD5 signing per spec (sort-by-key, `key=value&…`, append signKey, MD5, uppercase). Public API: `enabled`, `sign_payload`, `verify_callback_signature`, `create_payin`, `get_virtual_account`, `create_payout`, `query_trans`, `get_balance`, `list_banks` / `list_banks_cached`.
+- **Env vars** added to `/app/backend/.env`: `SHPAY_BASE_URL`, `SHPAY_MCHT_ID`, `SHPAY_APP_ID`, `SHPAY_SIGN_KEY`, `SHPAY_COUNTRY=NG`, `SHPAY_NOTIFY_URL`.
+- **New API endpoints** (in `server.py`):
+  - `GET /api/shpay/status` — user probe (enabled + gateway_ready + bank_count)
+  - `GET /api/shpay/banks` — user-facing bank list (cached 10 min)
+  - `GET /api/admin/shpay/health` — admin health probe (returns outbound IP + balance + errors)
+  - `POST /api/shpay/webhook` — signed callback endpoint for PAYIN + PAYOUT events. Uses `PlainTextResponse` so replies are raw `OK` / `SIGNATURE_INVALID` (spec-compliant). Idempotent — silently acks duplicate settle attempts. Verifies signature via `hashlib.md5` comparison; rejects forged callbacks.
+  - `POST /api/admin/withdrawals/{wid}/shpay-payout` — admin manual dispatch of a pending withdrawal via SHPAY (alternative to PayNow auto-payout).
+- **`POST /api/deposits` branches on method**: `paynow-auto` → PayNow (unchanged); `shpay-auto` → new SHPAY branch mirroring the PayNow shape (returns checkout URL + gateway_ready flag + graceful unavailable-drawer response when SHPAY is IP-blocked). Payer email is synthesised from phone if the user has no email on record (defensive `.get()` — no KeyError).
+- **Frontend Deposit page** now shows a second **Quick Pay** violet tile alongside PayNow's Instant Pay when SHPAY is enabled. Both open the same in-app iframe drawer with progressive-disclosure verify button + full-screen modal (all existing UX preserved).
+- **Verified by testing_agent — iteration 13 (11/11 green) + iteration 14 (100% green, both spec fixes re-verified)**: raw plain-text webhook body, defensive user.get() path, sign verification rejects forged callbacks, deposit/status/banks/health all return well-formed responses with the current gateway_ready=false state.
+
+**⚠️ Live end-to-end is blocked on SHPAY's IP whitelist:** merchant must add our outbound IP (visible at `GET /api/admin/shpay/health`) to the SHPAY dashboard. Until then the SHPAY tile shows and the drawer opens with a friendly "warming up" state (same graceful-degradation pattern PayNow uses). Once whitelisted, the Quick Pay flow will produce a real checkout link end-to-end and settle via the webhook.
+
+Deferred / follow-ups (from code review comments in iteration_14):
+- `server.py` is now >1900 lines — split into modules (auth, deposits, admin, shpay, paynow).
+- Consider `hmac.compare_digest` for the callback signature check.
+- Auto-reconciliation cron for stuck SHPAY transactions >30 min.
