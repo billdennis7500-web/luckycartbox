@@ -14,13 +14,35 @@ import LoadMore from "@/components/LoadMore";
 
 const TABS = ["pending", "approved", "rejected", "all"];
 const METHODS = [
-  { k: "all",    label: "All methods" },
-  { k: "paynow", label: "PayNow (auto)" },
-  { k: "manual", label: "Manual bank" },
+  { k: "all",      label: "All methods" },
+  { k: "paynow",   label: "PayNow — Instant Pay" },
+  { k: "shpay",    label: "SHPAY — Quick Pay" },
+  { k: "onesspay", label: "1SSPay — Fast Pay" },
+  { k: "juntbest", label: "JuntBest — Smart Pay" },
+  { k: "manual",   label: "Manual bank" },
 ];
 
+/* -------------------------------------------------------------------------
+ * Gateway → visual identity map. Every deposit's `gateway` field flows through
+ * this so admins can distinguish PayNow / SHPAY / 1SSPay / JuntBest / Manual
+ * bank transfers at a glance without opening the row.
+ * ---------------------------------------------------------------------- */
+const GATEWAY_IDENTITY = {
+  paynow:   { label: "PayNow",   sub: "Instant Pay", color: "#0055FF", icon: Zap },
+  shpay:    { label: "SHPAY",    sub: "Quick Pay",   color: "#8B5CF6", icon: Zap },
+  onesspay: { label: "1SSPay",   sub: "Fast Pay",    color: "#F97316", icon: Zap },
+  juntbest: { label: "JuntBest", sub: "Smart Pay",   color: "#10B981", icon: Zap },
+  manual:   { label: "Manual",   sub: "Bank transfer", color: "#94A3B8", icon: Landmark },
+};
+
+function gatewayIdentity(d) {
+  const key = d?.gateway && GATEWAY_IDENTITY[d.gateway] ? d.gateway : "manual";
+  return { key, ...GATEWAY_IDENTITY[key] };
+}
+
 function methodLabel(d) {
-  if (d.gateway === "paynow") return "PayNow (auto)";
+  const g = gatewayIdentity(d);
+  if (g.key !== "manual") return `${g.label} (${g.sub})`;
   if (d.payment_account_bank) return `${d.payment_account_bank} · ${d.payment_account_number}`;
   return "Manual bank";
 }
@@ -54,8 +76,14 @@ export default function AdminDeposits() {
 
   const filtered = useMemo(() => {
     let out = items;
-    if (methodFilter === "paynow") out = out.filter((d) => d.gateway === "paynow");
-    else if (methodFilter === "manual") out = out.filter((d) => d.gateway !== "paynow");
+    // Method filter — matches by gateway key. "manual" catches any deposit that
+    // isn't one of the 4 configured payment gateways (fallback / legacy).
+    const KNOWN = new Set(["paynow", "shpay", "onesspay", "juntbest"]);
+    if (methodFilter === "manual") {
+      out = out.filter((d) => !KNOWN.has(d.gateway));
+    } else if (KNOWN.has(methodFilter)) {
+      out = out.filter((d) => d.gateway === methodFilter);
+    }
     if (q) {
       const qq = q.toLowerCase();
       out = out.filter((d) =>
@@ -228,15 +256,25 @@ export default function AdminDeposits() {
                   </td>
                   <td className="px-4 py-3 tabular font-display font-600">{formatNaira(d.amount)}</td>
                   <td className="px-4 py-3">
-                    {d.gateway === "paynow" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#0055FF]/40 bg-[#0055FF]/10 text-[#0055FF] text-xs">
-                        <Zap className="w-3 h-3" /> PayNow
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[var(--nb-border)] bg-[var(--nb-card2)] text-xs">
-                        <Landmark className="w-3 h-3 text-[var(--nb-muted)]" /> Manual
-                      </span>
-                    )}
+                    {(() => {
+                      const g = gatewayIdentity(d);
+                      const Icon = g.icon;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                          data-testid={`gateway-pill-${g.key}-${d.id}`}
+                          style={{
+                            border: `1px solid ${g.color}66`,
+                            background: `${g.color}1A`,
+                            color: g.color,
+                          }}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {g.label}
+                          <span className="opacity-70 hidden sm:inline">· {g.sub}</span>
+                        </span>
+                      );
+                    })()}
                     {d.payment_account_bank && (
                       <div className="mt-1 text-[10px] text-[var(--nb-muted)] tabular truncate max-w-[180px]" title={`${d.payment_account_bank} · ${d.payment_account_number}`}>
                         {d.payment_account_bank} · {d.payment_account_number}
@@ -280,29 +318,37 @@ export default function AdminDeposits() {
                         </div>
                         <div className="space-y-1.5">
                           <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Payment target</div>
-                          {d.gateway === "paynow" ? (
-                            <>
-                              <Kv k="Merchant order" v={d.merchant_order_no} copyable />
-                              <Kv k="PayNow order"   v={d.platform_order_no} copyable />
-                              {d.checkout_url && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[var(--nb-muted)] w-32 shrink-0">Checkout URL</span>
-                                  <a href={d.checkout_url} target="_blank" rel="noreferrer"
-                                     data-testid={`open-checkout-${d.id}`}
-                                     className="inline-flex items-center gap-1 text-[#0055FF] hover:underline">
-                                    Open <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                </div>
-                              )}
-                              {d.gateway_error && <Kv k="Gateway error" v={d.gateway_error} />}
-                            </>
-                          ) : (
-                            <>
-                              <Kv k="Bank"     v={d.payment_account_bank || "—"} />
-                              <Kv k="Account #" v={d.payment_account_number || "—"} copyable />
-                              <Kv k="Account name" v={d.payment_account_name || "—"} />
-                            </>
-                          )}
+                          {(() => {
+                            const g = gatewayIdentity(d);
+                            if (g.key === "manual") {
+                              return (
+                                <>
+                                  <Kv k="Bank"        v={d.payment_account_bank || "—"} />
+                                  <Kv k="Account #"    v={d.payment_account_number || "—"} copyable />
+                                  <Kv k="Account name" v={d.payment_account_name || "—"} />
+                                </>
+                              );
+                            }
+                            return (
+                              <>
+                                <Kv k="Gateway"       v={`${g.label} — ${g.sub}`} />
+                                <Kv k="Merchant order" v={d.merchant_order_no} copyable />
+                                <Kv k={`${g.label} order`} v={d.platform_order_no} copyable />
+                                {d.checkout_url && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[var(--nb-muted)] w-32 shrink-0">Checkout URL</span>
+                                    <a href={d.checkout_url} target="_blank" rel="noreferrer"
+                                       data-testid={`open-checkout-${d.id}`}
+                                       className="inline-flex items-center gap-1 hover:underline"
+                                       style={{ color: g.color }}>
+                                      Open <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  </div>
+                                )}
+                                {d.gateway_error && <Kv k="Gateway error" v={d.gateway_error} />}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     </td>
