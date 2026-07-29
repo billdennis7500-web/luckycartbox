@@ -1,16 +1,16 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Home, ShoppingBag, Users, User, TrendingUp, Shield, Warehouse, LogIn, ArrowLeft, X, Sun, Moon } from "lucide-react";
+import { Home, Store, Users, User, TrendingUp, Shield, Boxes, LogIn, ArrowLeft, X, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 import { isImpersonatingTab } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 
 const NAV = [
   { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
-  { to: "/marketplace", label: "Shop",        icon: ShoppingBag, testid: "botnav-invest" },
-  { to: "/investments", label: "Warehouse",   icon: Warehouse,   testid: "botnav-portfolio" },
-  { to: "/referrals",   label: "Team",        icon: Users,       testid: "botnav-referrals" },
+  { to: "/marketplace", label: "Shop",        icon: Store,  testid: "botnav-invest" },
+  { to: "/investments", label: "Warehouse",   icon: Boxes,  testid: "botnav-portfolio" },
+  { to: "/referrals",   label: "Team",        icon: Users,  testid: "botnav-referrals" },
   { to: "/profile",     label: "Profile",     icon: User,      testid: "botnav-profile" },
 ];
 
