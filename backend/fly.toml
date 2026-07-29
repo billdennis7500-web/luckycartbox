@@ -1,0 +1,71 @@
+# -----------------------------------------------------------------------------
+# NaijaInvest backend — Fly.io deployment config
+# -----------------------------------------------------------------------------
+# Run these ONCE from /app/backend after editing this file:
+#
+#   fly launch --no-deploy --copy-config --name naijainvest-api --region jnb
+#   fly secrets set MONGO_URL="..." DB_NAME="..." JWT_SECRET="..." \
+#                   PAYNOW_API_KEY="..." SHPAY_API_KEY="..." \
+#                   ONESSPAY_MERCHANT_ID="..." ONESSPAY_API_KEY="..." \
+#                   JUNTBEST_MERCHANT_SN="20260710-hywmu" \
+#                   JUNTBEST_ACCESS_KEY="b932d8ec105ca82e824bb73d20aaaf8c" \
+#                   JUNTBEST_SECRET_KEY="45b795a648df86fdab52b4e97e2eca0f" \
+#                   HTTPS_PROXY="http://14a58358bb7f3:723b910fdb@46.20.101.18:12323"
+#   fly deploy
+#
+# Then to add your custom domain:
+#   fly certs create api.naijainvest.com
+#   # → point Cloudflare CNAME `api` to naijainvest-api.fly.dev (proxied)
+# -----------------------------------------------------------------------------
+
+app            = "naijainvest-api"
+primary_region = "jnb"          # Johannesburg — closest Fly region to Nigeria (~100ms)
+kill_signal    = "SIGTERM"
+kill_timeout   = "30s"          # graceful shutdown window for in-flight payments
+
+[build]
+  dockerfile = "Dockerfile"
+
+# --- HTTP service ------------------------------------------------------------
+[http_service]
+  internal_port          = 8001
+  force_https            = true
+  # Never auto-stop machines — fintech UX is unforgiving of cold-start delay
+  # on the first login of the day.
+  auto_stop_machines     = false
+  auto_start_machines    = true
+  min_machines_running   = 2    # always at least 2 warm for HA
+  processes              = ["app"]
+
+  [http_service.concurrency]
+    type       = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+# --- Healthcheck for Fly's own routing layer ---------------------------------
+[[http_service.checks]]
+  interval = "15s"
+  timeout  = "3s"
+  grace_period = "20s"
+  method   = "GET"
+  path     = "/api/health"
+
+# --- Machine sizing ----------------------------------------------------------
+# shared-cpu-2x @ 2GB RAM handles ~2,000 concurrent users at this stack's
+# workload. Bump to `performance-2x` or scale to more machines if metrics
+# show sustained CPU >70% or memory pressure.
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 2
+  memory   = "2gb"
+
+# --- Deploy strategy ---------------------------------------------------------
+[deploy]
+  # Rolling deploy — old machine keeps serving until the new one passes
+  # healthchecks, so users never see a downtime blip.
+  strategy = "rolling"
+
+# --- Metrics endpoint (for Fly's built-in Prometheus scraping) ---------------
+[metrics]
+  port = 8001
+  path = "/api/health"

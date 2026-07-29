@@ -3525,3 +3525,12 @@ app.add_middleware(
 @api.get("/")
 async def health():
     return {"ok": True, "service": "naija-invest"}
+
+
+@api.get("/health")
+async def health_check():
+    """Explicit healthcheck endpoint for Fly.io / Docker HEALTHCHECK / Better Stack /
+    UptimeRobot. Returns 200 as long as FastAPI is up. We deliberately do NOT
+    ping MongoDB here — a slow-but-alive DB shouldn't force a machine restart.
+    Use the separate `/api/admin/*/status` endpoints for gateway health."""
+    return {"status": "ok", "service": "naijainvest-api", "time": now_utc().isoformat()}
