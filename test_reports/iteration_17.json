@@ -1,0 +1,23 @@
+{
+  "summary": "Backend regression after moving /api/health BEFORE app.include_router(api). All 9 targeted tests pass (health P0 + root + auth + protected 401 + products + wallet + admin/shpay/health + admin/deposits + admin route auth guard).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_health_regression.py",
+    "/app/test_reports/pytest/iteration_17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is very large (>3500 lines); the earlier bug (route registered after include_router) is a direct symptom of file size — consider splitting into routers/modules.",
+    "Root Dockerfile copies backend/ but ensure .dockerignore isn't excluding backend/.env inadvertently; Fly.io should source config via fly.io secrets, verify at deploy time.",
+    "Consider adding a startup assertion in server.py that logs the mounted routes count so silent-drop bugs are caught in CI."
+  ],
+  "updated_files": ["/app/backend/tests/test_health_regression.py"],
+  "success_rate": {"backend": "100%", "frontend": "n/a"},
+  "test_credentials": "admin: billdennis750@gmail.com / djscan30 (login returns access_token in body AND sets httpOnly cookies).",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P0 /api/health fix verified. Reusable regression suite at /app/backend/tests/test_health_regression.py covers health, auth, admin, wallet, products, and 401 guards. Products endpoint resolved at /api/products; wallet resolved via /api/auth/me (has numeric wallet_balance).",
+  "rca of the issue": "Original 404 root cause: @api.get('/health') was declared after app.include_router(api) — FastAPI's APIRouter registration copies routes at include time, so any routes added after are silently ignored. Fix (move health route before include_router) confirmed working: GET /api/health returns 200 with {status:'ok', service:'naijainvest-api', time:<iso>}."
+}

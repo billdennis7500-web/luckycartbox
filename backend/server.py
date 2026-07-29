@@ -3508,6 +3508,25 @@ async def admin_update_gateways(payload: GatewayTogglesIn, admin: dict = Depends
 
 
 # ---------------------------------------------------------------------------
+# Healthcheck routes — MUST be defined BEFORE app.include_router(api) so that
+# FastAPI actually picks them up. Adding routes to an APIRouter after it has
+# already been included on the app is a silent no-op (that's the 404 trap).
+# ---------------------------------------------------------------------------
+@api.get("/")
+async def root():
+    return {"ok": True, "service": "naija-invest"}
+
+
+@api.get("/health")
+async def health_check():
+    """Explicit healthcheck endpoint for Fly.io / Docker HEALTHCHECK / Better Stack /
+    UptimeRobot. Returns 200 as long as FastAPI is up. We deliberately do NOT
+    ping MongoDB here — a slow-but-alive DB shouldn't force a machine restart.
+    Use the separate `/api/admin/*/status` endpoints for gateway health."""
+    return {"status": "ok", "service": "naijainvest-api", "time": now_utc().isoformat()}
+
+
+# ---------------------------------------------------------------------------
 # Router mount + CORS
 # ---------------------------------------------------------------------------
 app.include_router(api)
@@ -3520,17 +3539,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@api.get("/")
-async def health():
-    return {"ok": True, "service": "naija-invest"}
-
-
-@api.get("/health")
-async def health_check():
-    """Explicit healthcheck endpoint for Fly.io / Docker HEALTHCHECK / Better Stack /
-    UptimeRobot. Returns 200 as long as FastAPI is up. We deliberately do NOT
-    ping MongoDB here — a slow-but-alive DB shouldn't force a machine restart.
-    Use the separate `/api/admin/*/status` endpoints for gateway health."""
-    return {"status": "ok", "service": "naijainvest-api", "time": now_utc().isoformat()}

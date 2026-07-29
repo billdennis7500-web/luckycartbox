@@ -1,0 +1,41 @@
+# Keep Docker build context small and secret-free.
+# Frontend never ships in the backend image.
+frontend/
+node_modules/
+
+# Local envs & secrets — Fly reads secrets via `fly secrets set`.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python cruft
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tests & reports — not needed at runtime
+test_reports/
+tests/
+backend/tests/
+
+# Dev/editor
+.git/
+.gitignore
+.emergent/
+.vscode/
+.idea/
+.DS_Store
+
+# Docs & memory (not used at runtime)
+memory/
+*.md
+!README.md
+
+# Tooling
+tmp/
