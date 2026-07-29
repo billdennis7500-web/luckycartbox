@@ -3532,9 +3532,22 @@ async def health_check():
 app.include_router(api)
 
 frontend_origin = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+# Additional CORS origins: comma-separated list of production origins
+# (e.g. "https://luckycartbox.com,https://www.luckycartbox.com,https://luckycartbox.pages.dev").
+# Set via `fly secrets set CORS_ORIGINS="..."` in production.
+extra_origins = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
+allowed_origins = list({
+    frontend_origin,
+    "http://localhost:3000",
+    *extra_origins,
+})
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_origin, "http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
