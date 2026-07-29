@@ -496,12 +496,19 @@ async def startup():
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@12345")
     admin_name = os.environ.get("ADMIN_NAME", "Platform Admin")
 
-    # Prefer email as the primary admin identifier
+    # Prefer email as the primary admin identifier, but always fall back on the
+    # reserved referral_code / role so re-seeding is idempotent even when the
+    # admin email or phone changes between environments (this is what killed the
+    # Fly.io deploy on 2026-07-29 — DuplicateKeyError on referral_code_1).
     existing = None
     if admin_email:
         existing = await db.users.find_one({"email": admin_email})
     if not existing and admin_phone:
         existing = await db.users.find_one({"phone": admin_phone})
+    if not existing:
+        existing = await db.users.find_one({"referral_code": "ADMIN001"})
+    if not existing:
+        existing = await db.users.find_one({"role": "admin"})
 
     admin_doc = {
         "name": admin_name,
@@ -527,10 +534,24 @@ async def startup():
             await db.users.insert_one(admin_doc)
             logger.info("Seeded admin user email=%s phone=%s", admin_email or "-", admin_phone or "-")
         except Exception:
-            logger.exception("Admin seed failed (dup?), attempting upsert")
+            # Race: something else inserted first. Re-query and update instead
+            # of throwing — never let the seed step take down the app.
+            logger.exception("Admin seed insert failed, retrying via update")
+            recovered = None
             if admin_email:
-                await db.users.update_one({"email": admin_email},
-                                          {"$set": admin_doc, "$setOnInsert": {}}, upsert=True)
+                recovered = await db.users.find_one({"email": admin_email})
+            if not recovered:
+                recovered = await db.users.find_one({"referral_code": "ADMIN001"})
+            if recovered:
+                updates = {"password_hash": hash_password(admin_password), "role": "admin"}
+                if admin_email:
+                    updates["email"] = admin_email
+                if admin_phone:
+                    updates["phone"] = admin_phone
+                if admin_name:
+                    updates["name"] = admin_name
+                await db.users.update_one({"_id": recovered["_id"]}, {"$set": updates})
+                logger.info("Recovered admin user %s via post-insert lookup", recovered["_id"])
     else:
         # Update password + ensure email/phone/role are correct
         updates = {"password_hash": hash_password(admin_password), "role": "admin"}
