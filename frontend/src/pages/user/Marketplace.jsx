@@ -184,7 +184,7 @@ export default function Marketplace() {
           </DrawerHeader>
           {selected && (
             <div className="px-4 pb-2 space-y-4">
-              {/* Plan + Stake — gold-tinted card */}
+              {/* Product + Price — gold-tinted card */}
               <div
                 className="relative rounded-xl overflow-hidden"
                 style={{
@@ -198,7 +198,7 @@ export default function Marketplace() {
                       className="text-[10px] uppercase tracking-widest"
                       style={{ color: isLight ? "#8A6F14" : "rgba(245,197,24,0.80)" }}
                     >
-                      Plan
+                      Product
                     </div>
                     <div
                       className="mt-1 font-display font-800 text-lg truncate flex items-center gap-2"
@@ -220,7 +220,7 @@ export default function Marketplace() {
                       className="text-[10px] uppercase tracking-widest"
                       style={{ color: isLight ? "#8A6F14" : "rgba(245,197,24,0.80)" }}
                     >
-                      Stake
+                      Price
                     </div>
                     <div
                       className="mt-1 font-display font-800 text-lg tabular"
