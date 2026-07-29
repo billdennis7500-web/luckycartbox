@@ -27,6 +27,11 @@ Build a Nigerian online investment website with an admin backend and user fronte
 - Admin can credit any user's wallet.
 - Daily profit drop for the plan's `duration_days`.
 
+## What's implemented (2026-02-07 — Fly.io deployment fix)
+- ✅ Added ROOT-level `Dockerfile`, `fly.toml`, and `.dockerignore` at `/app/` (Fly.io looks for these at repo root, not `/app/backend/`). The backend-scoped copies in `/app/backend/` are kept for reference but Fly.io will now pick up the root ones on `fly deploy`.
+- ✅ Fixed `/api/health` 404 bug — the route was declared AFTER `app.include_router(api)` in `server.py`, which FastAPI silently ignores. Moved the `@api.get("/")` and `@api.get("/health")` declarations BEFORE `app.include_router(api)` (lines 3515 & 3520 respectively). Confirmed via curl: `GET /api/health` now returns `200` with `{status:"ok", service:"naijainvest-api", time:<iso>}`.
+- ✅ Backend regression tests: 9/9 pass (health P0 + root + auth login + protected-401 + products + wallet + admin/shpay/health + admin/deposits + admin auth guard). Reusable suite lives at `/app/backend/tests/test_health_regression.py`.
+
 ## What's implemented (2026-02-01)
 - ✅ Full auth (register, login, logout, `/me`, admin seeding, brute-force safe compare).
 - ✅ Product CRUD + 3 seeded default plans (Starter / Silver / Gold).
