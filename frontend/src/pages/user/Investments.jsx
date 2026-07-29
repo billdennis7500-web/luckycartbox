@@ -241,7 +241,7 @@ export default function Investments() {
       {/* Portfolio hero — gold ambient card */}
       <AmbientCard tone="gold" testid="investments-hero">
         <div>
-          <MicroLabel tone="gold">Portfolio value</MicroLabel>
+          <MicroLabel tone="gold">Warehouse value</MicroLabel>
           <div className="mt-1 flex items-baseline gap-2">
             <div className="font-display font-800 text-4xl tabular text-white tracking-tight" data-testid="inv-total-active">
               {formatNaira(totalActive)}
@@ -270,11 +270,11 @@ export default function Investments() {
       </AmbientCard>
 
       <SectionHeader
-        title="My investments"
+        title="My purchases"
         testid="investments-heading"
         right={
           <Link to="/marketplace" className="text-xs text-[#F5C518] hover:underline flex items-center gap-1 shrink-0 font-display font-700">
-            Browse plans <ChevronRight className="w-3 h-3" />
+            Browse products <ChevronRight className="w-3 h-3" />
           </Link>
         }
       />
@@ -301,7 +301,7 @@ export default function Investments() {
 
       {loading ? (
         <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-8 text-center text-sm text-[var(--nb-muted)]" data-testid="inv-loading">
-          Loading investments…
+          Loading purchases…
         </div>
       ) : shown.length === 0 ? (
         <div className="relative rounded-2xl overflow-hidden"
@@ -319,15 +319,15 @@ export default function Investments() {
             </div>
             <div className="text-sm text-[var(--nb-muted)]">
               {tab === "active"
-                ? "No active investments yet."
+                ? "No active purchases yet."
                 : tab === "completed"
-                ? "No completed investments yet."
-                : "You haven't started any investment plan."}
+                ? "No completed purchases yet."
+                : "You haven't bought any product yet."}
             </div>
             <div className="flex justify-center pt-1">
               <Link to="/marketplace">
                 <PillCTA tone="purple" size="md" icon={TrendingUp} testid="inv-empty-cta">
-                  Browse plans
+                  Browse products
                 </PillCTA>
               </Link>
             </div>

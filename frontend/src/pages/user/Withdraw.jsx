@@ -117,7 +117,7 @@ export default function Withdraw() {
               <div className="font-display font-800 text-white text-base">Withdrawals unlock after your first investment.</div>
               <div className="text-xs text-[var(--nb-muted)] mt-1">Pick any plan from the marketplace — small amounts count too.</div>
               <Link to="/marketplace" className="inline-block mt-3">
-                <PillCTA tone="purple" size="sm" testid="withdraw-locked-cta">Browse plans</PillCTA>
+                <PillCTA tone="purple" size="sm" testid="withdraw-locked-cta">Browse products</PillCTA>
               </Link>
             </div>
           </div>

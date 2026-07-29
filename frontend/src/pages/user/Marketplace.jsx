@@ -50,7 +50,7 @@ const DEFAULT_IMAGE = (
         <TrendingUp className="w-8 h-8 text-[#1A1508]" />
       </div>
       <div className="mt-2 text-[10px] font-display font-800 uppercase tracking-[0.15em] text-[#F5C518]/90">
-        Investment
+        Product
       </div>
     </div>
   </div>
@@ -74,12 +74,12 @@ export default function Marketplace() {
     setLoading(true);
     try {
       await api.post("/invest", { product_id: selected.id });
-      toast.success(`Invested ${formatNaira(selected.price)} in ${selected.name}`);
+      toast.success(`Bought ${selected.name} for ${formatNaira(selected.price)}`);
       setSelected(null);
       await refresh();
       load();
     } catch (e) {
-      toast.error(formatApiError(e.response?.data?.detail) || "Investment failed");
+      toast.error(formatApiError(e.response?.data?.detail) || "Purchase failed");
     } finally { setLoading(false); }
   };
 
@@ -97,7 +97,7 @@ export default function Marketplace() {
         <div className="flex items-center gap-2">
           <div className="w-1 h-6 rounded-sm bg-[#F5C518]" />
           <h1 className="font-display text-2xl font-800 tracking-tight" data-testid="marketplace-heading">
-            Investment plans
+            Shop products
           </h1>
         </div>
         <p className="text-sm text-[var(--nb-muted)] mt-1 ml-3">
@@ -173,7 +173,7 @@ export default function Marketplace() {
               className="font-display text-xl"
               style={{ color: isLight ? "#1A1508" : "#FFFFFF" }}
             >
-              Confirm your investment
+              Confirm your purchase
             </DrawerTitle>
             <DrawerDescription
               className="text-xs"
@@ -304,7 +304,7 @@ export default function Marketplace() {
                 boxShadow: "0 10px 28px -8px rgba(245,197,24,0.55)",
               }}
             >
-              {loading ? "Processing…" : "Confirm & invest"}
+              {loading ? "Processing…" : "Confirm & buy"}
               {!loading && <ChevronRight className="w-4 h-4" />}
             </button>
             <DrawerClose asChild>
@@ -453,7 +453,7 @@ function ProductRow({ p, onOpen, user }) {
               >
                 {affordable ? (
                   <>
-                    <Zap className="w-3.5 h-3.5 mr-1" /> Invest Now <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                    <Zap className="w-3.5 h-3.5 mr-1" /> Buy Now <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </>
                 ) : "Insufficient wallet"}
               </Button>

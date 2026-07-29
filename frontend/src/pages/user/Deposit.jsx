@@ -683,7 +683,7 @@ export default function Deposit() {
                     {formatNaira(waitDep.amount)} is now in your wallet. Go invest.
                   </div>
                   <Link to="/marketplace" onClick={closeWait} className="inline-flex mt-3 text-xs text-[#0055FF] hover:underline items-center gap-1">
-                    Browse plans <ArrowRight className="w-3 h-3" />
+                    Browse products <ArrowRight className="w-3 h-3" />
                   </Link>
                 </div>
               )}

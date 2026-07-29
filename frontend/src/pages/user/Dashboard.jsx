@@ -178,11 +178,11 @@ export default function Dashboard() {
                 You have {formatNaira(user?.bonus_balance)} welcome bonus
               </div>
               <div className="text-xs text-[var(--nb-muted)] mt-1 leading-relaxed">
-                Invest any amount to unlock withdrawals, referral commissions and coupon redemptions.
+                Buy any product to unlock withdrawals, referral commissions and coupon redemptions.
               </div>
               <Link to="/marketplace" data-testid="unlock-bonus-cta" className="inline-block mt-3">
                 <PillCTA tone="purple" size="sm" icon={TrendingUp} testid="unlock-bonus-btn">
-                  Invest now
+                  Buy now
                 </PillCTA>
               </Link>
             </div>
