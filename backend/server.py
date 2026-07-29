@@ -192,6 +192,9 @@ DEFAULT_SETTINGS = {
     "min_deposit": 500.0,
     "site_name": "NaijaInvest",
     "telegram_url": "",
+    "whatsapp_url": "",
+    "telegram_channel_url": "",
+    "support_hours": "Monday to Sunday, 10:00 AM to 7:00 PM",
     "welcome_message": "Welcome to NaijaInvest — grow your money the smart way. Invest today, cash out tomorrow.",
     "withdrawal_fee_pct": 15.0,
     "auto_payout_enabled": False,
@@ -1050,6 +1053,9 @@ class SettingsIn(BaseModel):
     min_deposit: Optional[float] = None
     site_name: Optional[str] = None
     telegram_url: Optional[str] = None
+    whatsapp_url: Optional[str] = None
+    telegram_channel_url: Optional[str] = None
+    support_hours: Optional[str] = None
     welcome_message: Optional[str] = None
     withdrawal_fee_pct: Optional[float] = None
     auto_payout_enabled: Optional[bool] = None
@@ -3377,6 +3383,9 @@ async def public_settings():
     return {
         "site_name": s.get("site_name") or "NaijaInvest",
         "telegram_url": s.get("telegram_url") or "",
+        "whatsapp_url": s.get("whatsapp_url") or "",
+        "telegram_channel_url": s.get("telegram_channel_url") or "",
+        "support_hours": s.get("support_hours") or "Monday to Sunday, 10:00 AM to 7:00 PM",
         "welcome_message": s.get("welcome_message") or "",
         "welcome_bonus": s.get("welcome_bonus") or 0,
         "min_deposit": s.get("min_deposit") or 0,

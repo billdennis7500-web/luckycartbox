@@ -23,6 +23,7 @@ import Transactions from "@/pages/user/Transactions";
 import Profile from "@/pages/user/Profile";
 import BindAccount from "@/pages/user/BindAccount";
 import Investments from "@/pages/user/Investments";
+import CustomerService from "@/pages/user/CustomerService";
 import ImpersonateBootstrap from "@/pages/ImpersonateBootstrap";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
@@ -85,6 +86,7 @@ function App() {
             <Route path="referrals" element={<Referrals />} />
             <Route path="coupon" element={<Coupon />} />
             <Route path="transactions" element={<Transactions />} />
+            <Route path="customer-service" element={<CustomerService />} />
             <Route path="profile" element={<Profile />} />
           </Route>
 

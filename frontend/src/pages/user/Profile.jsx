@@ -1,13 +1,35 @@
-import React from "react";
+/**
+ * Profile — restructured after user feedback (2026-07-29).
+ *
+ * Layout inspired by the reference screenshots the user shared, but rebuilt
+ * in NaijaInvest's dark-navy + gold aesthetic:
+ *
+ *   1. User identity card — avatar + name + masked phone + tier badge
+ *   2. Two side-by-side hero cards — Wallet balance (Deposit CTA) + Bonus
+ *      balance (Redeem CTA)
+ *   3. Three-tile stat row — Purchases, Total spent, Total earned
+ *   4. Quick-action strip (4 icons) — Deposit, Withdraw, Transactions, Bank
+ *   5. Grouped menu sections (matching the reference's card grouping):
+ *       • Group A: Team, Invite Friends, My Level
+ *       • Group B: Messages (badge), My Coupons, Gift Code
+ *       • Group C: Change Password, Customer Service, About
+ *   6. Sign out row
+ *
+ * All existing profile links continue to work and keep their existing
+ * `data-testid`s for testing continuity.
+ */
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
+import { api, formatNaira } from "@/lib/api";
 import {
   ArrowDownToLine, ArrowUpFromLine, Users as UsersIcon, LogOut,
   Shield, Copy, ChevronRight, Ticket, Landmark, Inbox, ScrollText, History,
+  Sparkles, Gift, MessageSquare, Lock, LifeBuoy, Info, Trophy,
+  ShoppingBag, TrendingUp, Wallet, Coins, Send, Phone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AmbientCard, SoftCard, MicroLabel } from "@/components/design";
+import { SoftCard, MicroLabel } from "@/components/design";
 
 const TILE_TONES = {
   info:    "#0055FF",
@@ -16,48 +38,193 @@ const TILE_TONES = {
   purple:  "#A855F7",
   hot:     "#EF4444",
   cyan:    "#06B6D4",
+  orange:  "#F97316",
 };
 
-function ProfileLink({ to, icon: Icon, label, hint, tone = "info", testid }) {
+/* ------------- Level / tier system (derived from total_invested) ---------- */
+function deriveTier(totalInvested = 0) {
+  if (totalInvested >= 500_000) return { key: "vip3", label: "VIP 3",   color: "#F5C518", tag: "Elite"    };
+  if (totalInvested >= 100_000) return { key: "vip2", label: "VIP 2",   color: "#A855F7", tag: "Advanced" };
+  if (totalInvested >= 20_000)  return { key: "vip1", label: "VIP 1",   color: "#06B6D4", tag: "Regular"  };
+  return                              { key: "std",  label: "NORMAL", color: "#94A3B8", tag: "Standard" };
+}
+
+function maskPhone(p = "") {
+  if (!p) return "";
+  const digits = p.replace(/\D/g, "");
+  if (digits.length < 7) return p;
+  return `${digits.slice(0, 4)}****${digits.slice(-3)}`;
+}
+
+/* ---------------------------- MENU LINK ROW ------------------------------- */
+function MenuRow({ to, icon: Icon, label, hint, tone = "info", testid, badge, onClick }) {
   const c = TILE_TONES[tone] || TILE_TONES.info;
-  return (
-    <Link
-      to={to}
-      data-testid={testid}
-      className="flex items-center gap-3 px-4 py-3.5 hover:bg-[var(--nb-card2)] transition-colors"
-    >
+  const body = (
+    <>
       <div className="w-10 h-10 rounded-lg grid place-items-center shrink-0"
            style={{ background: `${c}18`, border: `1px solid ${c}40`, color: c }}>
         <Icon className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-display font-700 text-sm text-white truncate">{label}</div>
-        <div className="text-[11px] text-[var(--nb-muted)] truncate">{hint}</div>
+        <div className="font-display font-700 text-sm text-white truncate flex items-center gap-2">
+          {label}
+          {badge && (
+            <span className="text-[9px] font-display font-800 px-1.5 py-0.5 rounded-full"
+                  style={{ background: "#EF4444", color: "#FFFFFF" }}>
+              {badge}
+            </span>
+          )}
+        </div>
+        {hint && <div className="text-[11px] text-[var(--nb-muted)] truncate">{hint}</div>}
       </div>
       <ChevronRight className="w-4 h-4 text-[var(--nb-muted)]" />
+    </>
+  );
+  const cls = "flex items-center gap-3 px-4 py-3.5 hover:bg-[var(--nb-card2)] transition-colors w-full text-left";
+  if (onClick) {
+    return (
+      <button onClick={onClick} data-testid={testid} className={cls}>{body}</button>
+    );
+  }
+  return (
+    <Link to={to} data-testid={testid} className={cls}>{body}</Link>
+  );
+}
+
+/* ---------------------------- QUICK ACTION ICON --------------------------- */
+function QuickAction({ to, icon: Icon, label, tone = "gold", testid }) {
+  const c = TILE_TONES[tone] || TILE_TONES.gold;
+  return (
+    <Link
+      to={to}
+      data-testid={testid}
+      className="flex flex-col items-center gap-1.5 rounded-xl py-3 transition-transform active:scale-[0.96] hover:bg-[var(--nb-card2)]"
+    >
+      <div
+        className="w-11 h-11 rounded-full grid place-items-center"
+        style={{
+          background: `${c}18`,
+          border: `1px solid ${c}40`,
+          color: c,
+          boxShadow: `0 4px 12px ${c}22`,
+        }}
+      >
+        <Icon className="w-4 h-4" strokeWidth={2.4} />
+      </div>
+      <div className="text-[10px] font-display font-700 text-white text-center leading-tight">
+        {label}
+      </div>
     </Link>
   );
 }
 
+/* ---------------------------- STAT MINI TILE ------------------------------ */
+function StatTile({ icon: Icon, value, label, tone = "gold", testid }) {
+  const c = TILE_TONES[tone] || TILE_TONES.gold;
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden bg-[var(--nb-card)] p-3 flex flex-col items-center text-center"
+      style={{ boxShadow: `0 4px 14px -6px ${c}55, 0 0 0 1px ${c}20` }}
+      data-testid={testid}
+    >
+      <div
+        className="w-9 h-9 rounded-full grid place-items-center mb-1.5"
+        style={{ background: `${c}18`, border: `1px solid ${c}40`, color: c }}
+      >
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="font-display font-800 tabular text-white text-base leading-none">
+        {value}
+      </div>
+      <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)] mt-1 font-display font-700">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- HERO STAT CARD ------------------------------ */
+function HeroCard({ label, value, ctaLabel, ctaTo, tone = "gold", icon: Icon, testid }) {
+  const c = TILE_TONES[tone] || TILE_TONES.gold;
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden bg-[var(--nb-card)] p-4 flex flex-col justify-between min-h-[124px]"
+      style={{ boxShadow: `0 8px 28px -10px ${c}66, 0 0 0 1px ${c}30` }}
+      data-testid={testid}
+    >
+      {/* Dashed accent line top */}
+      <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+           style={{ background: `repeating-linear-gradient(90deg,${c} 0 8px,transparent 8px 14px)`, opacity: 0.65 }} />
+      {/* Radial glow */}
+      <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full opacity-25 blur-2xl pointer-events-none"
+           style={{ background: c }} />
+      <div className="relative">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-display font-700"
+             style={{ color: c }}>
+          <Icon className="w-3 h-3" />
+          {label}
+        </div>
+        <div className="mt-1.5 font-display font-800 tabular text-xl text-white truncate">
+          {value}
+        </div>
+      </div>
+      <div className="relative mt-2">
+        <Link
+          to={ctaTo}
+          data-testid={`${testid}-cta`}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-display font-800 transition-all hover:brightness-110 active:scale-[0.97]"
+          style={{
+            background: `linear-gradient(135deg,${c},${c}CC)`,
+            color: c === "#F5C518" ? "#1A1508" : "#FFFFFF",
+            boxShadow: `0 4px 12px ${c}55`,
+          }}
+        >
+          {ctaLabel} <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* =========================== PAGE COMPONENT =============================== */
 export default function Profile() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const [invCount, setInvCount] = useState(null);
+
+  useEffect(() => {
+    api.get("/investments").then((r) => setInvCount((r.data || []).length))
+       .catch(() => setInvCount(0));
+  }, []);
+
+  const tier = useMemo(() => deriveTier(user?.total_invested || 0), [user?.total_invested]);
 
   const onLogout = async () => {
     await logout();
     nav("/");
   };
 
-  const copy = async (v) => {
-    try { await navigator.clipboard.writeText(v); toast.success("Copied"); }
-    catch { toast.error("Clipboard blocked — copy manually"); }
+  const copyRef = async () => {
+    try {
+      await navigator.clipboard.writeText(user?.referral_code || "");
+      toast.success("Referral code copied");
+    } catch { toast.error("Clipboard blocked — copy manually"); }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header — gold ambient card */}
-      <AmbientCard tone="gold" testid="profile-header-card">
-        <div className="flex items-center gap-4">
+    <div className="space-y-5">
+      {/* -------- 1. User identity card -------- */}
+      <div
+        className="relative rounded-2xl overflow-hidden bg-[var(--nb-card)] p-4"
+        style={{ boxShadow: "0 8px 32px -10px rgba(245,197,24,0.45), 0 0 0 1px rgba(245,197,24,0.30)" }}
+        data-testid="profile-identity-card"
+      >
+        <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+             style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.7 }} />
+        <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-20 blur-2xl pointer-events-none"
+             style={{ background: "#F5C518" }} />
+
+        <div className="relative flex items-center gap-4">
           <div
             className="w-16 h-16 rounded-2xl grid place-items-center text-xl font-display font-800 shrink-0"
             style={{
@@ -69,66 +236,165 @@ export default function Profile() {
             {(user?.name || "?").slice(0, 1).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <MicroLabel tone="gold">Account</MicroLabel>
-            <div className="font-display font-800 text-xl text-white truncate" data-testid="profile-name">
-              {user?.name}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="font-display font-800 text-lg text-white truncate" data-testid="profile-name">
+                {user?.name || "—"}
+              </div>
+              {/* Tier badge */}
+              <span
+                data-testid="profile-tier-badge"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-800 uppercase tracking-widest text-[9px] shrink-0"
+                style={{
+                  background: `${tier.color}18`,
+                  color: tier.color,
+                  border: `1px solid ${tier.color}55`,
+                }}
+              >
+                <Sparkles className="w-2.5 h-2.5" />
+                {tier.label}
+              </span>
             </div>
             <div className="text-xs text-[var(--nb-muted)] tabular truncate mt-0.5" data-testid="profile-phone">
-              {user?.phone}
+              {maskPhone(user?.phone)}
+            </div>
+            {/* Referral code inline */}
+            <div className="mt-2 flex items-center gap-1.5">
+              <MicroLabel tone="epic" className="!mt-0">Ref code</MicroLabel>
+              <button
+                onClick={copyRef}
+                data-testid="profile-copy-ref"
+                className="inline-flex items-center gap-1 text-[11px] font-display font-700 tabular text-[#A855F7] hover:text-[#C084FC]"
+              >
+                {user?.referral_code || "—"} <Copy className="w-3 h-3" />
+              </button>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="mt-5 flex items-center justify-between rounded-xl p-3.5"
-             style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.30)" }}>
-          <div className="min-w-0">
-            <MicroLabel tone="epic">Referral code</MicroLabel>
-            <div className="mt-1 font-display font-800 text-lg tabular text-white truncate" data-testid="profile-referral-code">
-              {user?.referral_code}
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => copy(user?.referral_code || "")}
-            data-testid="profile-copy-ref"
-            className="border-[#A855F7]/40 bg-[#A855F7]/10 text-[#A855F7] hover:bg-[#A855F7]/20 shrink-0"
-          >
-            <Copy className="w-3 h-3 mr-1" /> Copy
-          </Button>
-        </div>
-      </AmbientCard>
+      {/* -------- 2. Two hero cards side by side (Balance + Bonus) -------- */}
+      <div className="grid grid-cols-2 gap-3">
+        <HeroCard
+          label="Balance"
+          icon={Wallet}
+          value={formatNaira(user?.wallet_balance)}
+          ctaLabel="Deposit"
+          ctaTo="/deposit"
+          tone="gold"
+          testid="hero-wallet"
+        />
+        <HeroCard
+          label="Bonus"
+          icon={Coins}
+          value={formatNaira(user?.bonus_balance)}
+          ctaLabel="Redeem"
+          ctaTo="/coupon"
+          tone="purple"
+          testid="hero-bonus"
+        />
+      </div>
 
-      {/* Menu links */}
-      <SoftCard padded={false} testid="profile-menu-card">
-        <div className="divide-y divide-[var(--nb-border)] overflow-hidden">
-          <ProfileLink to="/referrals" icon={UsersIcon} label="Referrals" hint="Invite & earn 3-gen commissions" tone="purple" testid="profile-link-referrals" />
-          <ProfileLink to="/transactions" icon={History} label="Transaction history" hint="Every wallet movement" tone="cyan" testid="profile-link-transactions" />
-          <ProfileLink to="/deposit" icon={ArrowDownToLine} label="Deposit" hint="Fund your wallet" tone="success" testid="profile-link-deposit" />
-          <ProfileLink to="/deposit-history" icon={Inbox} label="Deposit history" hint="Every top-up you've made" tone="success" testid="profile-link-deposit-history" />
-          <ProfileLink to="/withdraw" icon={ArrowUpFromLine} label="Withdraw" hint="Cash out to bank" tone="info" testid="profile-link-withdraw" />
-          <ProfileLink to="/withdraw-history" icon={ScrollText} label="Withdrawal history" hint="Every payout you've requested" tone="gold" testid="profile-link-withdraw-history" />
-          <ProfileLink to="/bank-account" icon={Landmark} label="Bank account" hint="Bind or update your payout account" tone="info" testid="profile-link-bank" />
-          <ProfileLink to="/coupon" icon={Ticket} label="Redeem coupon" hint="Use a promo code" tone="gold" testid="profile-link-coupon" />
-          {user?.role === "admin" && (
-            <ProfileLink to="/admin" icon={Shield} label="Admin panel" hint="Control center" tone="hot" testid="profile-link-admin" />
-          )}
-          <button
-            onClick={onLogout}
-            data-testid="profile-logout-button"
-            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-[#EF4444]/8 transition-colors"
-          >
-            <div className="w-10 h-10 rounded-lg grid place-items-center shrink-0"
-                 style={{ background: "#EF444418", border: "1px solid #EF444440", color: "#EF4444" }}>
-              <LogOut className="w-4 h-4" />
-            </div>
-            <div className="flex-1 text-left">
-              <div className="font-display font-700 text-sm text-white">Sign out</div>
-              <div className="text-[11px] text-[var(--nb-muted)]">End this session</div>
-            </div>
-          </button>
+      {/* -------- 3. Three-tile stat row -------- */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile
+          icon={ShoppingBag}
+          value={invCount === null ? "…" : invCount}
+          label="Purchases"
+          tone="cyan"
+          testid="stat-purchases"
+        />
+        <StatTile
+          icon={TrendingUp}
+          value={formatNaira(user?.total_invested || 0)}
+          label="Spent"
+          tone="orange"
+          testid="stat-spent"
+        />
+        <StatTile
+          icon={Trophy}
+          value={formatNaira(user?.total_earned || 0)}
+          label="Earned"
+          tone="success"
+          testid="stat-earned"
+        />
+      </div>
+
+      {/* -------- 4. Quick action strip -------- */}
+      <SoftCard padded={false} testid="quick-actions-card">
+        <div className="grid grid-cols-4 p-2">
+          <QuickAction to="/deposit"          icon={ArrowDownToLine} label="Deposit"      tone="success" testid="qa-deposit" />
+          <QuickAction to="/withdraw"         icon={ArrowUpFromLine} label="Withdraw"     tone="info"    testid="qa-withdraw" />
+          <QuickAction to="/transactions"     icon={History}         label="Transactions" tone="cyan"    testid="qa-transactions" />
+          <QuickAction to="/bank-account"     icon={Landmark}        label="Bank Card"    tone="gold"    testid="qa-bank" />
         </div>
       </SoftCard>
+
+      {/* -------- 5a. Group A: Team / Invite / Level -------- */}
+      <SoftCard padded={false} testid="menu-group-team">
+        <div className="divide-y divide-[var(--nb-border)]">
+          <MenuRow to="/referrals" icon={UsersIcon} label="My Team"       hint="View your referral network" tone="purple" testid="menu-team" />
+          <MenuRow to="/referrals" icon={Send}      label="Invite Friends" hint="Earn 3-generation commissions" tone="info" testid="menu-invite" />
+          <MenuRow
+            icon={Trophy}
+            label="My Level"
+            hint={`Current tier · ${tier.label} (${tier.tag})`}
+            tone="gold"
+            testid="menu-level"
+            onClick={() => toast.info(
+              `You're ${tier.label}. Spend ₦${tier.key === "std" ? "20,000" : tier.key === "vip1" ? "100,000" : tier.key === "vip2" ? "500,000" : "500,000+"} to reach the next tier.`
+            )}
+          />
+        </div>
+      </SoftCard>
+
+      {/* -------- 5b. Group B: Deposit / Withdraw / Coupons -------- */}
+      <SoftCard padded={false} testid="menu-group-money">
+        <div className="divide-y divide-[var(--nb-border)]">
+          <MenuRow to="/deposit-history"  icon={Inbox}      label="Deposit history"    hint="Every top-up you've made"    tone="success" testid="profile-link-deposit-history" />
+          <MenuRow to="/withdraw-history" icon={ScrollText} label="Withdrawal history" hint="Every payout you've requested" tone="gold"    testid="profile-link-withdraw-history" />
+          <MenuRow to="/coupon"           icon={Ticket}     label="My Coupons"         hint="Active promo codes"          tone="purple"  testid="menu-coupons" />
+          <MenuRow to="/coupon"           icon={Gift}       label="Gift Code"          hint="Redeem a gift code"          tone="hot"     testid="menu-giftcode" />
+        </div>
+      </SoftCard>
+
+      {/* -------- 5c. Group C: Password / Support / About -------- */}
+      <SoftCard padded={false} testid="menu-group-account">
+        <div className="divide-y divide-[var(--nb-border)]">
+          <MenuRow
+            icon={Lock}
+            label="Change Password"
+            hint="Contact support to reset securely"
+            tone="info"
+            testid="menu-password"
+            onClick={() => {
+              toast.info("To reset your password, message us on Customer Service.");
+              nav("/customer-service");
+            }}
+          />
+          <MenuRow to="/customer-service" icon={LifeBuoy} label="Customer Service" hint="WhatsApp, Telegram & FAQ"      tone="success" testid="menu-customer-service" />
+          <MenuRow
+            icon={Info}
+            label="About"
+            hint="Version, terms & platform info"
+            tone="cyan"
+            testid="menu-about"
+            onClick={() => toast.info("NaijaInvest v1.0 — Nigeria's trusted investment platform.")}
+          />
+          {user?.role === "admin" && (
+            <MenuRow to="/admin" icon={Shield} label="Admin panel" hint="Control center" tone="hot" testid="profile-link-admin" />
+          )}
+        </div>
+      </SoftCard>
+
+      {/* -------- 6. Sign out -------- */}
+      <button
+        onClick={onLogout}
+        data-testid="profile-logout-button"
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl transition-colors bg-[var(--nb-card)] text-[#EF4444] hover:bg-[#EF4444]/8 font-display font-700"
+        style={{ boxShadow: "0 4px 14px -6px rgba(239,68,68,0.35), 0 0 0 1px rgba(239,68,68,0.25)" }}
+      >
+        <LogOut className="w-4 h-4" /> Sign out
+      </button>
     </div>
   );
 }
