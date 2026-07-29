@@ -1229,6 +1229,30 @@ async def me(user: dict = Depends(get_current_user)):
     return clean(user)
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@api.post("/auth/change-password")
+async def change_password(payload: ChangePasswordIn, user: dict = Depends(get_current_user)):
+    """Authenticated password change. Requires the current password so a stolen
+    session token can't silently take over the account. Same bcrypt scheme as
+    register + login (`hash_password` / `verify_password`)."""
+    if len(payload.new_password or "") < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(400, "New password must be different from your current one")
+    if not verify_password(payload.current_password, user.get("password_hash") or ""):
+        raise HTTPException(400, "Current password is incorrect")
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": hash_password(payload.new_password),
+                  "password_changed_at": now_utc().isoformat()}},
+    )
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Products (public list + admin CRUD)
 # ---------------------------------------------------------------------------

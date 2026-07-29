@@ -24,6 +24,9 @@ import Profile from "@/pages/user/Profile";
 import BindAccount from "@/pages/user/BindAccount";
 import Investments from "@/pages/user/Investments";
 import CustomerService from "@/pages/user/CustomerService";
+import Level from "@/pages/user/Level";
+import About from "@/pages/user/About";
+import ChangePassword from "@/pages/user/ChangePassword";
 import ImpersonateBootstrap from "@/pages/ImpersonateBootstrap";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
@@ -87,6 +90,9 @@ function App() {
             <Route path="coupon" element={<Coupon />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="customer-service" element={<CustomerService />} />
+            <Route path="level" element={<Level />} />
+            <Route path="about" element={<About />} />
+            <Route path="change-password" element={<ChangePassword />} />
             <Route path="profile" element={<Profile />} />
           </Route>
 

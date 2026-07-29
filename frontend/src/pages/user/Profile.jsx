@@ -25,11 +25,12 @@ import { api, formatNaira } from "@/lib/api";
 import {
   ArrowDownToLine, ArrowUpFromLine, Users as UsersIcon, LogOut,
   Shield, Copy, ChevronRight, Ticket, Landmark, Inbox, ScrollText, History,
-  Sparkles, Gift, MessageSquare, Lock, LifeBuoy, Info, Trophy,
-  ShoppingBag, TrendingUp, Wallet, Coins, Send, Phone,
+  Sparkles, MessageSquare, Lock, LifeBuoy, Info, Trophy,
+  ShoppingBag, TrendingUp, Wallet, Coins, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SoftCard, MicroLabel } from "@/components/design";
+import { deriveLevel } from "@/lib/levels";
 
 const TILE_TONES = {
   info:    "#0055FF",
@@ -40,14 +41,6 @@ const TILE_TONES = {
   cyan:    "#06B6D4",
   orange:  "#F97316",
 };
-
-/* ------------- Level / tier system (derived from total_invested) ---------- */
-function deriveTier(totalInvested = 0) {
-  if (totalInvested >= 500_000) return { key: "vip3", label: "VIP 3",   color: "#F5C518", tag: "Elite"    };
-  if (totalInvested >= 100_000) return { key: "vip2", label: "VIP 2",   color: "#A855F7", tag: "Advanced" };
-  if (totalInvested >= 20_000)  return { key: "vip1", label: "VIP 1",   color: "#06B6D4", tag: "Regular"  };
-  return                              { key: "std",  label: "NORMAL", color: "#94A3B8", tag: "Standard" };
-}
 
 function maskPhone(p = "") {
   if (!p) return "";
@@ -197,7 +190,9 @@ export default function Profile() {
        .catch(() => setInvCount(0));
   }, []);
 
-  const tier = useMemo(() => deriveTier(user?.total_invested || 0), [user?.total_invested]);
+  const level = useMemo(() => deriveLevel(user?.total_invested || 0), [user?.total_invested]);
+  const tierColor = level.current.color;
+  const tierLabel = level.current.name;
 
   const onLogout = async () => {
     await logout();
@@ -245,13 +240,13 @@ export default function Profile() {
                 data-testid="profile-tier-badge"
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-800 uppercase tracking-widest text-[9px] shrink-0"
                 style={{
-                  background: `${tier.color}18`,
-                  color: tier.color,
-                  border: `1px solid ${tier.color}55`,
+                  background: `${tierColor}18`,
+                  color: tierColor,
+                  border: `1px solid ${tierColor}55`,
                 }}
               >
                 <Sparkles className="w-2.5 h-2.5" />
-                {tier.label}
+                {tierLabel}
               </span>
             </div>
             <div className="text-xs text-[var(--nb-muted)] tabular truncate mt-0.5" data-testid="profile-phone">
@@ -335,51 +330,33 @@ export default function Profile() {
           <MenuRow to="/referrals" icon={UsersIcon} label="My Team"       hint="View your referral network" tone="purple" testid="menu-team" />
           <MenuRow to="/referrals" icon={Send}      label="Invite Friends" hint="Earn 3-generation commissions" tone="info" testid="menu-invite" />
           <MenuRow
+            to="/level"
             icon={Trophy}
             label="My Level"
-            hint={`Current tier · ${tier.label} (${tier.tag})`}
+            hint={level.next
+              ? `${tierLabel} · ${formatNaira(Math.max(0, level.next.threshold - (user?.total_invested || 0)))} to ${level.next.name}`
+              : `${tierLabel} · Max level reached`}
             tone="gold"
             testid="menu-level"
-            onClick={() => toast.info(
-              `You're ${tier.label}. Spend ₦${tier.key === "std" ? "20,000" : tier.key === "vip1" ? "100,000" : tier.key === "vip2" ? "500,000" : "500,000+"} to reach the next tier.`
-            )}
           />
         </div>
       </SoftCard>
 
-      {/* -------- 5b. Group B: Deposit / Withdraw / Coupons -------- */}
+      {/* -------- 5b. Group B: History / Coupons -------- */}
       <SoftCard padded={false} testid="menu-group-money">
         <div className="divide-y divide-[var(--nb-border)]">
           <MenuRow to="/deposit-history"  icon={Inbox}      label="Deposit history"    hint="Every top-up you've made"    tone="success" testid="profile-link-deposit-history" />
           <MenuRow to="/withdraw-history" icon={ScrollText} label="Withdrawal history" hint="Every payout you've requested" tone="gold"    testid="profile-link-withdraw-history" />
-          <MenuRow to="/coupon"           icon={Ticket}     label="My Coupons"         hint="Active promo codes"          tone="purple"  testid="menu-coupons" />
-          <MenuRow to="/coupon"           icon={Gift}       label="Gift Code"          hint="Redeem a gift code"          tone="hot"     testid="menu-giftcode" />
+          <MenuRow to="/coupon"           icon={Ticket}     label="My Coupons"         hint="Enter a coupon or gift code" tone="purple"  testid="menu-coupons" />
         </div>
       </SoftCard>
 
       {/* -------- 5c. Group C: Password / Support / About -------- */}
       <SoftCard padded={false} testid="menu-group-account">
         <div className="divide-y divide-[var(--nb-border)]">
-          <MenuRow
-            icon={Lock}
-            label="Change Password"
-            hint="Contact support to reset securely"
-            tone="info"
-            testid="menu-password"
-            onClick={() => {
-              toast.info("To reset your password, message us on Customer Service.");
-              nav("/customer-service");
-            }}
-          />
-          <MenuRow to="/customer-service" icon={LifeBuoy} label="Customer Service" hint="WhatsApp, Telegram & FAQ"      tone="success" testid="menu-customer-service" />
-          <MenuRow
-            icon={Info}
-            label="About"
-            hint="Version, terms & platform info"
-            tone="cyan"
-            testid="menu-about"
-            onClick={() => toast.info("NaijaInvest v1.0 — Nigeria's trusted investment platform.")}
-          />
+          <MenuRow to="/change-password"  icon={Lock}     label="Change Password"  hint="Keep your account safe"    tone="info"    testid="menu-password" />
+          <MenuRow to="/customer-service" icon={LifeBuoy} label="Customer Service" hint="WhatsApp, Telegram & FAQ"  tone="success" testid="menu-customer-service" />
+          <MenuRow to="/about"            icon={Info}     label="About us"         hint="Mission, values & version" tone="cyan"    testid="menu-about" />
           {user?.role === "admin" && (
             <MenuRow to="/admin" icon={Shield} label="Admin panel" hint="Control center" tone="hot" testid="profile-link-admin" />
           )}
