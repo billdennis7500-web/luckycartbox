@@ -155,72 +155,95 @@ export default function Deposit() {
   const pollRef = useRef(null);
 
   const load = () => {
-    // Two-phase load with guaranteed atomic reveal:
+    // Two-phase load with atomic reveal + hard timeouts.
     //
-    // FAST PHASE (all servers with the new /api/deposit/methods endpoint):
+    // FAST PHASE (new backend, /api/deposit/methods exists):
     //   One ~12 ms local call returns which gateways are enabled. All 4 tiles
-    //   render together in <200 ms. Individual gateway probes then run in the
+    //   render together in <200 ms. Individual probes then run in the
     //   background purely to flip the amber "ready" pill.
     //
-    // FALLBACK PHASE (backend without /deposit/methods yet):
-    //   /deposit/methods 404s. We instead call the 4 individual `/…/status`
-    //   probes but WAIT for `Promise.allSettled` on all 4 before flipping ANY
-    //   of the `xxxEnabled` flags — this prevents the "tiles appear one-by-one"
-    //   effect the user complained about. Slower, but atomic.
-    //
-    // The `fastPhaseOk` flag makes sure a slow-phase failure never overrides
-    // a successful fast-phase confirmation.
+    // FALLBACK PHASE (old backend without /deposit/methods):
+    //   We instead call the 4 individual `/…/status` probes but WAIT for all
+    //   of them together (Promise.all) with a HARD 4-second timeout PER PROBE.
+    //   If a probe times out we assume `enabled: true` (fail-open) — otherwise
+    //   a slow gateway would hide its own tile even when the gateway is fine.
+    //   If a probe returns an explicit `{enabled: false}`, we honour it (that
+    //   means the admin has disabled the gateway or env vars aren't set).
+    //   Users see all 4 tiles reveal atomically within 4 seconds worst case.
+
+    // Wrap a promise with a hard timeout. On timeout OR error we treat the
+    // gateway as ENABLED (fail-open) so the tile shows anyway. If a real
+    // deposit is attempted through a broken gateway, the create-payin call
+    // will surface a proper inline error — far better UX than an invisible
+    // tile that leaves the user confused about why "PayNow disappeared".
+    const withTimeout = (promise, ms, timeoutValue) =>
+      Promise.race([
+        promise,
+        new Promise((resolve) => setTimeout(() => resolve(timeoutValue), ms)),
+      ]);
+
+    const probe = (path) => withTimeout(
+      api.get(path)
+        .then((r) => ({ enabled: !!r.data?.enabled, ready: r.data?.gateway_ready !== false }))
+        .catch(() => ({ enabled: true, ready: false })), // network error → fail-open
+      4000,                                              // hard 4-second cap
+      { enabled: true, ready: false },                   // timeout → fail-open + amber pill
+    );
 
     // ---------- FAST PHASE ----------
-    const pMethods = api.get("/deposit/methods").then((r) => {
-      const d = r.data || {};
-      if (d.paynow !== undefined) {
-        // Reveal all 4 tiles atomically in one render frame.
-        setInstantEnabled(!!d.paynow);
-        setShpayEnabled(!!d.shpay);
-        setOnesspayEnabled(!!d.onesspay);
-        setJuntbestEnabled(!!d.juntbest);
-        return true; // fast-phase OK
-      }
-      return false;
-    }).catch(() => false); // endpoint missing → treat as false
+    const pMethods = withTimeout(
+      api.get("/deposit/methods").then((r) => {
+        const d = r.data || {};
+        if (d.paynow !== undefined) {
+          setInstantEnabled(!!d.paynow);
+          setShpayEnabled(!!d.shpay);
+          setOnesspayEnabled(!!d.onesspay);
+          setJuntbestEnabled(!!d.juntbest);
+          return true;
+        }
+        return false;
+      }).catch(() => false),
+      3000,   // fast endpoint should be <200ms — 3s is a safe ceiling
+      false,  // timeout → fall through to slow phase
+    );
 
-    const pAccounts = api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {});
-    const pSettings = api.get("/settings/public").then((r) => {
-      const qa = r.data?.deposit_quick_amounts;
-      if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
-    }).catch(() => {});
+    const pAccounts = withTimeout(
+      api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {}),
+      3000, undefined,
+    );
+    const pSettings = withTimeout(
+      api.get("/settings/public").then((r) => {
+        const qa = r.data?.deposit_quick_amounts;
+        if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
+      }).catch(() => {}),
+      3000, undefined,
+    );
 
-    // Wait for fast phase + accounts + settings, then decide whether to also
-    // wait for the slow probes.
+    // ---------- ORCHESTRATION ----------
     Promise.all([pMethods, pAccounts, pSettings]).then(async ([fastOk]) => {
       if (fastOk) {
-        // Fast path — tiles already revealed. Hide skeleton NOW. Slow probes
-        // run in the background only to update the "ready" pill.
+        // Fast path — tiles already revealed synchronously above. Hide skeleton
+        // NOW. Slow probes run in the background only to update the amber pill.
         setInitialLoad(false);
-        api.get("/paynow/banks")
-          .then((r) => setGatewayReady(r.data?.gateway_ready !== false))
+        withTimeout(api.get("/paynow/banks"), 6000, { data: { gateway_ready: false } })
+          .then((r) => setGatewayReady(r?.data?.gateway_ready !== false))
           .catch(() => setGatewayReady(false));
-        api.get("/shpay/status")
-          .then((r) => setShpayReady(r.data?.gateway_ready !== false))
+        withTimeout(api.get("/shpay/status"), 6000, { data: { gateway_ready: false } })
+          .then((r) => setShpayReady(r?.data?.gateway_ready !== false))
           .catch(() => setShpayReady(false));
-        api.get("/onesspay/status")
-          .then((r) => setOnesspayReady(r.data?.gateway_ready !== false))
+        withTimeout(api.get("/onesspay/status"), 6000, { data: { gateway_ready: false } })
+          .then((r) => setOnesspayReady(r?.data?.gateway_ready !== false))
           .catch(() => setOnesspayReady(false));
-        api.get("/juntbest/status")
-          .then((r) => setJuntbestReady(r.data?.gateway_ready !== false))
+        withTimeout(api.get("/juntbest/status"), 6000, { data: { gateway_ready: false } })
+          .then((r) => setJuntbestReady(r?.data?.gateway_ready !== false))
           .catch(() => setJuntbestReady(false));
         return;
       }
 
-      // Fallback path — /deposit/methods is missing (backend not yet redeployed).
-      // Run the 4 gateway probes IN PARALLEL and collect their `enabled` flags,
-      // but DON'T call setXxxEnabled until ALL 4 have settled. This guarantees
-      // all tiles reveal in one atomic render, not one-by-one.
-      const probe = (path) => api.get(path)
-        .then((r) => ({ enabled: !!r.data?.enabled, ready: r.data?.gateway_ready !== false }))
-        .catch(() => ({ enabled: false, ready: false }));
-
+      // Fallback path — /deposit/methods missing. Fire all 4 probes with
+      // 4-second timeout each, in parallel. Since all probes have the same
+      // hard cap, Promise.all resolves within ~4 s regardless of how slow
+      // any individual gateway is.
       const [paynowResult, shpayResult, onesspayResult, juntbestResult] = await Promise.all([
         probe("/paynow/banks"),
         probe("/shpay/status"),
@@ -228,7 +251,8 @@ export default function Deposit() {
         probe("/juntbest/status"),
       ]);
 
-      // All 4 results are in — set every flag in one batch, THEN reveal.
+      // Batch-set every flag in one tick — React batches into a single render,
+      // so all 4 tiles reveal atomically.
       setInstantEnabled(paynowResult.enabled);
       setGatewayReady(paynowResult.ready);
       setShpayEnabled(shpayResult.enabled);
