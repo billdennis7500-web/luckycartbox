@@ -2938,6 +2938,34 @@ async def juntbest_banks(user: dict = Depends(get_current_user)):
     return {"enabled": True, "gateway_ready": True, "data": juntbest.list_banks()}
 
 
+# ---------------------------------------------------------------------------
+# Fast, config-only deposit-methods endpoint.
+#
+# Purpose: the four `/…/status` endpoints above each fire a real HTTPS call to
+# the gateway (through the IPRoyal proxy) to test live reachability. On a slow
+# gateway (SHPAY / 1SSPay have both been known to hang for 10-20s), the tile
+# stays hidden for that long — and if the call times out, the tile never
+# appears at all, which is exactly what users are reporting ("PayNow doesn't
+# show sometimes").
+#
+# This endpoint returns config-only state (env-configured + admin toggle),
+# NO outbound network calls. The Deposit page uses it to render tiles
+# instantly. Individual per-gateway "green/amber pill" health probes are still
+# available via the existing `/…/status` endpoints and are fired in the
+# background so the UI can add a warning badge — but the tiles show up
+# immediately regardless.
+# ---------------------------------------------------------------------------
+@api.get("/deposit/methods")
+async def deposit_methods(user: dict = Depends(get_current_user)):
+    toggles = await get_gateway_toggles()
+    return {
+        "paynow":   paynow.enabled()   and bool(toggles.get("paynow",   {}).get("payin")),
+        "shpay":    shpay.enabled()    and bool(toggles.get("shpay",    {}).get("payin")),
+        "onesspay": onesspay.enabled() and bool(toggles.get("onesspay", {}).get("payin")),
+        "juntbest": juntbest.enabled() and bool(toggles.get("juntbest", {}).get("payin")),
+    }
+
+
 
 @api.get("/onesspay/banks")
 async def onesspay_banks(user: dict = Depends(get_current_user)):

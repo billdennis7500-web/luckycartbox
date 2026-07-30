@@ -155,34 +155,52 @@ export default function Deposit() {
   const pollRef = useRef(null);
 
   const load = () => {
-    // Kick every call off in parallel and hide the skeleton only when ALL of
-    // them settle. Previously `initialLoad` flipped to false after just the
-    // first call (`/payment-accounts`), which caused each gateway tile to pop
-    // in one-by-one as its own status probe resolved — that's the "staggered"
-    // load users see. `Promise.allSettled` guarantees a single reveal.
+    // Two-phase load:
+    //   1. Fast phase — `/deposit/methods` + `/payment-accounts` + `/settings/public`
+    //      are ~100 ms local-only queries (no outbound gateway calls). Tiles render
+    //      IMMEDIATELY based on their enabled flag. Hides the skeleton.
+    //   2. Slow phase — the individual `/…/status` probes fire a real API call
+    //      to each gateway (through the IPRoyal proxy). We run these in the
+    //      background purely to flip the `xxxReady` state (used for the amber
+    //      "warning" pill inside the tile) — the tile itself is already visible
+    //      so a slow/failing gateway never hides its tile.
+    //
+    // Previously we waited for ALL 6 calls (Promise.allSettled) before showing
+    // any tiles — so a single slow gateway held up the whole page. This split
+    // guarantees tiles appear in < 200 ms regardless of gateway health.
+
+    // ---------- FAST PHASE ----------
+    const pMethods  = api.get("/deposit/methods").then((r) => {
+      setInstantEnabled(!!r.data?.paynow);
+      setShpayEnabled(!!r.data?.shpay);
+      setOnesspayEnabled(!!r.data?.onesspay);
+      setJuntbestEnabled(!!r.data?.juntbest);
+    }).catch(() => {});
     const pAccounts = api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {});
-    const pPaynow = api.get("/paynow/banks").then((r) => {
-      setInstantEnabled(!!r.data?.enabled);
-      setGatewayReady(r.data?.gateway_ready !== false);
-    }).catch(() => { setInstantEnabled(false); setGatewayReady(false); });
-    const pShpay = api.get("/shpay/status").then((r) => {
-      setShpayEnabled(!!r.data?.enabled);
-      setShpayReady(r.data?.gateway_ready !== false);
-    }).catch(() => { setShpayEnabled(false); setShpayReady(false); });
-    const pOnesspay = api.get("/onesspay/status").then((r) => {
-      setOnesspayEnabled(!!r.data?.enabled);
-      setOnesspayReady(r.data?.gateway_ready !== false);
-    }).catch(() => { setOnesspayEnabled(false); setOnesspayReady(false); });
-    const pJuntbest = api.get("/juntbest/status").then((r) => {
-      setJuntbestEnabled(!!r.data?.enabled);
-      setJuntbestReady(r.data?.gateway_ready !== false);
-    }).catch(() => { setJuntbestEnabled(false); setJuntbestReady(false); });
     const pSettings = api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
     }).catch(() => {});
-    Promise.allSettled([pAccounts, pPaynow, pShpay, pOnesspay, pJuntbest, pSettings])
+
+    Promise.allSettled([pMethods, pAccounts, pSettings])
       .finally(() => setInitialLoad(false));
+
+    // ---------- SLOW PHASE (background — never blocks tile visibility) ----------
+    // These update the amber "gateway warning" pill inside each tile. If they
+    // fail, we leave the tile in its default "assumed ready" state — a real
+    // create-deposit call will surface the specific error inline anyway.
+    api.get("/paynow/banks")
+      .then((r) => setGatewayReady(r.data?.gateway_ready !== false))
+      .catch(() => setGatewayReady(false));
+    api.get("/shpay/status")
+      .then((r) => setShpayReady(r.data?.gateway_ready !== false))
+      .catch(() => setShpayReady(false));
+    api.get("/onesspay/status")
+      .then((r) => setOnesspayReady(r.data?.gateway_ready !== false))
+      .catch(() => setOnesspayReady(false));
+    api.get("/juntbest/status")
+      .then((r) => setJuntbestReady(r.data?.gateway_ready !== false))
+      .catch(() => setJuntbestReady(false));
   };
   useEffect(() => { load(); }, []);
 
