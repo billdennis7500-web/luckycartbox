@@ -4,6 +4,30 @@ import { api, formatNaira } from "@/lib/api";
 import { TrendingUp, CheckCircle2, Sparkles, Timer, Calendar, ChevronRight, Coins } from "lucide-react";
 import { AmbientCard, SectionHeader, MicroLabel, PillCTA, TIER_TOKENS } from "@/components/design";
 
+/* -------------- skeleton for perceived-fast load -------------- */
+function InvestmentSkeleton() {
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden animate-pulse"
+      style={{ boxShadow: "0 6px 24px -8px rgba(245,197,24,0.20), 0 0 0 1px rgba(245,197,24,0.10)" }}
+      data-testid="inv-skeleton"
+    >
+      <div className="relative bg-[var(--nb-card)] p-4 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="h-5 w-2/5 rounded bg-[var(--nb-card2)]" />
+          <div className="h-4 w-16 rounded-full bg-[var(--nb-card2)]" />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="h-14 rounded-lg bg-[var(--nb-card2)]" />
+          <div className="h-14 rounded-lg bg-[var(--nb-card2)]" />
+          <div className="h-14 rounded-lg bg-[var(--nb-card2)]" />
+        </div>
+        <div className="h-2 w-full rounded-full bg-[var(--nb-card2)]" />
+      </div>
+    </div>
+  );
+}
+
 /* -------------- helpers -------------- */
 function nextPayoutText(inv) {
   if (inv.status === "completed") return "Completed";
@@ -300,8 +324,9 @@ export default function Investments() {
       </div>
 
       {loading ? (
-        <div className="rounded-xl border border-dashed border-[var(--nb-border)] p-8 text-center text-sm text-[var(--nb-muted)]" data-testid="inv-loading">
-          Loading purchases…
+        <div className="grid gap-3" data-testid="inv-loading">
+          <InvestmentSkeleton />
+          <InvestmentSkeleton />
         </div>
       ) : shown.length === 0 ? (
         <div className="relative rounded-2xl overflow-hidden"

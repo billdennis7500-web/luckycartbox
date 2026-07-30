@@ -155,27 +155,34 @@ export default function Deposit() {
   const pollRef = useRef(null);
 
   const load = () => {
-    api.get("/payment-accounts").then((r) => setAccounts(r.data)).finally(() => setInitialLoad(false));
-    api.get("/paynow/banks").then((r) => {
+    // Kick every call off in parallel and hide the skeleton only when ALL of
+    // them settle. Previously `initialLoad` flipped to false after just the
+    // first call (`/payment-accounts`), which caused each gateway tile to pop
+    // in one-by-one as its own status probe resolved — that's the "staggered"
+    // load users see. `Promise.allSettled` guarantees a single reveal.
+    const pAccounts = api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {});
+    const pPaynow = api.get("/paynow/banks").then((r) => {
       setInstantEnabled(!!r.data?.enabled);
       setGatewayReady(r.data?.gateway_ready !== false);
     }).catch(() => { setInstantEnabled(false); setGatewayReady(false); });
-    api.get("/shpay/status").then((r) => {
+    const pShpay = api.get("/shpay/status").then((r) => {
       setShpayEnabled(!!r.data?.enabled);
       setShpayReady(r.data?.gateway_ready !== false);
     }).catch(() => { setShpayEnabled(false); setShpayReady(false); });
-    api.get("/onesspay/status").then((r) => {
+    const pOnesspay = api.get("/onesspay/status").then((r) => {
       setOnesspayEnabled(!!r.data?.enabled);
       setOnesspayReady(r.data?.gateway_ready !== false);
     }).catch(() => { setOnesspayEnabled(false); setOnesspayReady(false); });
-    api.get("/juntbest/status").then((r) => {
+    const pJuntbest = api.get("/juntbest/status").then((r) => {
       setJuntbestEnabled(!!r.data?.enabled);
       setJuntbestReady(r.data?.gateway_ready !== false);
     }).catch(() => { setJuntbestEnabled(false); setJuntbestReady(false); });
-    api.get("/settings/public").then((r) => {
+    const pSettings = api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
     }).catch(() => {});
+    Promise.allSettled([pAccounts, pPaynow, pShpay, pOnesspay, pJuntbest, pSettings])
+      .finally(() => setInitialLoad(false));
   };
   useEffect(() => { load(); }, []);
 
@@ -289,9 +296,16 @@ export default function Deposit() {
 
       {/* Payment options — small equal blocks */}
       {initialLoad ? (
-        <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-6 text-center text-sm text-[var(--nb-muted)]" data-testid="deposit-loading">
-          Loading payment options…
-        </div>
+        <section data-testid="deposit-loading">
+          <div className="font-display text-xs font-600 uppercase tracking-widest text-[var(--nb-muted)] mb-3 h-4 w-40 rounded bg-[var(--nb-card2)] animate-pulse" />
+          <div className="grid grid-cols-3 gap-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i}
+                   className="rounded-xl min-h-[98px] bg-[var(--nb-card)] animate-pulse"
+                   style={{ boxShadow: "inset 0 0 0 1.5px rgba(245,197,24,0.20)" }} />
+            ))}
+          </div>
+        </section>
       ) : !hasAnyMethod ? (
         <div className="rounded-2xl border border-dashed border-[var(--nb-border)] p-6 text-center text-sm text-[var(--nb-muted)]" data-testid="deposit-none-available">
           No deposit options are available right now. Please contact support.

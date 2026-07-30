@@ -36,7 +36,22 @@ export default function Referrals() {
     return currentTabUsers.filter((u) => (u.name || "").toLowerCase().includes(q));
   }, [currentTabUsers, search]);
 
-  if (!data) return <div className="text-[var(--nb-muted)]">Loading…</div>;
+  if (!data) return (
+    <div className="space-y-4" data-testid="referrals-skeleton">
+      <div className="animate-pulse rounded-2xl bg-[var(--nb-card)] h-24"
+           style={{ boxShadow: "0 6px 24px -8px rgba(245,197,24,0.20), 0 0 0 1px rgba(245,197,24,0.10)" }} />
+      <div className="grid grid-cols-3 gap-2">
+        <div className="animate-pulse rounded-xl h-16 bg-[var(--nb-card)]" />
+        <div className="animate-pulse rounded-xl h-16 bg-[var(--nb-card)]" />
+        <div className="animate-pulse rounded-xl h-16 bg-[var(--nb-card)]" />
+      </div>
+      <div className="space-y-2">
+        <div className="animate-pulse rounded-lg h-14 bg-[var(--nb-card)]" />
+        <div className="animate-pulse rounded-lg h-14 bg-[var(--nb-card)]" />
+        <div className="animate-pulse rounded-lg h-14 bg-[var(--nb-card)]" />
+      </div>
+    </div>
+  );
 
   const link = `${window.location.origin}/register?ref=${data.referral_code}`;
   const shareText = `Join me on NaijaInvest — earn daily naira profits. Use my code ${data.referral_code} to sign up and grab a ₦500 welcome bonus.`;

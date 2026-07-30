@@ -61,12 +61,15 @@ export default function Marketplace() {
   const { theme } = useTheme();
   const isLight = theme === "light";
   const [products, setProducts] = useState([]);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(6);
   const [filter, setFilter] = useState("all");
 
-  const load = () => api.get("/products").then((r) => setProducts(r.data));
+  const load = () => api.get("/products")
+    .then((r) => setProducts(r.data))
+    .finally(() => setInitialLoading(false));
   useEffect(() => { load(); }, []);
 
   const invest = async () => {
@@ -125,9 +128,17 @@ export default function Marketplace() {
       )}
 
       <div className="space-y-4">
-        {filtered.slice(0, visible).map((p) => (
-          <ProductRow key={p.id} p={p} onOpen={() => setSelected(p)} user={user} />
-        ))}
+        {initialLoading ? (
+          <>
+            <ProductSkeleton />
+            <ProductSkeleton />
+            <ProductSkeleton />
+          </>
+        ) : (
+          filtered.slice(0, visible).map((p) => (
+            <ProductRow key={p.id} p={p} onOpen={() => setSelected(p)} user={user} />
+          ))
+        )}
       </div>
 
       <LoadMore
@@ -323,6 +334,32 @@ export default function Marketplace() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Skeleton row shown while the product list is loading — same layout        */
+/*  dimensions as ProductRow to prevent layout shift when data arrives.        */
+/* -------------------------------------------------------------------------- */
+function ProductSkeleton() {
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden animate-pulse"
+      style={{ boxShadow: "0 6px 32px -8px rgba(245,197,24,0.20), 0 0 0 1px rgba(245,197,24,0.10)" }}
+      data-testid="product-skeleton"
+    >
+      <Card className="relative bg-[var(--nb-card)] border-0 rounded-2xl overflow-hidden">
+        <div className="flex items-stretch min-h-[160px]">
+          <div className="shrink-0 w-[38%] max-w-[180px] min-h-full bg-[var(--nb-card2)]" />
+          <div className="flex-1 min-w-0 p-4 flex flex-col justify-between gap-3">
+            <div className="h-5 w-3/4 rounded bg-[var(--nb-card2)]" />
+            <div className="h-4 w-24 rounded bg-[var(--nb-card2)]" />
+            <div className="h-8 w-32 rounded bg-[var(--nb-card2)]" />
+            <div className="h-9 w-28 rounded-full bg-[var(--nb-card2)] ml-auto" />
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

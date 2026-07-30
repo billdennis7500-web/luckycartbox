@@ -175,7 +175,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display font-800 text-white text-base">
-                You have {formatNaira(user?.bonus_balance)} welcome bonus
+                You have {formatNaira(settings.welcome_bonus || 500)} welcome bonus
               </div>
               <div className="text-xs text-[var(--nb-muted)] mt-1 leading-relaxed">
                 Buy any product to unlock withdrawals, referral commissions and coupon redemptions.
