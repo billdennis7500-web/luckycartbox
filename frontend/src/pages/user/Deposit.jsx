@@ -155,27 +155,31 @@ export default function Deposit() {
   const pollRef = useRef(null);
 
   const load = () => {
-    // Two-phase load:
-    //   1. Fast phase — `/deposit/methods` + `/payment-accounts` + `/settings/public`
-    //      are ~100 ms local-only queries (no outbound gateway calls). Tiles render
-    //      IMMEDIATELY based on their enabled flag. Hides the skeleton.
-    //   2. Slow phase — the individual `/…/status` probes fire a real API call
-    //      to each gateway (through the IPRoyal proxy). We run these in the
-    //      background purely to flip the `xxxReady` state (used for the amber
-    //      "warning" pill inside the tile) — the tile itself is already visible
-    //      so a slow/failing gateway never hides its tile.
+    // Two-phase load with fallback:
+    //   1. Fast phase — `/deposit/methods` returns which gateways are enabled
+    //      instantly (no outbound calls). If this endpoint exists (backend is
+    //      up-to-date), all tiles render in ~200 ms.
+    //   2. If `/deposit/methods` is missing (backend not yet redeployed) or
+    //      errors, we FALL BACK to reading `enabled` from the individual
+    //      per-gateway `/…/status` probes. That's the pre-fix behaviour —
+    //      slower and staggered, but at least tiles still appear.
     //
-    // Previously we waited for ALL 6 calls (Promise.allSettled) before showing
-    // any tiles — so a single slow gateway held up the whole page. This split
-    // guarantees tiles appear in < 200 ms regardless of gateway health.
+    // We track fastPhaseOk so we don't overwrite fast-phase results with
+    // slow-phase probe failures.
+
+    let fastPhaseOk = false;
 
     // ---------- FAST PHASE ----------
     const pMethods  = api.get("/deposit/methods").then((r) => {
-      setInstantEnabled(!!r.data?.paynow);
-      setShpayEnabled(!!r.data?.shpay);
-      setOnesspayEnabled(!!r.data?.onesspay);
-      setJuntbestEnabled(!!r.data?.juntbest);
-    }).catch(() => {});
+      const d = r.data || {};
+      if (d.paynow !== undefined) {
+        setInstantEnabled(!!d.paynow);
+        setShpayEnabled(!!d.shpay);
+        setOnesspayEnabled(!!d.onesspay);
+        setJuntbestEnabled(!!d.juntbest);
+        fastPhaseOk = true;
+      }
+    }).catch(() => { /* endpoint missing on old backend — fall through to slow phase */ });
     const pAccounts = api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {});
     const pSettings = api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
@@ -185,22 +189,28 @@ export default function Deposit() {
     Promise.allSettled([pMethods, pAccounts, pSettings])
       .finally(() => setInitialLoad(false));
 
-    // ---------- SLOW PHASE (background — never blocks tile visibility) ----------
-    // These update the amber "gateway warning" pill inside each tile. If they
-    // fail, we leave the tile in its default "assumed ready" state — a real
-    // create-deposit call will surface the specific error inline anyway.
-    api.get("/paynow/banks")
-      .then((r) => setGatewayReady(r.data?.gateway_ready !== false))
-      .catch(() => setGatewayReady(false));
-    api.get("/shpay/status")
-      .then((r) => setShpayReady(r.data?.gateway_ready !== false))
-      .catch(() => setShpayReady(false));
-    api.get("/onesspay/status")
-      .then((r) => setOnesspayReady(r.data?.gateway_ready !== false))
-      .catch(() => setOnesspayReady(false));
-    api.get("/juntbest/status")
-      .then((r) => setJuntbestReady(r.data?.gateway_ready !== false))
-      .catch(() => setJuntbestReady(false));
+    // ---------- SLOW PHASE (background) ----------
+    // Always update the "ready" pill via the individual gateway probes.
+    // Also, if the fast phase didn't work (older backend), use these probes'
+    // `enabled` field as a FALLBACK to populate the tile-visibility flag.
+    // The `fastPhaseOk` guard prevents a slow-phase failure from hiding a
+    // tile that fast-phase already confirmed is enabled.
+    api.get("/paynow/banks").then((r) => {
+      if (!fastPhaseOk) setInstantEnabled(!!r.data?.enabled);
+      setGatewayReady(r.data?.gateway_ready !== false);
+    }).catch(() => { if (!fastPhaseOk) setInstantEnabled(false); setGatewayReady(false); });
+    api.get("/shpay/status").then((r) => {
+      if (!fastPhaseOk) setShpayEnabled(!!r.data?.enabled);
+      setShpayReady(r.data?.gateway_ready !== false);
+    }).catch(() => { if (!fastPhaseOk) setShpayEnabled(false); setShpayReady(false); });
+    api.get("/onesspay/status").then((r) => {
+      if (!fastPhaseOk) setOnesspayEnabled(!!r.data?.enabled);
+      setOnesspayReady(r.data?.gateway_ready !== false);
+    }).catch(() => { if (!fastPhaseOk) setOnesspayEnabled(false); setOnesspayReady(false); });
+    api.get("/juntbest/status").then((r) => {
+      if (!fastPhaseOk) setJuntbestEnabled(!!r.data?.enabled);
+      setJuntbestReady(r.data?.gateway_ready !== false);
+    }).catch(() => { if (!fastPhaseOk) setJuntbestEnabled(false); setJuntbestReady(false); });
   };
   useEffect(() => { load(); }, []);
 
