@@ -155,62 +155,90 @@ export default function Deposit() {
   const pollRef = useRef(null);
 
   const load = () => {
-    // Two-phase load with fallback:
-    //   1. Fast phase — `/deposit/methods` returns which gateways are enabled
-    //      instantly (no outbound calls). If this endpoint exists (backend is
-    //      up-to-date), all tiles render in ~200 ms.
-    //   2. If `/deposit/methods` is missing (backend not yet redeployed) or
-    //      errors, we FALL BACK to reading `enabled` from the individual
-    //      per-gateway `/…/status` probes. That's the pre-fix behaviour —
-    //      slower and staggered, but at least tiles still appear.
+    // Two-phase load with guaranteed atomic reveal:
     //
-    // We track fastPhaseOk so we don't overwrite fast-phase results with
-    // slow-phase probe failures.
-
-    let fastPhaseOk = false;
+    // FAST PHASE (all servers with the new /api/deposit/methods endpoint):
+    //   One ~12 ms local call returns which gateways are enabled. All 4 tiles
+    //   render together in <200 ms. Individual gateway probes then run in the
+    //   background purely to flip the amber "ready" pill.
+    //
+    // FALLBACK PHASE (backend without /deposit/methods yet):
+    //   /deposit/methods 404s. We instead call the 4 individual `/…/status`
+    //   probes but WAIT for `Promise.allSettled` on all 4 before flipping ANY
+    //   of the `xxxEnabled` flags — this prevents the "tiles appear one-by-one"
+    //   effect the user complained about. Slower, but atomic.
+    //
+    // The `fastPhaseOk` flag makes sure a slow-phase failure never overrides
+    // a successful fast-phase confirmation.
 
     // ---------- FAST PHASE ----------
-    const pMethods  = api.get("/deposit/methods").then((r) => {
+    const pMethods = api.get("/deposit/methods").then((r) => {
       const d = r.data || {};
       if (d.paynow !== undefined) {
+        // Reveal all 4 tiles atomically in one render frame.
         setInstantEnabled(!!d.paynow);
         setShpayEnabled(!!d.shpay);
         setOnesspayEnabled(!!d.onesspay);
         setJuntbestEnabled(!!d.juntbest);
-        fastPhaseOk = true;
+        return true; // fast-phase OK
       }
-    }).catch(() => { /* endpoint missing on old backend — fall through to slow phase */ });
+      return false;
+    }).catch(() => false); // endpoint missing → treat as false
+
     const pAccounts = api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {});
     const pSettings = api.get("/settings/public").then((r) => {
       const qa = r.data?.deposit_quick_amounts;
       if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
     }).catch(() => {});
 
-    Promise.allSettled([pMethods, pAccounts, pSettings])
-      .finally(() => setInitialLoad(false));
+    // Wait for fast phase + accounts + settings, then decide whether to also
+    // wait for the slow probes.
+    Promise.all([pMethods, pAccounts, pSettings]).then(async ([fastOk]) => {
+      if (fastOk) {
+        // Fast path — tiles already revealed. Hide skeleton NOW. Slow probes
+        // run in the background only to update the "ready" pill.
+        setInitialLoad(false);
+        api.get("/paynow/banks")
+          .then((r) => setGatewayReady(r.data?.gateway_ready !== false))
+          .catch(() => setGatewayReady(false));
+        api.get("/shpay/status")
+          .then((r) => setShpayReady(r.data?.gateway_ready !== false))
+          .catch(() => setShpayReady(false));
+        api.get("/onesspay/status")
+          .then((r) => setOnesspayReady(r.data?.gateway_ready !== false))
+          .catch(() => setOnesspayReady(false));
+        api.get("/juntbest/status")
+          .then((r) => setJuntbestReady(r.data?.gateway_ready !== false))
+          .catch(() => setJuntbestReady(false));
+        return;
+      }
 
-    // ---------- SLOW PHASE (background) ----------
-    // Always update the "ready" pill via the individual gateway probes.
-    // Also, if the fast phase didn't work (older backend), use these probes'
-    // `enabled` field as a FALLBACK to populate the tile-visibility flag.
-    // The `fastPhaseOk` guard prevents a slow-phase failure from hiding a
-    // tile that fast-phase already confirmed is enabled.
-    api.get("/paynow/banks").then((r) => {
-      if (!fastPhaseOk) setInstantEnabled(!!r.data?.enabled);
-      setGatewayReady(r.data?.gateway_ready !== false);
-    }).catch(() => { if (!fastPhaseOk) setInstantEnabled(false); setGatewayReady(false); });
-    api.get("/shpay/status").then((r) => {
-      if (!fastPhaseOk) setShpayEnabled(!!r.data?.enabled);
-      setShpayReady(r.data?.gateway_ready !== false);
-    }).catch(() => { if (!fastPhaseOk) setShpayEnabled(false); setShpayReady(false); });
-    api.get("/onesspay/status").then((r) => {
-      if (!fastPhaseOk) setOnesspayEnabled(!!r.data?.enabled);
-      setOnesspayReady(r.data?.gateway_ready !== false);
-    }).catch(() => { if (!fastPhaseOk) setOnesspayEnabled(false); setOnesspayReady(false); });
-    api.get("/juntbest/status").then((r) => {
-      if (!fastPhaseOk) setJuntbestEnabled(!!r.data?.enabled);
-      setJuntbestReady(r.data?.gateway_ready !== false);
-    }).catch(() => { if (!fastPhaseOk) setJuntbestEnabled(false); setJuntbestReady(false); });
+      // Fallback path — /deposit/methods is missing (backend not yet redeployed).
+      // Run the 4 gateway probes IN PARALLEL and collect their `enabled` flags,
+      // but DON'T call setXxxEnabled until ALL 4 have settled. This guarantees
+      // all tiles reveal in one atomic render, not one-by-one.
+      const probe = (path) => api.get(path)
+        .then((r) => ({ enabled: !!r.data?.enabled, ready: r.data?.gateway_ready !== false }))
+        .catch(() => ({ enabled: false, ready: false }));
+
+      const [paynowResult, shpayResult, onesspayResult, juntbestResult] = await Promise.all([
+        probe("/paynow/banks"),
+        probe("/shpay/status"),
+        probe("/onesspay/status"),
+        probe("/juntbest/status"),
+      ]);
+
+      // All 4 results are in — set every flag in one batch, THEN reveal.
+      setInstantEnabled(paynowResult.enabled);
+      setGatewayReady(paynowResult.ready);
+      setShpayEnabled(shpayResult.enabled);
+      setShpayReady(shpayResult.ready);
+      setOnesspayEnabled(onesspayResult.enabled);
+      setOnesspayReady(onesspayResult.ready);
+      setJuntbestEnabled(juntbestResult.enabled);
+      setJuntbestReady(juntbestResult.ready);
+      setInitialLoad(false);
+    });
   };
   useEffect(() => { load(); }, []);
 
