@@ -305,7 +305,7 @@ export default function Deposit() {
     try {
       const backendMethod = isInstant ? "paynow-auto" : (isShpay ? "shpay-auto" : (isOnesspay ? "onesspay-auto" : (isJuntbest ? "juntbest-auto" : method)));
       const { data } = await api.post("/deposits", { amount: Number(amount), method: backendMethod, reference });
-      if (data.gateway === "paynow" || data.gateway === "shpay" || data.gateway === "onesspay") {
+      if (data.gateway === "paynow" || data.gateway === "shpay" || data.gateway === "onesspay" || data.gateway === "juntbest") {
         // All auto-flow gateways return either a checkout URL (happy path) or a
         // gateway_ready:false response — open the same in-app drawer for all.
         setWaitDep(data);
@@ -643,6 +643,7 @@ export default function Deposit() {
                   : waitState === "unavailable"
                   ? (waitDep?.gateway === "shpay" ? "Quick Pay is warming up"
                      : waitDep?.gateway === "onesspay" ? "Fast Pay is warming up"
+                     : waitDep?.gateway === "juntbest" ? "Smart Pay is warming up"
                      : "Instant Pay is warming up")
                   : "Complete your payment"}
               </div>
@@ -690,6 +691,7 @@ export default function Deposit() {
                   <div className="mt-3 font-display font-700 text-white">
                     {waitDep?.gateway === "shpay" ? "Quick Pay is warming up"
                      : waitDep?.gateway === "onesspay" ? "Fast Pay is warming up"
+                     : waitDep?.gateway === "juntbest" ? "Smart Pay is warming up"
                      : "Instant Pay is warming up"}
                   </div>
                   <div className="text-xs text-[var(--nb-muted)] mt-1.5 leading-relaxed max-w-md mx-auto">

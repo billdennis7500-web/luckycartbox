@@ -73,7 +73,7 @@ def _config() -> Dict[str, str]:
         # for the exact wayCode allowed for NGN bank-transfer payins. Common
         # values: "NGN_TRANSFER", "BANK_TRANSFER", "NGN_BANK". Configurable so
         # you don't need a redeploy to try alternatives.
-        "payin_way_code":  os.environ.get("JUNTBEST_PAYIN_WAY_CODE",  "NGN_TRANSFER"),
+        "payin_way_code":  os.environ.get("JUNTBEST_PAYIN_WAY_CODE",  "BANK_TRANSFER"),
         "payout_way_code": os.environ.get("JUNTBEST_PAYOUT_WAY_CODE", "BANK_ACCOUNT"),
         "payin_notify":    os.environ.get("JUNTBEST_PAYIN_NOTIFY_URL",  ""),
         "payout_notify":   os.environ.get("JUNTBEST_PAYOUT_NOTIFY_URL", ""),
