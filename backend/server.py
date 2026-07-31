@@ -10,7 +10,7 @@ import asyncio
 import logging
 import secrets
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Annotated
+from typing import List, Optional, Annotated, Any, Dict
 
 import bcrypt
 import httpx
@@ -3156,107 +3156,200 @@ async def admin_juntbest_balance(admin: dict = Depends(get_admin_user)):
     return {"enabled": True, "outbound_ip": outbound_ip, "balance_response": bal}
 
 
-@api.post("/juntbest/webhook/payin", response_class=PlainTextResponse)
-async def juntbest_payin_webhook(request: Request):
-    """JuntBest payin callback. JSON body. Response MUST be the literal string
-    `SUCCESS` (case-sensitive) — anything else triggers JuntBest's retry.
+# ---------------------------------------------------------------------------
+# JuntBest / JuntPay webhook handlers.
+#
+# The 2026-07-30 migration to the new juntpay.top v1 API changed the webhook
+# body shape from flat `{order_sn, status, amount}` to nested
+# `{event: "PAYMENT"|"TRANSFER", data: {mchOrderNo, state, amount, realAmount,
+# errorMessage, ...}}`. State codes also changed: `state=2` is now "success"
+# (was `status="1"`), `state=3` is "failed" (was `status="9"`).
+#
+# The v1 API also only exposes ONE "Push address" field per merchant — it
+# uses the `event` field to distinguish payin vs payout webhooks. We support
+# THREE endpoints for maximum operational flexibility:
+#   /juntbest/webhook          — unified dispatcher (recommended in portal)
+#   /juntbest/webhook/payin    — explicit payin route (fallback)
+#   /juntbest/webhook/payout   — explicit payout route (fallback)
+# All three delegate to the same shared processors so behavior is identical.
+# ---------------------------------------------------------------------------
 
-    Signature: md5(ak + platform_osn + status + amount + sk).
-    Status codes: 0=pending, 1=success, 9=failed.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        # Some gateways POST form data on failure — try that too.
-        form = await request.form()
-        body = {k: str(v) for k, v in form.items()}
-    logger.info("JuntBest payin webhook received: %s", body)
-    if not juntbest.verify_payin_callback(body):
-        logger.warning("JuntBest payin webhook: signature mismatch")
-        return PlainTextResponse("signature_invalid", status_code=200)
-
-    order_sn = str(body.get("order_sn") or "")
+def _juntbest_extract(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalise a JuntPay v1 webhook body into flat fields the processors use.
+    Also handles the legacy top-level format as a defensive fallback in case an
+    old-format webhook ever hits us."""
+    if isinstance(body.get("data"), dict):
+        d = body["data"]
+        state_raw = d.get("state")
+        try:
+            state = int(state_raw) if state_raw is not None else -1
+        except Exception:
+            state = -1
+        try:
+            amount = float(d.get("realAmount") or d.get("amount") or 0)
+        except Exception:
+            amount = 0.0
+        return {
+            "event":       str(body.get("event") or "").upper(),
+            "order_sn":    str(d.get("mchOrderNo") or ""),
+            "platform_id": str(d.get("orderId") or d.get("transferId") or ""),
+            "state":       state,
+            "succeeded":   state == 2,
+            "failed":      state in (3, 4),
+            "amount":      amount,
+            "error":       str(d.get("errorMessage") or ""),
+        }
+    # Legacy flat format
     status = str(body.get("status") or "").strip()
     try:
         amount = float(body.get("amount") or 0)
     except Exception:
         amount = 0.0
+    return {
+        "event":       "",
+        "order_sn":    str(body.get("order_sn") or body.get("mchOrderNo") or ""),
+        "platform_id": str(body.get("platform_osn") or ""),
+        "state":       -1,
+        "succeeded":   status == "1",
+        "failed":      status == "9",
+        "amount":      amount,
+        "error":       str(body.get("message") or ""),
+    }
 
+
+async def _juntbest_process_payin(body: Dict[str, Any]) -> str:
+    """Handle a JuntPay payin webhook body. Returns the SUCCESS/error string
+    to send back to JuntPay. Idempotent by design (safe to receive twice)."""
+    e = _juntbest_extract(body)
+    order_sn = e["order_sn"]
+    if not order_sn:
+        logger.warning("JuntPay payin webhook: missing order id in body=%s", body)
+        return "SUCCESS"
     dep = await db.deposits.find_one({"merchant_order_no": order_sn, "gateway": "juntbest"})
     if not dep:
-        logger.warning("JuntBest payin webhook: unknown order_sn=%s", order_sn)
+        logger.warning("JuntPay payin webhook: unknown order_sn=%s", order_sn)
         return "SUCCESS"
-    if status == "1":  # success
+    if e["succeeded"]:
         if dep["status"] != "pending":
             return "SUCCESS"
         updated = await db.deposits.find_one_and_update(
             {"_id": dep["_id"], "status": "pending"},
             {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                       "gateway_callback": body,
-                      "settled_amount": amount}},
+                      "settled_amount": e["amount"]}},
             return_document=ReturnDocument.AFTER,
         )
         if not updated:
             return "SUCCESS"
-        credit_amount = amount if amount > 0 else float(dep["amount"])
+        credit_amount = e["amount"] if e["amount"] > 0 else float(dep["amount"])
         await db.users.update_one({"_id": dep["user_id"]},
                                   {"$inc": {"wallet_balance": credit_amount}})
         await add_transaction(dep["user_id"], "deposit", credit_amount,
-                              "Deposit auto-credited (JuntBest)",
+                              "Deposit auto-credited (JuntPay)",
                               {"deposit_id": str(dep["_id"]), "gateway": "juntbest"})
-        logger.info("JuntBest payin credited user=%s amount=₦%.2f dep=%s",
+        logger.info("JuntPay payin credited user=%s amount=₦%.2f dep=%s",
                     dep["user_id"], credit_amount, dep["_id"])
-        return "SUCCESS"
-    if status == "9":  # failed
+    elif e["failed"]:
         await db.deposits.update_one(
             {"_id": dep["_id"], "status": "pending"},
             {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
-                      "gateway_error": body.get("message") or "JuntBest reported failure",
+                      "gateway_error": e["error"] or "JuntPay reported failure",
                       "gateway_callback": body}},
         )
     return "SUCCESS"
 
 
-@api.post("/juntbest/webhook/payout", response_class=PlainTextResponse)
-async def juntbest_payout_webhook(request: Request):
-    """JuntBest payout callback. JSON body. Response must be `SUCCESS`."""
-    try:
-        body = await request.json()
-    except Exception:
-        form = await request.form()
-        body = {k: str(v) for k, v in form.items()}
-    logger.info("JuntBest payout webhook received: %s", body)
-    if not juntbest.verify_payout_callback(body):
-        logger.warning("JuntBest payout webhook: signature mismatch")
-        return PlainTextResponse("signature_invalid", status_code=200)
-
-    order_sn = str(body.get("order_sn") or "")
-    status = str(body.get("status") or "").strip()
+async def _juntbest_process_payout(body: Dict[str, Any]) -> str:
+    e = _juntbest_extract(body)
+    order_sn = e["order_sn"]
+    if not order_sn:
+        logger.warning("JuntPay payout webhook: missing order id in body=%s", body)
+        return "SUCCESS"
     w = await db.withdrawals.find_one({"merchant_order_no": order_sn, "gateway": "juntbest"})
     if not w:
-        logger.warning("JuntBest payout webhook: unknown order_sn=%s", order_sn)
+        logger.warning("JuntPay payout webhook: unknown order_sn=%s", order_sn)
         return "SUCCESS"
-    if status == "1" and w["status"] not in {"approved"}:
+    if e["succeeded"] and w["status"] not in {"approved"}:
         await db.withdrawals.update_one(
             {"_id": w["_id"]},
             {"$set": {"status": "approved", "processed_at": now_utc().isoformat(),
                       "gateway_callback": body}},
         )
         await settle_withdrawal_hold(w["user_id"], str(w["_id"]), "withdrawal",
-                                      "Withdrawal paid out (JuntBest)")
-    elif status == "9" and w["status"] not in {"approved", "rejected"}:
+                                      "Withdrawal paid out (JuntPay)")
+    elif e["failed"] and w["status"] not in {"approved", "rejected"}:
         await db.withdrawals.update_one(
             {"_id": w["_id"]},
             {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
-                      "gateway_error": body.get("message") or "JuntBest reported failure",
+                      "gateway_error": e["error"] or "JuntPay reported failure",
                       "gateway_callback": body}},
         )
         await db.users.update_one({"_id": w["user_id"]},
                                   {"$inc": {"wallet_balance": float(w["amount"])}})
         await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
-                              "Withdrawal rejected - refunded (JuntBest)",
+                              "Withdrawal rejected - refunded (JuntPay)",
                               {"withdrawal_id": str(w["_id"]), "gateway": "juntbest"})
     return "SUCCESS"
+
+
+async def _juntbest_parse_body(request: Request) -> Dict[str, Any]:
+    """JSON body if possible, form-data fallback (some gateways form-encode
+    on failure). Returns {} on malformed."""
+    try:
+        return await request.json()
+    except Exception:
+        try:
+            form = await request.form()
+            return {k: str(v) for k, v in form.items()}
+        except Exception:
+            return {}
+
+
+@api.post("/juntbest/webhook", response_class=PlainTextResponse)
+async def juntbest_unified_webhook(request: Request):
+    """Unified JuntPay webhook — this is what you put in the JuntPay merchant
+    portal's "Push address" field. Dispatches to payin or payout handler based
+    on the `event` field (`PAYMENT` = payin, `TRANSFER` = payout).
+
+    Response is the literal string `SUCCESS` (case-sensitive) — JuntPay retries
+    on anything else.
+    """
+    body = await _juntbest_parse_body(request)
+    logger.info("JuntPay unified webhook received: %s", body)
+    if not juntbest.verify_payin_callback(body):  # same algo works for both
+        logger.warning("JuntPay webhook: signature mismatch, body=%s", body)
+        return PlainTextResponse("signature_invalid", status_code=200)
+    event = str(body.get("event") or "").upper()
+    if event == "TRANSFER":
+        return await _juntbest_process_payout(body)
+    # PAYMENT (payin) is the default — also handles the case where `event` is
+    # absent (some gateway versions omit it and only send payment webhooks
+    # through this endpoint).
+    return await _juntbest_process_payin(body)
+
+
+@api.post("/juntbest/webhook/payin", response_class=PlainTextResponse)
+async def juntbest_payin_webhook(request: Request):
+    """Explicit payin webhook. Kept as an alias in case the portal is
+    configured with this URL rather than the unified /juntbest/webhook."""
+    body = await _juntbest_parse_body(request)
+    logger.info("JuntPay payin webhook received: %s", body)
+    if not juntbest.verify_payin_callback(body):
+        logger.warning("JuntPay payin webhook: signature mismatch")
+        return PlainTextResponse("signature_invalid", status_code=200)
+    return await _juntbest_process_payin(body)
+
+
+@api.post("/juntbest/webhook/payout", response_class=PlainTextResponse)
+async def juntbest_payout_webhook(request: Request):
+    """Explicit payout webhook. Kept as an alias in case the portal is
+    configured with this URL rather than the unified /juntbest/webhook."""
+    body = await _juntbest_parse_body(request)
+    logger.info("JuntPay payout webhook received: %s", body)
+    if not juntbest.verify_payout_callback(body):
+        logger.warning("JuntPay payout webhook: signature mismatch")
+        return PlainTextResponse("signature_invalid", status_code=200)
+    return await _juntbest_process_payout(body)
 
 
 class VerifyAccountIn(BaseModel):
