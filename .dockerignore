@@ -1,6 +1,10 @@
-# Keep Docker build context small and secret-free.
-# Frontend never ships in the backend image.
-frontend/
+# Docker build context settings.
+#
+# NOTE: DO NOT list `frontend/` here — the Emergent Deploy platform's multi-stage
+# builder needs both `frontend/` and `backend/` folders in the build context to
+# assemble the full-stack image. The custom /app/Dockerfile (used only with
+# direct `fly deploy` CLI) already scopes to `backend/` via its own COPY step,
+# so no ignore is needed for that path either.
 node_modules/
 
 # Local envs & secrets — Fly reads secrets via `fly secrets set`.
