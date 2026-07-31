@@ -1,0 +1,22 @@
+<analysis>await_phishinggunicorn: command not foundawait_phishingsupport@emergent.shserver.py/api/version/api/healthserver.pyDockerfilefly.toml.dockerignoreajv@^8.12.0package.jsonserver.pyCORS_ORIGINSLogin.jsxDuplicateKeyError/api/deposit/methodsjuntbest.pypayment.juntpay.topDeposit.jsxgunicornrequirements.txtfrontend/.dockerignore
+/app/
+├── backend/
+│   ├── server.py          # Main FastAPI app (>3600 lines, needs refactoring)
+│   ├── paynow.py          
+│   ├── shpay.py           
+│   ├── onesspay.py        
+│   ├── juntbest.py        # Rewritten JuntPay SDK
+│   ├── requirements.txt   # Updated with gunicorn
+│   ├── db.py              
+│   └── deps.py            
+├── frontend/
+│   └── src/
+│       ├── components/    
+│       ├── lib/api.js     # Axios config
+│       ├── pages/         # Updated with skeletons and atomic loading
+│       └── App.js
+├── Dockerfile             # Fly.io config
+├── fly.toml               # Fly.io config
+├── .dockerignore          # Updated to include frontend/
+└── memory/
+httpx.AsyncClientHTTPS_PROXY{phone, email, hashed_password, wallet_balance, total_invested, role, ref_code}{..., juntbest_payin, juntbest_payout, whatsapp_url, telegram_channel_url, support_hours, welcome_bonus}gunicornrequirements.txtngn.junt.bestpayment.juntpay.top/app/backend/server.py/app/backend/juntbest.py/app/backend/requirements.txtgunicorn==26.0.0/app/frontend/package.jsonyarn.lockajv/app/frontend/src/pages/user/Deposit.jsxDashboard.jsxMarketplace.jsxInvestments.jsxReferrals.jsx/app/.dockerignorefrontend/server.pyGET /api/deposit/methodsPOST /api/juntbest/webhookeventGET /api/healthsupport@emergent.shwayCodeBANK_TRANSFERHTTPS_PROXY46.20.101.18/app/memory/PRD.md/app/memory/test_credentials.md/app/test_reports/iteration_17.jsongunicorn: command not foundawait_phishing/app/test_reports/iteration_17.jsonbilldennis750@gmail.comdjscan30await_phishingsupport@emergent.sh</analysis>

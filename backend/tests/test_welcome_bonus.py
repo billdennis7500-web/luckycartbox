@@ -4,7 +4,7 @@ import time
 import requests
 import pytest
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://returns-hub-21.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dark-gold-ui-build.preview.emergentagent.com").rstrip("/")
 
 # Unique phone per run
 _ts = str(int(time.time()))
