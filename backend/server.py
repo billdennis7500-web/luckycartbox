@@ -3677,20 +3677,26 @@ frontend_origin = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 # Additional CORS origins: comma-separated list of production origins
 # (e.g. "https://luckycartbox.com,https://www.luckycartbox.com,https://luckycartbox.pages.dev").
 # Set via `fly secrets set CORS_ORIGINS="..."` in production.
-extra_origins = [
-    o.strip()
-    for o in os.environ.get("CORS_ORIGINS", "").split(",")
-    if o.strip()
-]
-allowed_origins = list({
-    frontend_origin,
-    "http://localhost:3000",
-    *extra_origins,
-})
+# Special case: `CORS_ORIGINS="*"` means "allow every origin" and requires
+# credentials to be disabled per the CORS spec — Starlette silently ignores
+# wildcards mixed with `allow_credentials=True`, which is exactly the WARN
+# the deployment agent flagged.
+cors_env = os.environ.get("CORS_ORIGINS", "").strip()
+if cors_env == "*":
+    allowed_origins = ["*"]
+    allow_credentials = False
+else:
+    extra_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+    allowed_origins = list({
+        frontend_origin,
+        "http://localhost:3000",
+        *extra_origins,
+    })
+    allow_credentials = True
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
