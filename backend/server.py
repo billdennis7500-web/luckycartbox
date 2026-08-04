@@ -2185,14 +2185,14 @@ async def referral_rewards(user: dict = Depends(get_current_user)):
             "claimable": eligible and not is_claimed,
         })
 
-    # Progress toward the next locked tier
+    # Progress toward the next locked tier. We show absolute progress
+    # (count / next_tier.min_referrals) so the visual bar always matches
+    # the "N / M" text the user sees — no confusing 0% at tier-entry.
     next_tier = next((t for t in tiers if not t["unlocked"]), None)
     prev_tier = next((t for t in reversed(tiers) if t["unlocked"]), None)
     if next_tier:
-        prev_min = prev_tier["min_referrals"] if prev_tier else 0
-        span = max(1, next_tier["min_referrals"] - prev_min)
-        done = max(0, count - prev_min)
-        progress_pct = min(100.0, round(done * 100 / span, 1))
+        span = max(1, next_tier["min_referrals"])
+        progress_pct = min(100.0, round(count * 100 / span, 1))
     else:
         progress_pct = 100.0 if tiers else 0.0
 

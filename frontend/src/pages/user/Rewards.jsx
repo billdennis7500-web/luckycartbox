@@ -66,15 +66,14 @@ function TierCard({ tier, onClaim, claiming }) {
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden p-4 flex items-center gap-4"
+      className="relative rounded-2xl overflow-hidden p-4 flex items-center gap-4 bg-[var(--nb-card)]"
       data-testid={`rewards-tier-${tier.level}`}
       style={{
-        background: "var(--nb-card)",
         border: `1px solid ${locked ? "var(--nb-border)" : `${tier.color}66`}`,
         boxShadow: locked
-          ? "0 4px 14px -6px rgba(0,0,0,0.35)"
+          ? "0 4px 14px -6px rgba(0,0,0,0.20)"
           : `0 8px 24px -10px ${tier.color}55, inset 0 0 0 1px ${tier.color}22`,
-        opacity: locked ? 0.68 : 1,
+        opacity: locked ? 0.75 : 1,
       }}
     >
       {!locked && (
@@ -91,9 +90,9 @@ function TierCard({ tier, onClaim, claiming }) {
           className="w-14 h-14 rounded-2xl grid place-items-center relative overflow-hidden"
           style={{
             background: locked
-              ? "linear-gradient(135deg,#26262A,#1B1B1F)"
+              ? "linear-gradient(135deg,var(--nb-card2),var(--nb-border))"
               : `linear-gradient(135deg,${tier.color} 0%, ${tier.color}CC 60%, ${tier.color}88 100%)`,
-            color: locked ? "#5A5A63" : "#FFFFFF",
+            color: locked ? "var(--nb-muted)" : "#FFFFFF",
             boxShadow: locked ? "none" : `0 6px 18px ${tier.color}66`,
           }}
         >
@@ -113,8 +112,8 @@ function TierCard({ tier, onClaim, claiming }) {
         <div
           className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full grid place-items-center text-[10px] font-display font-800 tabular border-2"
           style={{
-            background: locked ? "#0F0F12" : tier.color,
-            color: locked ? "#8A8A94" : "#FFFFFF",
+            background: locked ? "var(--nb-card)" : tier.color,
+            color: locked ? "var(--nb-muted)" : "#FFFFFF",
             borderColor: locked ? "var(--nb-border)" : `${tier.color}`,
           }}
         >
@@ -240,17 +239,25 @@ export default function Rewards() {
         />
       </div>
 
-      {/* Hero — progress card */}
+      {/* Hero — progress card. Uses var(--nb-card) so it flips white in
+          light-mode; the gold radial glow + tier-tinted border/shadow
+          provides the "treasure card" aesthetic on both themes. */}
       <div
-        className="relative rounded-2xl overflow-hidden p-5"
+        className="relative rounded-2xl overflow-hidden p-5 bg-[var(--nb-card)]"
         data-testid="rewards-hero"
         style={{
-          background:
-            "linear-gradient(135deg,#1A1508 0%, #241A0A 55%, #33260F 100%)",
-          border: `1px solid ${heroColor}44`,
+          border: `1px solid ${heroColor}55`,
           boxShadow: `0 12px 40px -14px ${heroColor}55, inset 0 0 0 1px ${heroColor}18`,
         }}
       >
+        {/* Warm gold wash overlay — visible on both light + dark surfaces */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none opacity-70"
+          style={{
+            background: `linear-gradient(135deg, ${heroColor}12 0%, ${heroColor}05 55%, ${heroColor}00 100%)`,
+          }}
+        />
         <div
           aria-hidden
           className="absolute -top-24 -right-16 w-72 h-72 rounded-full opacity-40 blur-2xl pointer-events-none"

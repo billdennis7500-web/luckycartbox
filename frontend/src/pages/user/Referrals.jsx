@@ -116,19 +116,26 @@ export default function Referrals() {
         testid="referrals-heading"
       />
 
-      {/* Reward levels action card — links to the milestone-bonuses page */}
+      {/* Reward levels action card — links to the milestone-bonuses page.
+          Uses var(--nb-card) so it flips white in light-mode; gold accents
+          + medallion carry the identity in both themes. */}
       <Link
         to="/rewards"
         data-testid="referrals-rewards-cta"
-        className="group relative block rounded-2xl overflow-hidden p-4 sm:p-5"
+        className="group relative block rounded-2xl overflow-hidden p-4 sm:p-5 bg-[var(--nb-card)]"
         style={{
-          background:
-            "linear-gradient(135deg,#1A1508 0%, #2A1F0C 60%, #3B2A10 100%)",
-          border: "1px solid rgba(245,197,24,0.35)",
+          border: "1px solid rgba(245,197,24,0.45)",
           boxShadow:
             "0 10px 32px -12px rgba(245,197,24,0.45), inset 0 0 0 1px rgba(255,229,128,0.10)",
         }}
       >
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none opacity-70"
+          style={{
+            background: "linear-gradient(135deg, rgba(245,197,24,0.10) 0%, rgba(245,197,24,0.04) 55%, rgba(245,197,24,0) 100%)",
+          }}
+        />
         <div
           aria-hidden
           className="absolute -top-16 -right-10 w-56 h-56 rounded-full opacity-40 pointer-events-none blur-2xl"

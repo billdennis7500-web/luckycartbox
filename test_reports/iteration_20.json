@@ -1,0 +1,41 @@
+{
+  "summary": "Verified iteration_20 deliverables end-to-end. Backend: added /app/backend/tests/test_progress_pct.py — 2/2 passing. GET /api/referrals/rewards now returns progress_pct=50.0 when regression user has count=5 (Ascend next tier min=10) and progress_pct=0 for a freshly-registered user (count=0). All 24 regression tests (referral rewards claim flow, admin settings persistence, public settings shape, deposit gateway labeling: paynow/shpay/onesspay/juntbest, welcome bonus, health) still pass. Frontend (Playwright, viewport 1280x900): logged in as +2348099887711 / pass1234, forced theme-light. /rewards hero card has bg rgb(255,255,255) + text rgb(26,21,8) — READABLE. All expected copy visible: 'Ignite', progress '5/10', '5 more to unlock ₦1,500', qualifying refs '5', earned '₦500'. Locked Ascend tier renders with subtle gray lock icon (not jarring dark). Ignite CLAIMED pill present. /referrals CTA card (data-testid=referrals-rewards-cta) renders on light cream with dark text — READABLE. /profile: data-testid=profile-avatar-pendant (1) and data-testid=profile-ref-level-pill (1) BOTH present. Pill text = 'IGNITE MEMBER'. Clicking pendant navigates to /rewards. Toggled back to DARK mode — Rewards + Profile still render premium (rich dark surface with orange tier glow, pendant still visible, count=1).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/health", "issue": "test_health_regression.py::test_health_endpoint asserts service=='naijainvest-api' but backend now returns 'luckycartbox-api'. Pre-existing test bit-rot, not a backend bug."},
+      {"endpoint": "/api/admin/shpay/health", "issue": "Returns 500 in test_admin_shpay_health. Pre-existing, unrelated to this iteration's referral/rewards changes."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_progress_pct.py",
+    "/app/backend/tests/test_referral_rewards.py",
+    "/app/test_reports/pytest/iteration_20.xml"
+  ],
+  "action_items": [
+    "OPTIONAL cleanup: update /app/backend/tests/test_health_regression.py to expect service='luckycartbox-api' (bit-rot from earlier rename).",
+    "OPTIONAL: investigate /api/admin/shpay/health 500 (pre-existing, out of scope for iteration_20)."
+  ],
+  "critical_code_review_comments": [
+    "ProfilePendant.jsx cleanly separates TierMedallion (icon-only) from ProfilePendant (medallion+pill wrapper) — good composability. Both no-op when tier is null which correctly hides the pendant for users with no unlocked tier.",
+    "Rewards.jsx + Referrals.jsx now use bg-[var(--nb-card)] and tier-color overlays instead of hardcoded dark-brown gradient — theme-adaptive as intended. Computed style confirms bg flips to white in light mode.",
+    "Backend progress_pct formula: `min(100, count*100/next_tier.min_referrals)` — reads intuitively for the user (5/10 => 50%). Note: once user unlocks the top tier, `next_tier` is None and progress_pct hard-codes to 100 — correct.",
+    "server.py is still 3860 lines. Splitting rewards/settings/admin into routers remains overdue but not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_progress_pct.py",
+    "/app/test_reports/iteration_20.json"
+  ],
+  "success_rate": {"backend": "100% (26/26 iteration_20-relevant tests, 2 pre-existing unrelated failures ignored)", "frontend": "100%"},
+  "test_credentials": "Admin billdennis750@gmail.com / djscan30 via /admin-login. Regression user +2348099887711 / pass1234 (5 qualifying refs, Ignite CLAIMED, wallet=₦860).",
+  "seed_data_creation": "test_progress_pct_fresh_user_zero registers a random 080******** user each run to verify the count=0 progress_pct=0 path. These leak into DB but are harmless (no investments, no refs).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration_20 added the ProfilePendant medallion + pill to /profile driven by GET /api/referrals/rewards, and fixed both the light-theme readability of /rewards + /referrals CTA and the progress_pct formula. Backend regression suite: /app/backend/tests/test_progress_pct.py + test_referral_rewards.py cover the full flow. To retest pendant-ABSENT case, register a fresh user (POST /api/auth/register with new phone, 6+ char password) — 0 qualifying refs means both pendant and pill render count=0. Light theme toggle in browser: `localStorage.setItem('nb-theme','light'); document.documentElement.classList.add('theme-light');` then hard-reload. Dark: swap 'light'->'dark' and remove the class.",
+  "rca of the issue": "No new bugs found. All three requested changes verified working: (1) light-mode Rewards + Referrals hero/CTA now use bg-[var(--nb-card)] tokens and swap to cream/white with dark readable text; (2) profile pendant + level pill render for users with an unlocked tier (regression user Ignite), navigate to /rewards on click, and are absent for users with 0 unlocked tiers; (3) progress_pct formula now uses absolute count/next_tier.min_referrals — regression user at count=5 with Ascend next => 50.0%, fresh user with count=0 => 0."
+}

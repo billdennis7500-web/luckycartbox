@@ -31,6 +31,7 @@ import {
 import { toast } from "sonner";
 import { SoftCard, MicroLabel } from "@/components/design";
 import { deriveLevel } from "@/lib/levels";
+import { ProfilePendant, TierMedallion } from "@/components/ProfilePendant";
 
 const TILE_TONES = {
   info:    "#0055FF",
@@ -184,10 +185,19 @@ export default function Profile() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [invCount, setInvCount] = useState(null);
+  const [refLevel, setRefLevel] = useState(null);
 
   useEffect(() => {
     api.get("/investments").then((r) => setInvCount((r.data || []).length))
        .catch(() => setInvCount(0));
+    // Referral pendant — fetch current unlocked tier for the avatar medallion
+    api.get("/referrals/rewards").then((r) => {
+      const d = r.data || {};
+      const unlocked = (d.tiers || []).filter((t) => t.unlocked);
+      // Highest unlocked tier is the "achieved" level shown as pendant
+      const top = unlocked.length ? unlocked[unlocked.length - 1] : null;
+      setRefLevel(top);
+    }).catch(() => setRefLevel(null));
   }, []);
 
   const level = useMemo(() => deriveLevel(user?.total_invested || 0), [user?.total_invested]);
@@ -220,22 +230,35 @@ export default function Profile() {
              style={{ background: "#F5C518" }} />
 
         <div className="relative flex items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-2xl grid place-items-center text-xl font-display font-800 shrink-0"
-            style={{
-              background: "linear-gradient(135deg,#FFE580,#F5C518)",
-              color: "#1A1508",
-              boxShadow: "0 6px 22px -6px rgba(245,197,24,0.55)",
-            }}
-          >
-            {(user?.name || "?").slice(0, 1).toUpperCase()}
+          <div className="relative shrink-0">
+            <div
+              className="w-16 h-16 rounded-2xl grid place-items-center text-xl font-display font-800"
+              style={{
+                background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                color: "#1A1508",
+                boxShadow: "0 6px 22px -6px rgba(245,197,24,0.55)",
+              }}
+            >
+              {(user?.name || "?").slice(0, 1).toUpperCase()}
+            </div>
+            {/* Referral level pendant — pinned to avatar's bottom-right */}
+            {refLevel && (
+              <button
+                onClick={() => nav("/rewards")}
+                data-testid="profile-avatar-pendant"
+                aria-label={`View ${refLevel.name} reward level`}
+                className="absolute -bottom-1.5 -right-1.5 transition-transform active:scale-90 focus:outline-none"
+              >
+                <TierMedallion tier={refLevel} size={30} />
+              </button>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <div className="font-display font-800 text-lg text-white truncate" data-testid="profile-name">
                 {user?.name || "—"}
               </div>
-              {/* Tier badge */}
+              {/* Tier badge (investment tier) */}
               <span
                 data-testid="profile-tier-badge"
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-800 uppercase tracking-widest text-[9px] shrink-0"
@@ -248,6 +271,20 @@ export default function Profile() {
                 <Sparkles className="w-2.5 h-2.5" />
                 {tierLabel}
               </span>
+              {/* Referral pendant label — shown when user has unlocked ≥ 1 level */}
+              {refLevel && (
+                <span
+                  data-testid="profile-ref-level-pill"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-800 uppercase tracking-widest text-[9px] shrink-0"
+                  style={{
+                    background: `${refLevel.color}1F`,
+                    color: refLevel.color,
+                    border: `1px solid ${refLevel.color}55`,
+                  }}
+                >
+                  {refLevel.name} member
+                </span>
+              )}
             </div>
             <div className="text-xs text-[var(--nb-muted)] tabular truncate mt-0.5" data-testid="profile-phone">
               {maskPhone(user?.phone)}
