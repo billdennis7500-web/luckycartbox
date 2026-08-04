@@ -3175,7 +3175,6 @@ async def admin_server_ip(admin: dict = Depends(get_admin_user)):
             display_proxy = f"{p.scheme}://***@{p.hostname}:{p.port}"
             # If the proxy host is already a numeric IPv4, use it directly —
             # this is the whole point of a static-IP proxy.
-            import re
             if proxy_host and re.match(r"^\d{1,3}(\.\d{1,3}){3}$", proxy_host):
                 proxy_ip_from_env = proxy_host
         except Exception:
@@ -3212,7 +3211,6 @@ async def admin_server_ip(admin: dict = Depends(get_admin_user)):
                     r = await c.get(svc)
                     ip = (r.text or "").strip().split("\n")[0].strip()
                     # sanity check — must look like an IPv4
-                    import re
                     if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip):
                         outbound_ip = ip
                         method = f"echo:{svc.split('//')[1].split('/')[0]}"
