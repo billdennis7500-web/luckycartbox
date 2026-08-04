@@ -2397,6 +2397,17 @@ async def referral_rewards(user: dict = Depends(get_current_user)):
 
     total_earned = sum(t["reward"] for t in tiers if t["claimed"])
 
+    # Newly-unlocked tiers the user hasn't been "notified" of yet — the
+    # dashboard listener uses this to fire a confetti milestone toast, then
+    # POSTs to /referrals/rewards/acknowledge so the toast fires exactly once
+    # per tier across every device the user logs in on.
+    notified = set(user.get("notified_referral_levels") or [])
+    newly_unlocked = [
+        {"level": t["level"], "name": t["name"], "icon": t["icon"],
+         "color": t["color"], "reward": t["reward"]}
+        for t in tiers if t["unlocked"] and t["level"] not in notified
+    ]
+
     return {
         "count": count,
         "requires_investment": requires_inv,
@@ -2408,7 +2419,26 @@ async def referral_rewards(user: dict = Depends(get_current_user)):
         "next_level_needs": (next_tier["min_referrals"] - count) if next_tier else 0,
         "progress_pct": progress_pct,
         "total_earned": total_earned,
+        "newly_unlocked": newly_unlocked,
     }
+
+
+@api.post("/referrals/rewards/acknowledge")
+async def referral_reward_acknowledge(user: dict = Depends(get_current_user)):
+    """Mark every currently-unlocked tier as notified so the milestone
+    toast fires exactly once per tier per user across every device."""
+    settings = await get_settings()
+    requires_inv = bool(settings.get("referral_level_requires_investment", True))
+    levels = _sorted_levels(settings)
+    count = await _qualifying_referral_count(user["_id"], requires_inv)
+    unlocked = [int(l["level"]) for l in levels if count >= int(l.get("min_referrals", 0))]
+    if not unlocked:
+        return {"ok": True, "acknowledged": []}
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$addToSet": {"notified_referral_levels": {"$each": unlocked}}},
+    )
+    return {"ok": True, "acknowledged": unlocked}
 
 
 @api.post("/referrals/rewards/claim/{level_id}")
@@ -2483,8 +2513,81 @@ async def redeem_coupon(payload: CouponRedeemIn, user: dict = Depends(get_curren
     await db.coupons.update_one({"_id": coupon["_id"]}, {"$push": {"used_by": user["_id"]}})
     await db.users.update_one({"_id": user["_id"]},
                               {"$inc": {"wallet_balance": amount, "total_earned": amount}})
-    await add_transaction(user["_id"], "coupon", amount, f"Redeemed coupon {code}")
+    await add_transaction(
+        user["_id"], "coupon", amount, f"Redeemed coupon {code}",
+        meta={"code": code, "coupon_type": coupon.get("type") or "manual"},
+    )
     return {"ok": True, "amount": amount}
+
+
+@api.get("/coupons/history")
+async def coupon_history(
+    user: dict = Depends(get_current_user),
+    limit: int = 50,
+    skip: int = 0,
+):
+    """Every coupon the user has redeemed, newest first. Reads from the
+    transactions log so we get exact amount + timestamp per redemption.
+    Enriches each row with the code and coupon_type (daily / manual)."""
+    limit = max(1, min(200, int(limit or 50)))
+    skip = max(0, int(skip or 0))
+    q = {"user_id": user["_id"], "type": "coupon"}
+    total = await db.transactions.count_documents(q)
+    total_earned = 0.0
+    async for tx in db.transactions.aggregate([
+        {"$match": q},
+        {"$group": {"_id": None, "sum": {"$sum": "$amount"}}},
+    ]):
+        total_earned = float(tx.get("sum") or 0)
+
+    cur = db.transactions.find(q).sort("created_at", -1).skip(skip).limit(limit)
+    raw_txs = await cur.to_list(length=limit)
+
+    # Build a set of coupon codes we need to look up (either the meta was
+    # missing or we need to enrich the type). Old transactions never carried
+    # `meta.coupon_type`, so join with the coupons collection to recover it.
+    codes_to_lookup: set[str] = set()
+    for tx in raw_txs:
+        meta = tx.get("meta") or {}
+        code = meta.get("code")
+        if not code:
+            note = tx.get("note") or ""
+            code = note.replace("Redeemed coupon ", "").strip() or None
+        if code and not meta.get("coupon_type"):
+            codes_to_lookup.add(code)
+    coupon_type_by_code: Dict[str, str] = {}
+    if codes_to_lookup:
+        async for c in db.coupons.find({"code": {"$in": list(codes_to_lookup)}}, {"code": 1, "type": 1}):
+            coupon_type_by_code[c["code"]] = c.get("type") or "manual"
+
+    items = []
+    daily_count = 0
+    manual_count = 0
+    for tx in raw_txs:
+        meta = tx.get("meta") or {}
+        code = meta.get("code")
+        if not code:
+            note = tx.get("note") or ""
+            code = note.replace("Redeemed coupon ", "").strip() or None
+        coupon_type = meta.get("coupon_type") or coupon_type_by_code.get(code or "", "manual")
+        if coupon_type == "auto_daily":
+            daily_count += 1
+        else:
+            manual_count += 1
+        items.append({
+            "id": str(tx["_id"]),
+            "code": code,
+            "amount": float(tx.get("amount") or 0),
+            "created_at": tx.get("created_at"),
+            "coupon_type": coupon_type,
+        })
+    return {
+        "items": items,
+        "total": total,
+        "total_earned": total_earned,
+        "daily_count": daily_count,
+        "manual_count": manual_count,
+    }
 
 
 @api.get("/coupons/daily")

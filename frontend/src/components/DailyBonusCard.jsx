@@ -13,7 +13,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatApiError, formatNaira } from "@/lib/api";
 import { toast } from "sonner";
-import { Gift, Copy, Check, Sparkles, Clock, Users, PartyPopper } from "lucide-react";
+import { Gift, Copy, Check, Sparkles, Clock, Users, PartyPopper, History } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { MicroLabel } from "@/components/design";
 
@@ -252,6 +253,16 @@ export default function DailyBonusCard({ hasInvested }) {
             You need to invest at least once before you can redeem this code.
           </div>
         )}
+
+        {/* Subtle history link — quick access to see every bagged code */}
+        <Link
+          to="/coupon-history"
+          data-testid="daily-bonus-history-link"
+          className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-[var(--nb-muted)] hover:text-[#F5C518] font-display font-700"
+        >
+          <History className="w-3 h-3" />
+          View coupon history
+        </Link>
       </div>
     </section>
   );

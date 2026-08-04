@@ -38,6 +38,24 @@ export default function Coupon() {
         testid="coupon-heading"
       />
 
+      {/* History link — quick access to their claim streak */}
+      <Link
+        to="/coupon-history"
+        data-testid="coupon-history-cta"
+        className="flex items-center justify-between rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card)] p-3 hover:border-[#F5C518]/40"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-[var(--nb-card2)] grid place-items-center text-[#F5C518]">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-sm text-white font-display font-700">View coupon history</div>
+            <div className="text-xs text-[var(--nb-muted)]">Every code you've bagged, with amount + date</div>
+          </div>
+        </div>
+        <ArrowRight className="w-4 h-4 text-[var(--nb-muted)]" />
+      </Link>
+
       {/* Hero ticket — with notches, matches physical-ticket aesthetic */}
       <AmbientCard tone="gold" testid="coupon-hero">
         <div className="relative">

@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 25 verification (Milestone confetti toast + Coupon History) fully passes. Backend: 12/12 pytest cases green — newly_unlocked/acknowledge idempotency, coupons/history shape (items, total, total_earned, daily_count, manual_count), pagination, legacy JOIN fallback (LUCKY-KL5S has meta.coupon_type but LUCKY-AYX8 too — both categorized correctly), and new-user empty history. Frontend: after resetting notified_referral_levels=[] and logging in as +2348099887711, dashboard fired the '🎉 Level 1 unlocked — ₦500 bonus ready to claim!' Sonner toast with the Claim action + a confetti canvas element inserted into DOM. Toast does NOT refire on reload (acknowledge worked). /coupon-history renders all 8 required data-testids with correct values (total_earned=₦1,000, daily=1, manual=1, total=2, both rows with correct codes/chips/dates/amounts). data-testid=coupon-history-cta on /coupon and data-testid=daily-bonus-history-link on /dashboard both present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Welcome modal (dashboard)", "issues": ["Radix DialogContent still missing DialogTitle / aria-describedby — same a11y warning carried over from iteration 24. Non-blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_milestone_and_coupon_history.py",
+    "/app/test_reports/pytest/iter25.xml"
+  ],
+  "action_items": [
+    "Spec named tiers 'Ignite/Ascend/Empire/Sovereign/Titan' but seeded referral_levels use generic 'Level 1..N' names with min_referrals=[3,10] only. Confirm whether the marketing tier names should be seeded, or if the review-request naming was aspirational. Toast still fires correctly with 'Level 1' name because backend echoes the configured name.",
+    "Optional a11y fix for WelcomeBackModal (add DialogTitle/DialogDescription) — carried over from iter24."
+  ],
+  "critical_code_review_comments": [
+    "MilestoneListener acknowledges after firing the toast — correct order (fire → acknowledge). Uses inFlight ref to prevent concurrent duplicate toasts across mount/focus events.",
+    "GET /api/coupons/history JOIN-fallback: when meta.coupon_type is missing, it batch-fetches coupons collection to recover 'auto_daily' vs 'manual' — legacy-safe. Deleted coupons default to 'manual' which is a sensible default.",
+    "POST /referrals/rewards/acknowledge uses $addToSet with $each for idempotency — good.",
+    "MilestoneListener skips admins (user.role === 'admin') — sensible; prevents unnecessary polls.",
+    "canvas-confetti bursts fire correctly; canvas element is inserted into body as expected."
+  ],
+  "updated_files": ["/app/backend/tests/test_milestone_and_coupon_history.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin billdennis750@gmail.com/djscan30; User +2348099887711/pass1234",
+  "seed_data_creation": "Reset notified_referral_levels=[] for +2348099887711 twice (once for backend pytest, once for the UI test). After the tests, the user's notified_referral_levels=[1] again (acknowledged). Wallet unchanged at ₦1,860 (no new redeems). No new fresh-user data left over — the empty-history test used a throwaway TEST_HistTester phone.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression user +2348099887711 has notified_referral_levels=[1] again after this run. To retrigger the milestone toast, reset it via `db.users.update_one({'phone':'+2348099887711'},{'$set':{'notified_referral_levels':[]}})`. Coupon history for this user = 2 rows (LUCKY-AYX8 auto_daily, LUCKY-KL5S manual, ₦500 each, ₦1,000 total). Backend referral_levels config only has 2 tiers (Level 1 min_ref=3, Level 2 min_ref=10) — NOT the 5 marketing-named tiers described in the spec.",
+  "rca of the issue": "N/A — no bugs. Note the naming mismatch (Level 1 vs. Ignite) is a data-config concern, not code."
+}

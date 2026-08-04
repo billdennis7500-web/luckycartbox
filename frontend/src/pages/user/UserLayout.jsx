@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { isImpersonatingTab } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 import { BrandLogo } from "@/components/BrandLogo";
+import MilestoneListener from "@/components/MilestoneListener";
 
 const NAV = [
   { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
@@ -134,6 +135,11 @@ export default function UserLayout() {
       <main className="flex-1 max-w-3xl mx-auto w-full px-5 pt-6 pb-32">
         <Outlet />
       </main>
+
+      {/* Milestone listener — fires a confetti toast the moment a user
+          crosses a referral tier threshold (Ignite → Titan). Renders no
+          markup; polls in the background. */}
+      <MilestoneListener />
 
       {/* Bottom nav */}
       <nav
