@@ -15,6 +15,7 @@ import {
   AmbientCard, SoftCard, SectionHeader, MicroLabel, StackChip, StatChip, PillCTA,
 } from "@/components/design";
 import InstallAppTile from "@/components/InstallAppTile";
+import DailyBonusCard from "@/components/DailyBonusCard";
 
 function ActionTile({ to, icon: Icon, label, tone, testid }) {
   const tones = {
@@ -164,6 +165,10 @@ export default function Dashboard() {
           <InstallAppTile />
         </div>
       </section>
+
+      {/* Daily bonus drop — admin-generated coupon that appears every day
+          at the configured time. Card auto-refreshes every minute. */}
+      <DailyBonusCard hasInvested={user?.has_invested} />
 
       {/* Not-invested nudge — gets tier-hot glow to nudge action */}
       {!user?.has_invested && (

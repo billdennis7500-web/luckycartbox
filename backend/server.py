@@ -9,8 +9,10 @@ import re
 import asyncio
 import logging
 import secrets
+import string
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Annotated, Any, Dict
+from zoneinfo import ZoneInfo
 
 import bcrypt
 import httpx
@@ -229,6 +231,21 @@ DEFAULT_SETTINGS = {
     # (has_invested=True) count toward the level thresholds. When False, any
     # registered gen-1 referral counts.
     "referral_level_requires_investment": True,
+    # ── Daily Bonus Drop — an auto-generated coupon that appears on every
+    # invested user's dashboard once per day at a scheduled time (Africa/Lagos).
+    "auto_coupon_enabled": True,
+    "auto_coupon_time": "17:10",          # HH:MM in Africa/Lagos (24h clock)
+    "auto_coupon_amount": 500.0,          # naira per redeem
+    "auto_coupon_max_uses": 10,           # how many users can grab today's code
+    "auto_coupon_prefix": "LUCKY",        # printed as e.g. LUCKY-A3F7
+    "auto_coupon_last_generated_date": "",  # bookkeeping — set by the cron
+    # ── Withdrawal window — a daily open/close time (Africa/Lagos) that
+    # prevents users from SUBMITTING new withdrawal requests outside the
+    # window. Admin manual approval is never blocked.
+    "withdrawal_window_enabled": False,
+    "withdrawal_open_time": "08:00",
+    "withdrawal_close_time": "17:00",
+    "withdrawal_closed_message": "Withdrawals close at 5:00 PM daily. See you tomorrow at 8:00 AM!",
     # Admin-controlled gateway visibility. Each gateway can be toggled
     # independently for payin (deposits) and payout (withdrawals). Default:
     # every gateway on both directions is ON; admin can turn any off from the
@@ -614,6 +631,7 @@ async def startup():
     asyncio.create_task(_shpay_reconcile_cron())
     asyncio.create_task(_onesspay_reconcile_cron())
     asyncio.create_task(_juntbest_reconcile_cron())
+    asyncio.create_task(_auto_coupon_cron())
 
 
 async def _paynow_reconcile_cron():
@@ -984,6 +1002,155 @@ async def reconcile_pending_paynow_withdrawals() -> int:
     return settled
 
 
+# ---------------------------------------------------------------------------
+# Africa/Lagos time helpers — every scheduled feature (daily coupon drop,
+# withdrawal window) expresses times in local Nigerian time even though the
+# server stores UTC. WAT is UTC+1 all year (no DST).
+# ---------------------------------------------------------------------------
+_LAGOS_TZ = ZoneInfo("Africa/Lagos")
+
+
+def _lagos_now() -> datetime:
+    return datetime.now(_LAGOS_TZ)
+
+
+def _parse_hhmm(s: str, default_h: int = 0, default_m: int = 0) -> tuple[int, int]:
+    """Best-effort parse of admin-entered 'HH:MM' string."""
+    try:
+        h, m = (s or "").split(":", 1)
+        return max(0, min(23, int(h))), max(0, min(59, int(m)))
+    except Exception:
+        return default_h, default_m
+
+
+def _random_coupon_suffix(n: int = 4) -> str:
+    """Human-friendly 4-char suffix — no ambiguous 0/O or 1/I."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(n))
+
+
+async def _generate_daily_coupon(settings: dict) -> Optional[dict]:
+    """Atomically create the day's auto-coupon if it hasn't been created yet.
+
+    Idempotent — guarded on `settings.auto_coupon_last_generated_date` so
+    concurrent cron invocations OR admin "Generate now" clicks can't
+    accidentally spawn two coupons for the same day. Returns the created
+    coupon doc or None if today's coupon already exists.
+    """
+    today = _lagos_now().strftime("%Y-%m-%d")
+    # Compare-and-swap on the date field prevents double-generation
+    res = await db.settings.update_one(
+        {"$or": [
+            {"auto_coupon_last_generated_date": {"$ne": today}},
+            {"auto_coupon_last_generated_date": {"$exists": False}},
+        ]},
+        {"$set": {"auto_coupon_last_generated_date": today}},
+    )
+    if res.modified_count == 0:
+        # Another worker already generated today's coupon
+        return None
+
+    prefix = (settings.get("auto_coupon_prefix") or "LUCKY").upper().strip()[:10]
+    amount = float(settings.get("auto_coupon_amount") or 500)
+    max_uses = max(1, int(settings.get("auto_coupon_max_uses") or 10))
+
+    # Loop in case of a rare collision on the random suffix
+    for _ in range(6):
+        code = f"{prefix}-{_random_coupon_suffix()}"
+        existing = await db.coupons.find_one({"code": code})
+        if not existing:
+            break
+    else:
+        # Extremely unlikely: 6 collisions in a row → use longer suffix
+        code = f"{prefix}-{_random_coupon_suffix(6)}"
+
+    now_iso = now_utc().isoformat()
+    doc = {
+        "code": code,
+        "amount": amount,
+        "max_uses": max_uses,
+        "used_by": [],
+        "active": True,
+        "type": "auto_daily",           # distinguishes from admin-manual coupons
+        "generated_date": today,        # YYYY-MM-DD in Africa/Lagos
+        "created_at": now_iso,
+    }
+    res2 = await db.coupons.insert_one(doc)
+    doc["_id"] = res2.inserted_id
+    logger.info("Daily coupon generated: %s (amount=₦%.0f, max_uses=%d)",
+                code, amount, max_uses)
+    return doc
+
+
+async def _auto_coupon_cron():
+    """Wake up every 30s; when Lagos local time matches admin's configured
+    generation time (HH:MM) and today's coupon hasn't been generated yet,
+    create it. Robust against sleep-through (checks every 30s so worst-case
+    delay from set time is 30s). Also self-heals if pod restarts inside the
+    trigger minute."""
+    await asyncio.sleep(45)  # let startup settle
+    while True:
+        try:
+            settings = await get_settings()
+            if not settings.get("auto_coupon_enabled", True):
+                await asyncio.sleep(30)
+                continue
+            now = _lagos_now()
+            target_h, target_m = _parse_hhmm(settings.get("auto_coupon_time") or "17:10", 17, 10)
+            today = now.strftime("%Y-%m-%d")
+            last = settings.get("auto_coupon_last_generated_date") or ""
+            if last == today:
+                # Already generated today — sleep until close to next check
+                await asyncio.sleep(30)
+                continue
+            # Fire only when we've reached/passed the target time today
+            if now.hour > target_h or (now.hour == target_h and now.minute >= target_m):
+                await _generate_daily_coupon(settings)
+        except Exception:
+            logger.exception("Auto-coupon cron tick failed")
+        await asyncio.sleep(30)
+
+
+# ---------------------------------------------------------------------------
+# Withdrawal window — check if user submissions are currently allowed given
+# the admin-configured open/close times in Africa/Lagos.
+# ---------------------------------------------------------------------------
+def _withdrawal_window_state(settings: dict) -> dict:
+    """Return {'enabled', 'is_open', 'open_time', 'close_time', 'message',
+    'next_open_at'}. `next_open_at` is an ISO datetime of the next opening,
+    used by the client to render a friendly countdown."""
+    enabled = bool(settings.get("withdrawal_window_enabled", False))
+    open_str = settings.get("withdrawal_open_time") or "08:00"
+    close_str = settings.get("withdrawal_close_time") or "17:00"
+    message = settings.get("withdrawal_closed_message") or "Withdrawals are currently closed."
+    if not enabled:
+        return {
+            "enabled": False, "is_open": True,
+            "open_time": open_str, "close_time": close_str,
+            "message": None, "next_open_at": None,
+        }
+    now = _lagos_now()
+    oh, om = _parse_hhmm(open_str, 8, 0)
+    ch, cm = _parse_hhmm(close_str, 17, 0)
+    open_dt = now.replace(hour=oh, minute=om, second=0, microsecond=0)
+    close_dt = now.replace(hour=ch, minute=cm, second=0, microsecond=0)
+
+    if open_dt <= close_dt:
+        is_open = open_dt <= now < close_dt
+        next_open = open_dt if now < open_dt else (open_dt + timedelta(days=1))
+    else:
+        # Overnight window (rare) e.g. open 22:00 close 06:00
+        is_open = now >= open_dt or now < close_dt
+        next_open = open_dt if now < open_dt else open_dt
+
+    return {
+        "enabled": True, "is_open": is_open,
+        "open_time": open_str, "close_time": close_str,
+        "message": None if is_open else message,
+        "next_open_at": next_open.astimezone(timezone.utc).isoformat(),
+    }
+
+
 async def _profit_drop_cron():
     """Every 15 minutes, iterate all users with active investments and settle due profit drops."""
     await asyncio.sleep(30)  # let app fully start
@@ -1114,6 +1281,15 @@ class SettingsIn(BaseModel):
     batch_approve_limit: Optional[int] = None
     referral_levels: Optional[List[dict]] = None
     referral_level_requires_investment: Optional[bool] = None
+    auto_coupon_enabled: Optional[bool] = None
+    auto_coupon_time: Optional[str] = None
+    auto_coupon_amount: Optional[float] = None
+    auto_coupon_max_uses: Optional[int] = None
+    auto_coupon_prefix: Optional[str] = None
+    withdrawal_window_enabled: Optional[bool] = None
+    withdrawal_open_time: Optional[str] = None
+    withdrawal_close_time: Optional[str] = None
+    withdrawal_closed_message: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -1952,6 +2128,11 @@ async def create_withdrawal(payload: WithdrawCreateIn, user: dict = Depends(get_
     if not user.get("has_invested"):
         raise HTTPException(400, "You must invest first before withdrawing")
     settings = await get_settings()
+    # Admin-configured daily withdrawal window (blocks user submissions only —
+    # admins can still manually approve pending requests at any time).
+    win = _withdrawal_window_state(settings)
+    if win["enabled"] and not win["is_open"]:
+        raise HTTPException(status_code=423, detail=win["message"])
     if payload.amount < settings["min_withdrawal"]:
         raise HTTPException(400, f"Minimum withdrawal is ₦{settings['min_withdrawal']:.0f}")
     if payload.amount > user["wallet_balance"]:
@@ -2304,6 +2485,95 @@ async def redeem_coupon(payload: CouponRedeemIn, user: dict = Depends(get_curren
                               {"$inc": {"wallet_balance": amount, "total_earned": amount}})
     await add_transaction(user["_id"], "coupon", amount, f"Redeemed coupon {code}")
     return {"ok": True, "amount": amount}
+
+
+@api.get("/coupons/daily")
+async def get_daily_coupon(user: dict = Depends(get_current_user)):
+    """Today's auto-generated coupon (if any) with per-user redemption context.
+
+    Response shape:
+      { available: bool, code?, amount?, max_uses?, used_count?, remaining?,
+        already_redeemed?, next_drop_at, drop_time, message }
+    """
+    settings = await get_settings()
+    enabled = bool(settings.get("auto_coupon_enabled", True))
+    drop_time = settings.get("auto_coupon_time") or "17:10"
+    today = _lagos_now().strftime("%Y-%m-%d")
+
+    # Compute the ISO next-drop timestamp for the client countdown
+    now = _lagos_now()
+    th, tm = _parse_hhmm(drop_time, 17, 10)
+    next_drop = now.replace(hour=th, minute=tm, second=0, microsecond=0)
+    if now >= next_drop:
+        next_drop = next_drop + timedelta(days=1)
+
+    base = {
+        "enabled": enabled,
+        "drop_time": drop_time,
+        "next_drop_at": next_drop.astimezone(timezone.utc).isoformat(),
+    }
+
+    if not enabled:
+        return {**base, "available": False, "message": "Daily bonus is currently paused."}
+
+    # Look up today's auto coupon
+    coupon = await db.coupons.find_one({"type": "auto_daily", "generated_date": today, "active": True})
+    if not coupon:
+        return {**base, "available": False, "message": f"Today's bonus code drops at {drop_time}."}
+
+    used_count = len(coupon.get("used_by", []))
+    max_uses = int(coupon.get("max_uses", 0))
+    remaining = max(0, max_uses - used_count)
+    already = user["_id"] in coupon.get("used_by", [])
+    can_redeem = user.get("has_invested", False) and not already and remaining > 0
+
+    return {
+        **base,
+        "available": True,
+        "code": coupon["code"],
+        "amount": float(coupon.get("amount", 0)),
+        "max_uses": max_uses,
+        "used_count": used_count,
+        "remaining": remaining,
+        "already_redeemed": already,
+        "can_redeem": can_redeem,
+        "requires_investment": not user.get("has_invested", False),
+        "sold_out": remaining <= 0 and not already,
+        "message": None,
+    }
+
+
+@api.post("/admin/coupons/generate-now")
+async def admin_generate_daily_coupon(admin: dict = Depends(get_admin_user)):
+    """Manually trigger today's daily coupon generation (idempotent — if
+    today's coupon already exists, returns it without creating a new one)."""
+    settings = await get_settings()
+    today = _lagos_now().strftime("%Y-%m-%d")
+    existing = await db.coupons.find_one({"type": "auto_daily", "generated_date": today, "active": True})
+    if existing:
+        return {
+            "ok": True, "already_existed": True,
+            "code": existing["code"], "amount": float(existing["amount"]),
+            "max_uses": int(existing.get("max_uses", 0)),
+            "used_count": len(existing.get("used_by", [])),
+        }
+    coupon = await _generate_daily_coupon(settings)
+    if not coupon:
+        # Race — another worker created it between our check and CAS
+        coupon = await db.coupons.find_one({"type": "auto_daily", "generated_date": today, "active": True})
+    return {
+        "ok": True, "already_existed": False,
+        "code": coupon["code"], "amount": float(coupon["amount"]),
+        "max_uses": int(coupon.get("max_uses", 0)),
+        "used_count": len(coupon.get("used_by", [])),
+    }
+
+
+@api.get("/withdrawals/window")
+async def withdrawal_window_status(user: dict = Depends(get_current_user)):
+    """Whether user-initiated withdrawals are currently allowed."""
+    settings = await get_settings()
+    return _withdrawal_window_state(settings)
 
 
 # ---------------------------------------------------------------------------

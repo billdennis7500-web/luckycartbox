@@ -82,6 +82,15 @@ export default function AdminSettings() {
           reward: Math.max(0, Number(l.reward) || 0),
         })) : undefined,
         referral_level_requires_investment: !!s.referral_level_requires_investment,
+        auto_coupon_enabled: !!s.auto_coupon_enabled,
+        auto_coupon_time: (s.auto_coupon_time || "17:10").trim(),
+        auto_coupon_amount: Math.max(1, Number(s.auto_coupon_amount) || 500),
+        auto_coupon_max_uses: Math.max(1, Number(s.auto_coupon_max_uses) || 10),
+        auto_coupon_prefix: (s.auto_coupon_prefix || "LUCKY").toUpperCase().trim().slice(0, 10),
+        withdrawal_window_enabled: !!s.withdrawal_window_enabled,
+        withdrawal_open_time: (s.withdrawal_open_time || "08:00").trim(),
+        withdrawal_close_time: (s.withdrawal_close_time || "17:00").trim(),
+        withdrawal_closed_message: (s.withdrawal_closed_message || "").trim(),
       });
       toast.success("Settings saved");
       // Normalize the local state after save
@@ -233,6 +242,156 @@ export default function AdminSettings() {
             className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular"
           />
           <p className="text-xs text-[var(--nb-muted)] mt-1">Comma-separated. Rendered as chips on the user deposit page.</p>
+        </div>
+
+        {/* ─ Automation subsection ─ daily bonus drop + withdrawal window */}
+        <div className="pt-3 border-t border-[var(--nb-border)]">
+          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Automation</div>
+
+          {/* Daily bonus drop */}
+          <div className="rounded-xl bg-[var(--nb-card2)] border border-[#F5C518]/30 p-4 space-y-3" data-testid="setting-auto-coupon-block">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-display font-700 text-white text-sm">Daily bonus drop 🎁</div>
+                <div className="text-[11px] text-[var(--nb-muted)] mt-0.5">
+                  Auto-generates a coupon every day at the configured time and displays it on invested users' dashboards.
+                </div>
+              </div>
+              <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!s.auto_coupon_enabled}
+                  onChange={(e) => setS({ ...s, auto_coupon_enabled: e.target.checked })}
+                  data-testid="setting-auto-coupon-enabled"
+                  className="w-4 h-4 accent-[#F5C518]"
+                />
+                <span className="text-xs text-white font-display font-700">
+                  {s.auto_coupon_enabled ? "Enabled" : "Paused"}
+                </span>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <Label className="text-[11px]">Drop time (WAT)</Label>
+                <Input
+                  type="time"
+                  value={s.auto_coupon_time || "17:10"}
+                  onChange={(e) => setS({ ...s, auto_coupon_time: e.target.value })}
+                  data-testid="setting-auto-coupon-time"
+                  className="mt-1.5 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-10 tabular"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px]">Amount (₦)</Label>
+                <Input
+                  type="number" min="1"
+                  value={s.auto_coupon_amount ?? 500}
+                  onChange={(e) => setS({ ...s, auto_coupon_amount: e.target.value })}
+                  data-testid="setting-auto-coupon-amount"
+                  className="mt-1.5 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-10 tabular"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px]">Max claims</Label>
+                <Input
+                  type="number" min="1"
+                  value={s.auto_coupon_max_uses ?? 10}
+                  onChange={(e) => setS({ ...s, auto_coupon_max_uses: e.target.value })}
+                  data-testid="setting-auto-coupon-max-uses"
+                  className="mt-1.5 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-10 tabular"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px]">Code prefix</Label>
+                <Input
+                  value={s.auto_coupon_prefix || "LUCKY"}
+                  onChange={(e) => setS({ ...s, auto_coupon_prefix: e.target.value.toUpperCase() })}
+                  data-testid="setting-auto-coupon-prefix"
+                  className="mt-1.5 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-10 font-mono"
+                />
+              </div>
+            </div>
+            <div>
+              <Button
+                onClick={async () => {
+                  try {
+                    const { data } = await api.post("/admin/coupons/generate-now");
+                    if (data.already_existed) {
+                      toast.info(`Today's code already exists: ${data.code}`);
+                    } else {
+                      toast.success(`Today's code generated: ${data.code}`);
+                    }
+                  } catch (e) {
+                    toast.error(formatApiError(e.response?.data?.detail) || "Generation failed");
+                  }
+                }}
+                data-testid="setting-auto-coupon-generate-now"
+                className="mt-1 bg-[#F5C518] hover:bg-[#E1B516] text-black h-9 px-3 text-xs font-display font-700 rounded-lg"
+              >
+                Generate today's code now
+              </Button>
+              <p className="text-[11px] text-[var(--nb-muted)] mt-2">
+                Skips if today's code already exists (idempotent). Use if you edited the settings after the scheduled time already passed.
+              </p>
+            </div>
+          </div>
+
+          {/* Withdrawal window */}
+          <div className="rounded-xl bg-[var(--nb-card2)] border border-[#F97316]/30 p-4 space-y-3 mt-3" data-testid="setting-withdrawal-window-block">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-display font-700 text-white text-sm">Withdrawal window ⏰</div>
+                <div className="text-[11px] text-[var(--nb-muted)] mt-0.5">
+                  When ON, users can only submit new withdrawals during the daily open window. Admin manual approvals are never blocked.
+                </div>
+              </div>
+              <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!s.withdrawal_window_enabled}
+                  onChange={(e) => setS({ ...s, withdrawal_window_enabled: e.target.checked })}
+                  data-testid="setting-withdrawal-window-enabled"
+                  className="w-4 h-4 accent-[#F97316]"
+                />
+                <span className="text-xs text-white font-display font-700">
+                  {s.withdrawal_window_enabled ? "Enabled" : "Always open"}
+                </span>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px]">Open time (WAT)</Label>
+                <Input
+                  type="time"
+                  value={s.withdrawal_open_time || "08:00"}
+                  onChange={(e) => setS({ ...s, withdrawal_open_time: e.target.value })}
+                  data-testid="setting-withdrawal-open-time"
+                  className="mt-1.5 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-10 tabular"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px]">Close time (WAT)</Label>
+                <Input
+                  type="time"
+                  value={s.withdrawal_close_time || "17:00"}
+                  onChange={(e) => setS({ ...s, withdrawal_close_time: e.target.value })}
+                  data-testid="setting-withdrawal-close-time"
+                  className="mt-1.5 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-10 tabular"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-[11px]">Closed message (shown to users)</Label>
+              <textarea
+                value={s.withdrawal_closed_message || ""}
+                onChange={(e) => setS({ ...s, withdrawal_closed_message: e.target.value })}
+                rows={2}
+                placeholder="Withdrawals close at 5:00 PM daily. See you tomorrow at 8:00 AM!"
+                data-testid="setting-withdrawal-closed-message"
+                className="mt-1.5 w-full rounded-md bg-[var(--nb-card)] border border-[var(--nb-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[#F97316]/40"
+              />
+            </div>
+          </div>
         </div>
       </Card>
       )}

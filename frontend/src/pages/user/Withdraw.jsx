@@ -31,6 +31,7 @@ export default function Withdraw() {
   const [paynowEnabled, setPaynowEnabled] = useState(false);
   const [feePct, setFeePct] = useState(0);
   const [autoPayout, setAutoPayout] = useState(false);
+  const [window_, setWindow] = useState(null); // withdrawal open/close status
 
   const load = () => {
     api.get("/me/bank-account").then((r) => setBound(r.data)).catch(() => setBound(null));
@@ -39,18 +40,22 @@ export default function Withdraw() {
       setFeePct(Number(r.data?.withdrawal_fee_pct) || 0);
       setAutoPayout(!!r.data?.auto_payout_enabled);
     }).catch(() => {});
+    // Fetch admin-configured withdrawal window so we can render a friendly
+    // closed banner instead of letting the user hit a 423 on submit.
+    api.get("/withdrawals/window").then((r) => setWindow(r.data)).catch(() => setWindow(null));
   };
   useEffect(() => { load(); }, []);
 
   const canWithdraw = user?.has_invested;
   const hasAccount = !!(bound && bound.bank_name);
+  const windowOpen = !window_?.enabled || window_?.is_open;
   const amountNum = Number(amount) || 0;
   const fee = amountNum * feePct / 100;
   const net = amountNum - fee;
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!canWithdraw || !hasAccount) return;
+    if (!canWithdraw || !hasAccount || !windowOpen) return;
     setLoading(true);
     try {
       await api.post("/withdrawals", { amount: amountNum });
@@ -104,6 +109,28 @@ export default function Withdraw() {
           </div>
         )}
       </AmbientCard>
+
+      {/* Withdrawal window closed banner — shows the friendly admin-defined
+          message + the next opening time. Blocks the submit button below. */}
+      {window_?.enabled && !window_.is_open && (
+        <AmbientCard tone="hot" testid="withdraw-window-closed-banner">
+          <div className="flex items-start gap-3">
+            <div className="w-11 h-11 shrink-0 rounded-xl grid place-items-center"
+                 style={{ background: "#F5C51818", border: "1px solid #F5C51840", color: "#F5C518" }}>
+              <Lock className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-800 text-white text-base">Withdrawals are resting for the day.</div>
+              <div className="text-xs text-[var(--nb-muted)] mt-1 leading-relaxed" data-testid="withdraw-window-closed-msg">
+                {window_.message}
+              </div>
+              <div className="text-[11px] text-[#F5C518] mt-2 font-display font-700 tabular">
+                Open {window_.open_time} – Close {window_.close_time} (Africa/Lagos)
+              </div>
+            </div>
+          </div>
+        </AmbientCard>
+      )}
 
       {/* Locked banner */}
       {!canWithdraw && (
@@ -205,7 +232,7 @@ export default function Withdraw() {
 
           <button
             type="submit"
-            disabled={loading || !canWithdraw || !hasAccount}
+            disabled={loading || !canWithdraw || !hasAccount || !windowOpen}
             data-testid="withdraw-submit-button"
             className="w-full h-12 rounded-full font-display font-800 text-sm text-[#1A1508] disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110 active:scale-[0.98] flex items-center justify-center gap-1.5"
             style={{
