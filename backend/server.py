@@ -1237,7 +1237,13 @@ async def register(payload: RegisterIn, response: Response):
     refresh = create_refresh_token(str(res.inserted_id))
     set_auth_cookies(response, access, refresh)
     user = await db.users.find_one({"_id": res.inserted_id})
-    return {"user": clean(user), "access_token": access}
+    return {
+        "user": clean(user),
+        "access_token": access,
+        # Authoritative amount actually credited — the client uses this for the
+        # welcome toast so the message can never drift from settings.welcome_bonus.
+        "welcome_bonus_credited": welcome,
+    }
 
 
 @api.post("/auth/login")

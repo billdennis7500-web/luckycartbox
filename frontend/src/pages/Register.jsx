@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { api, formatNaira } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,10 +17,17 @@ export default function Register() {
   const [form, setForm] = useState({ name: "", phone: "", password: "", referral_code: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  // Welcome bonus amount is admin-controlled — read from public settings so
+  // the pre-signup copy (subtitle + badge) never drifts from what the backend
+  // will actually credit. Falls back to a sane placeholder while loading.
+  const [welcomeBonus, setWelcomeBonus] = useState(null);
 
   useEffect(() => {
     const ref = sp.get("ref");
     if (ref) setForm((f) => ({ ...f, referral_code: ref }));
+    api.get("/settings/public")
+      .then((r) => setWelcomeBonus(Number(r.data?.welcome_bonus) || 0))
+      .catch(() => setWelcomeBonus(0));
   }, [sp]);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -28,20 +36,25 @@ export default function Register() {
     e.preventDefault();
     setLoading(true); setErr("");
     try {
-      const u = await register(form);
-      toast.success("Account created! ₦500 welcome bonus credited 🎉");
-      nav(u.role === "admin" ? "/admin" : "/dashboard");
+      const { user, welcome_bonus_credited } = await register(form);
+      // Prefer the amount the backend actually credited; fall back to settings.
+      const credited = Number(welcome_bonus_credited ?? welcomeBonus ?? 0);
+      toast.success(`Account created! ${formatNaira(credited)} welcome bonus credited 🎉`);
+      nav(user.role === "admin" ? "/admin" : "/dashboard");
     } catch (e2) {
       setErr(e2.message);
     } finally { setLoading(false); }
   };
+
+  // Display value while typing (before /settings/public resolves) — shows "…"
+  const bonusLabel = welcomeBonus === null ? "…" : formatNaira(welcomeBonus);
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-[var(--nb-page)]">
       <div className="flex items-center justify-center p-6 lg:p-12 order-2 lg:order-1">
         <div className="w-full max-w-md">
           <h2 className="font-display text-3xl font-800 tracking-tight">Create your account</h2>
-          <p className="text-[var(--nb-muted)] mt-2">Sign up in seconds. Claim your ₦500 welcome bonus.</p>
+          <p className="text-[var(--nb-muted)] mt-2" data-testid="register-subtitle">Sign up in seconds. Claim your {bonusLabel} welcome bonus.</p>
 
           <form onSubmit={submit} className="mt-8 space-y-5">
             <div>
@@ -91,8 +104,8 @@ export default function Register() {
           <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0055FF]/15 border border-[#0055FF]/40 text-xs text-white mb-6">
-            <Gift className="w-3 h-3" /> ₦500 welcome bonus
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0055FF]/15 border border-[#0055FF]/40 text-xs text-white mb-6" data-testid="register-bonus-badge">
+            <Gift className="w-3 h-3" /> {bonusLabel} welcome bonus
           </div>
           <h1 className="font-display text-4xl font-800 tracking-tight leading-tight">
             Nigeria's smartest way to grow your naira.

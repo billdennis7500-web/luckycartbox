@@ -38,7 +38,9 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.post("/auth/register", payload);
       setUser(data.user);
-      return data.user;
+      // Return the full response so callers can access welcome_bonus_credited
+      // (the authoritative amount the backend actually applied to the wallet).
+      return { user: data.user, welcome_bonus_credited: data.welcome_bonus_credited };
     } catch (e) {
       const msg = formatApiError(e.response?.data?.detail) || e.message;
       setError(msg);

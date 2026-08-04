@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 22 — Signup welcome bonus copy consistency fix verified end-to-end. Backend: 8/8 pytest passed. UI: /register subtitle + badge dynamically render ₦1,000 (from /api/settings/public), full signup flow displays toast 'Account created! ₦1,000 welcome bonus credited 🎉' and dashboard wallet reads ₦1,000. Mid-flow admin change (1000→750→1000) confirmed via PUT /api/admin/settings — response.welcome_bonus_credited and user.wallet_balance both matched the current setting. Regression suite (health, login, products, admin/deposits, server-ip determinism 46.20.101.18/proxy_env) all green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_welcome_bonus_display.py",
+    "/app/test_reports/pytest/iter22_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Register.jsx correctly reads welcome_bonus from /api/settings/public and prefers response.welcome_bonus_credited (authoritative) with settings fallback — no more hardcoded ₦500. Clean fix.",
+    "Minor a11y warnings in console: DialogContent missing DialogTitle/aria-describedby (Radix). Not introduced by this iteration but worth cleaning up in a future pass.",
+    "server-ip response key is `outbound_ip`, not `ip` — request-file wording said 'returns deterministic 46.20.101.18'; actual key is outbound_ip. Consistent with iteration 21 shape. No action needed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_welcome_bonus_display.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin billdennis750@gmail.com/djscan30. Regression user +2348099887711/pass1234. Fresh users created via /api/auth/register during tests.",
+  "seed_data_creation": "Test created 3 fresh users during pytest run (bonus display + mid-flow ×2). Admin setting mutated 1000→750→1000 and restored.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 22 shipped a small copy-consistency fix on Register.jsx (removed 3 hardcoded ₦500 strings). Fully verified. If future iterations touch signup/welcome bonus, re-run /app/backend/tests/test_welcome_bonus_display.py — it also covers mid-flow admin-settings changes."
+}
