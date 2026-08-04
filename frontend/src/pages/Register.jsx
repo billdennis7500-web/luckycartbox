@@ -89,7 +89,7 @@ export default function Register() {
           <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
             <TrendingUp className="w-5 h-5" />
           </div>
-          <span className="font-display font-bold text-xl">NaijaInvest</span>
+          <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0055FF]/15 border border-[#0055FF]/40 text-xs text-white mb-6">
@@ -102,7 +102,7 @@ export default function Register() {
             Automated daily profits, 3-generation referrals, instant bank withdrawals.
           </p>
         </div>
-        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 NaijaInvest</div>
+        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 Luckycart Box</div>
       </div>
     </div>
   );

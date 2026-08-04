@@ -1,5 +1,5 @@
 """
-SHPAY OpenAPI client for NaijaInvest.
+SHPAY OpenAPI client for Luckycart Box.
 
 Docs (private): https://www.showdoc.com.cn/2319656718203863/10355369271356215
 Base URL: https://transapi.shpays.com

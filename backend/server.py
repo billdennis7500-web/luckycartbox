@@ -40,7 +40,7 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-app = FastAPI(title="Naija Invest Platform API")
+app = FastAPI(title="Luckycart Box Platform API")
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -190,12 +190,12 @@ DEFAULT_SETTINGS = {
     "welcome_bonus": 500.0,
     "min_withdrawal": 1000.0,
     "min_deposit": 500.0,
-    "site_name": "NaijaInvest",
+    "site_name": "Luckycart Box",
     "telegram_url": "",
     "whatsapp_url": "",
     "telegram_channel_url": "",
     "support_hours": "Monday to Sunday, 10:00 AM to 7:00 PM",
-    "welcome_message": "Welcome to NaijaInvest — grow your money the smart way. Invest today, cash out tomorrow.",
+    "welcome_message": "Welcome to Luckycart Box — grow your money the smart way. Invest today, cash out tomorrow.",
     "withdrawal_fee_pct": 15.0,
     "auto_payout_enabled": False,
     "deposit_quick_amounts": [500, 1000, 2000, 5000, 10000, 20000],
@@ -1537,7 +1537,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         # (registration-in-progress, admin-created placeholder, migrated data).
         u_phone = (user.get("phone") or "").lstrip("+")
         u_name  = user.get("name") or "User"
-        u_email = user.get("email") or f"{u_phone or 'user'}@naijainvest.local"
+        u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
         try:
             sp = await shpay.create_payin(
                 out_trade_no,
@@ -1546,7 +1546,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                 payer_mobile=u_phone[-10:] if u_phone else None,
                 payer_email=u_email,
                 subject="Wallet deposit",
-                body=f"NaijaInvest deposit for {u_name}",
+                body=f"Luckycart Box deposit for {u_name}",
             )
         except Exception as e:
             logger.exception("SHPAY create_payin failed")
@@ -1597,7 +1597,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         order_no = f"O{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
         u_phone = (user.get("phone") or "").lstrip("+")
         u_name  = user.get("name") or "User"
-        u_email = user.get("email") or f"{u_phone or 'user'}@naijainvest.local"
+        u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
         try:
             resp = await onesspay.create_payin(
                 order_no=order_no,
@@ -1655,7 +1655,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         order_sn = f"JB{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
         u_phone = (user.get("phone") or "").lstrip("+")
         u_name  = user.get("name") or "User"
-        u_email = user.get("email") or f"{u_phone or 'user'}@naijainvest.local"
+        u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
         redirect_url = (os.environ.get("FRONTEND_URL") or "").rstrip("/") + "/deposit"
         try:
             resp = await juntbest.create_payin(
@@ -1664,7 +1664,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                 name=u_name,
                 phone=u_phone[-10:] if u_phone else "0000000000",
                 email=u_email,
-                remark=f"NaijaInvest deposit for {u_name}",
+                remark=f"Luckycart Box deposit for {u_name}",
                 redirect_url=redirect_url,
             )
         except Exception as e:
@@ -1880,7 +1880,7 @@ async def _juntbest_payout_withdrawal(w: dict, note: str = "") -> dict:
         name=w["account_name"],
         account=w["account_number"],
         bank_code=bank_code,
-        remark=note or f"NaijaInvest payout for {w.get('user_name') or 'user'}",
+        remark=note or f"Luckycart Box payout for {w.get('user_name') or 'user'}",
     )
     # JuntBest returns {code: 0, message, data:{platform_osn,...}}. Success is 0.
     if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
@@ -3547,7 +3547,7 @@ async def public_settings():
     """Non-sensitive settings safe to expose to any authenticated or anonymous client."""
     s = await get_settings()
     return {
-        "site_name": s.get("site_name") or "NaijaInvest",
+        "site_name": s.get("site_name") or "Luckycart Box",
         "telegram_url": s.get("telegram_url") or "",
         "whatsapp_url": s.get("whatsapp_url") or "",
         "telegram_channel_url": s.get("telegram_channel_url") or "",
@@ -3665,7 +3665,7 @@ async def health_check():
     UptimeRobot. Returns 200 as long as FastAPI is up. We deliberately do NOT
     ping MongoDB here — a slow-but-alive DB shouldn't force a machine restart.
     Use the separate `/api/admin/*/status` endpoints for gateway health."""
-    return {"status": "ok", "service": "naijainvest-api", "time": now_utc().isoformat()}
+    return {"status": "ok", "service": "luckycartbox-api", "time": now_utc().isoformat()}
 
 
 # ---------------------------------------------------------------------------

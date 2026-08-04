@@ -1,5 +1,5 @@
 /**
- * NaijaInvest service worker
+ * Luckycart Box service worker
  * -------------------------------------------------------------
  * Deliberately minimal — this SW exists to satisfy the PWA
  * install criteria (must respond to `fetch`) so browsers offer
@@ -9,9 +9,9 @@
  * + browser cache instead). This avoids the classic "stale UI
  * after deploy" trap that hurts fintech UX.
  */
-const SW_VERSION = "naijainvest-sw-2";
+const SW_VERSION = "luckycartbox-sw-3";
 const OFFLINE_URL = "/offline.html";
-const OFFLINE_CACHE = "naijainvest-offline-v1";
+const OFFLINE_CACHE = "luckycartbox-offline-v1";
 
 self.addEventListener("install", (event) => {
   // Pre-cache a small offline fallback page.

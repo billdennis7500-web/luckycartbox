@@ -2,7 +2,7 @@
  * Profile — restructured after user feedback (2026-07-29).
  *
  * Layout inspired by the reference screenshots the user shared, but rebuilt
- * in NaijaInvest's dark-navy + gold aesthetic:
+ * in Luckycart Box's dark-navy + gold aesthetic:
  *
  *   1. User identity card — avatar + name + masked phone + tier badge
  *   2. Two side-by-side hero cards — Wallet balance (Deposit CTA) + Bonus

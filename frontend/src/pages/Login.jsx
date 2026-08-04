@@ -35,7 +35,7 @@ export default function Login() {
           <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
             <TrendingUp className="w-5 h-5" />
           </div>
-          <span className="font-display font-bold text-xl">NaijaInvest</span>
+          <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
         <div className="relative z-10">
           <h1 className="font-display text-4xl font-800 tracking-tight leading-tight">
@@ -45,7 +45,7 @@ export default function Login() {
             Sign in to check your daily profits, manage investments, and cash out to your bank.
           </p>
         </div>
-        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 NaijaInvest</div>
+        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 Luckycart Box</div>
       </div>
 
       <div className="flex items-center justify-center p-6 lg:p-12">

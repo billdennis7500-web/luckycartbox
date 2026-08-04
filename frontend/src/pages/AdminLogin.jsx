@@ -44,7 +44,7 @@ export default function AdminLogin() {
           <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
             <TrendingUp className="w-5 h-5" />
           </div>
-          <span className="font-display font-bold text-xl">NaijaInvest</span>
+          <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
 
         <div className="relative z-10 space-y-6">
@@ -59,7 +59,7 @@ export default function AdminLogin() {
           </p>
         </div>
 
-        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 NaijaInvest</div>
+        <div className="text-xs text-[var(--nb-muted)] relative z-10">© 2026 Luckycart Box</div>
       </div>
 
       <div className="flex items-center justify-center p-6 lg:p-12">

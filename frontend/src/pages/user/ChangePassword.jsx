@@ -168,7 +168,7 @@ export default function ChangePassword() {
           <ShieldCheck className="w-5 h-5" />
         </div>
         <div className="text-xs text-[var(--nb-muted)] leading-relaxed">
-          Never share your password. NaijaInvest support will never ask for it. If you suspect your account is compromised, change it here immediately and message Customer Service.
+          Never share your password. Luckycart Box support will never ask for it. If you suspect your account is compromised, change it here immediately and message Customer Service.
         </div>
       </div>
     </div>

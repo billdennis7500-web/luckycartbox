@@ -101,7 +101,7 @@ export default function UserLayout() {
             >
               <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
             </div>
-            <span className="font-display font-bold text-lg">NaijaInvest</span>
+            <span className="font-display font-bold text-lg">Luckycart Box</span>
           </Link>
           <div className="flex items-center gap-3">
             <button

@@ -1,5 +1,5 @@
 /**
- * NaijaInvest — 10-tier level system
+ * Luckycart Box — 10-tier level system
  *
  * Levels are derived purely from `user.total_invested` (the running total of
  * everything the user has bought through the shop). No admin toggle needed —

@@ -1,5 +1,5 @@
 """
-JuntPay (formerly JuntBest) OpenAPI v1 client for NaijaInvest.
+JuntPay (formerly JuntBest) OpenAPI v1 client for Luckycart Box.
 
 Migrated 2026-07-30 from the legacy ngn.junt.best v1 API to the new
 juntpay.top v1 API. The merchant portal URL is https://merchant.juntpay.top
@@ -217,7 +217,7 @@ async def _post(path: str, body: Dict[str, Any], timeout: float = 20.0) -> Dict[
 # Response normalisation
 # ---------------------------------------------------------------------------
 #
-# The rest of NaijaInvest (server.py, admin views, deposit records) was
+# The rest of Luckycart Box (server.py, admin views, deposit records) was
 # written against the legacy field names (`platform_osn`, `pay_url`,
 # `message`). We normalise the new v1 response into the legacy shape at the
 # SDK boundary so callers don't need to change.
@@ -292,7 +292,7 @@ async def create_payin(order_sn: str, amount: float, *,
         "wayCode":        c["payin_way_code"],
         "subject":        remark or "Wallet deposit",
         "customerName":   name or "User",
-        "customerEmail":  email or "user@naijainvest.local",
+        "customerEmail":  email or "user@luckycartbox.local",
         "customerMobile": phone or "0000000000",
     })
     if c["payin_notify"]:
@@ -339,7 +339,7 @@ async def create_payout(order_sn: str, amount: float, *,
         "customerName":   name or "Beneficiary",
         # These two are marked required in the docs even for payouts.
         "customerMobile": "0000000000",
-        "customerEmail":  "payee@naijainvest.local",
+        "customerEmail":  "payee@luckycartbox.local",
     })
     if c["payout_notify"]:
         body["notifyUrl"] = c["payout_notify"]

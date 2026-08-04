@@ -1,5 +1,5 @@
 """
-1SSPay OpenAPI client for NaijaInvest.
+1SSPay OpenAPI client for Luckycart Box.
 
 Docs (Chinese): https://www.showdoc.com.cn/2598851032522392
 Base URL (prod): https://api.1sspay.com/

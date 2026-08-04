@@ -1,4 +1,4 @@
-/*  Shared visual language for NaijaInvest — matches the Marketplace redesign
+/*  Shared visual language for Luckycart Box — matches the Marketplace redesign
  *  (dark-gold ambient background, tier-colored glow border, dashed gold accent
  *  lines, purple pill CTAs, chip badges, big monospaced numbers).
  *

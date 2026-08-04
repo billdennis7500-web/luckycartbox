@@ -1,7 +1,7 @@
 {
-  "name": "NaijaInvest — Nigeria's investment platform",
-  "short_name": "NaijaInvest",
-  "description": "Invest in curated products, earn daily profits, and grow your wallet with NaijaInvest.",
+  "name": "Luckycart Box — Nigeria's investment platform",
+  "short_name": "Luckycart Box",
+  "description": "Invest in curated products, earn daily profits, and grow your wallet with Luckycart Box.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

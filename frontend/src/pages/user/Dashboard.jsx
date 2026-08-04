@@ -51,7 +51,7 @@ function ActionTile({ to, icon: Icon, label, tone, testid }) {
 export default function Dashboard() {
   const { user, refresh } = useAuth();
   const [hidden, setHidden] = useState(false);
-  const [settings, setSettings] = useState({ telegram_url: "", welcome_message: "", site_name: "NaijaInvest" });
+  const [settings, setSettings] = useState({ telegram_url: "", welcome_message: "", site_name: "Luckycart Box" });
   const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function Dashboard() {
   };
 
   const tg = (settings.telegram_url || "").trim();
-  const brand = settings.site_name || "NaijaInvest";
+  const brand = settings.site_name || "Luckycart Box";
   const welcomeMsg = (settings.welcome_message || "").trim() ||
     `Welcome to ${brand} — grow your money the smart way. Invest today, cash out tomorrow.`;
 

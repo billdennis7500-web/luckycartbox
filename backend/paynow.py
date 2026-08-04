@@ -1,5 +1,5 @@
 """
-PayNow® OpenAPI client for NaijaInvest.
+PayNow® OpenAPI client for Luckycart Box.
 
 Signing rule (from https://merchant.paynow.money OpenAPI docs):
   string_to_sign = merchantNo + params_sorted_json + signType + timestamp + merchantKey

@@ -54,7 +54,7 @@ export default function Referrals() {
   );
 
   const link = `${window.location.origin}/register?ref=${data.referral_code}`;
-  const shareText = `Join me on NaijaInvest — earn daily naira profits. Use my code ${data.referral_code} to sign up and grab a ₦500 welcome bonus.`;
+  const shareText = `Join me on Luckycart Box — earn daily naira profits. Use my code ${data.referral_code} to sign up and grab a ₦500 welcome bonus.`;
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(link);

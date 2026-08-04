@@ -45,7 +45,7 @@ export default function AdminLayout() {
             </div>
             <div>
               <div className="font-display font-bold text-lg leading-none">Admin</div>
-              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">NaijaInvest</div>
+              <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Luckycart Box</div>
             </div>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden text-[var(--nb-muted)]"><X className="w-5 h-5"/></button>

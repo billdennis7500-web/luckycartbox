@@ -33,13 +33,13 @@ export default function InstallAppTile() {
 
   async function handleClick() {
     if (isInstalled) {
-      toast.success("NaijaInvest is already on your home screen.");
+      toast.success("Luckycart Box is already on your home screen.");
       return;
     }
     if (canInstall) {
       const outcome = await promptInstall();
       if (outcome === "accepted") {
-        toast.success("Installed! Look for the NaijaInvest icon on your home screen.");
+        toast.success("Installed! Look for the Luckycart Box icon on your home screen.");
       } else if (outcome === "dismissed") {
         toast.info("No worries — you can install anytime from this tile.");
       } else if (isIOS) {
@@ -131,7 +131,7 @@ export default function InstallAppTile() {
               </div>
               <div className="flex-1">
                 <DialogTitle className="font-display text-lg font-800 text-white">
-                  Install NaijaInvest on iPhone
+                  Install Luckycart Box on iPhone
                 </DialogTitle>
                 <DialogDescription className="text-sm text-[var(--nb-muted)] mt-1">
                   Two quick taps and you're done.
@@ -163,7 +163,7 @@ export default function InstallAppTile() {
               <IosStep
                 n={3}
                 title="Tap 'Add'"
-                hint="NaijaInvest lands on your home screen — open it like any other app."
+                hint="Luckycart Box lands on your home screen — open it like any other app."
                 icon={<Sparkles className="w-4 h-4" strokeWidth={2.5} />}
               />
             </ol>

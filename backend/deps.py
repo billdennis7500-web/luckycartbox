@@ -143,7 +143,7 @@ DEFAULT_SETTINGS = {
     "welcome_bonus": 500.0,
     "min_withdrawal": 1000.0,
     "min_deposit": 500.0,
-    "site_name": "NaijaInvest",
+    "site_name": "Luckycart Box",
 }
 
 

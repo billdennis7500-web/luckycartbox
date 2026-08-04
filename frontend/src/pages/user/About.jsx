@@ -51,7 +51,7 @@ export default function About() {
         </div>
         <div className="relative">
           <MicroLabel tone="gold" className="!mt-0 justify-center">About</MicroLabel>
-          <div className="font-display font-800 text-2xl text-white mt-1">NaijaInvest</div>
+          <div className="font-display font-800 text-2xl text-white mt-1">Luckycart Box</div>
           <div className="text-xs text-[var(--nb-muted)] mt-1">
             Nigeria's trusted daily-earning investment platform
           </div>
@@ -65,12 +65,12 @@ export default function About() {
           Put daily-earning investments within reach of every Nigerian — without hidden fees, without confusing jargon, and without waiting weeks for a payout.
         </div>
         <div className="mt-3 text-xs text-[var(--nb-muted)] leading-relaxed">
-          We built NaijaInvest for the trader in Balogun, the freelancer in Yaba, and the student in Zaria alike. If you can operate a bank app, you can grow your money here.
+          We built Luckycart Box for the trader in Balogun, the freelancer in Yaba, and the student in Zaria alike. If you can operate a bank app, you can grow your money here.
         </div>
       </SoftCard>
 
-      {/* Why NaijaInvest */}
-      <SectionHeader title="Why NaijaInvest" />
+      {/* Why Luckycart Box */}
+      <SectionHeader title="Why Luckycart Box" />
       <div className="space-y-3">
         {VALUES.map((v) => {
           const Icon = v.icon;
@@ -124,7 +124,7 @@ export default function About() {
 
       {/* Legal footer */}
       <div className="text-center text-[10px] text-[var(--nb-muted)] pb-4 leading-relaxed">
-        © {new Date().getFullYear()} NaijaInvest. All rights reserved.
+        © {new Date().getFullYear()} Luckycart Box. All rights reserved.
         <br />
         Investments carry risk. Past returns do not guarantee future performance.
       </div>
