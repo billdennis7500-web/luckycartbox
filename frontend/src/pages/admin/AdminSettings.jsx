@@ -8,20 +8,38 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy, AlertTriangle, Trash2, Loader2, Settings, CreditCard, Server, ShieldAlert } from "lucide-react";
+import { Copy, AlertTriangle, Trash2, Loader2, Sparkles, Wallet, MessageCircle, Award, CreditCard, Server, ShieldAlert, LogOut } from "lucide-react";
 import { SectionHeader } from "@/components/design";
 
+/**
+ * Admin Settings tab layout — grouped by concern rather than a single
+ * monolithic "General" tab. Each group has its own icon + short subtitle
+ * so the admin can find things fast.
+ *
+ *   Branding   — site name, welcome bonus, welcome pop-up
+ *   Finance    — deposit/withdrawal limits, fee, auto-payout, quick amounts
+ *   Referrals  — reward levels list + qualifying-refs toggle
+ *   Support    — WhatsApp + Telegram channels, working hours
+ *   Payments   — gateway toggles + PayNow webhook (existing)
+ *   Server     — outbound IP + all gateway webhook URLs (existing)
+ *   Danger     — reset platform + force-logout all users
+ */
 const TABS = [
-  { key: "general",  label: "General",  icon: Settings },
-  { key: "payments", label: "Payments", icon: CreditCard },
-  { key: "infra",    label: "Server",   icon: Server },
-  { key: "danger",   label: "Danger",   icon: ShieldAlert },
+  { key: "branding",  label: "Branding",  icon: Sparkles },
+  { key: "finance",   label: "Finance",   icon: Wallet },
+  { key: "referrals", label: "Referrals", icon: Award },
+  { key: "support",   label: "Support",   icon: MessageCircle },
+  { key: "payments",  label: "Payments",  icon: CreditCard },
+  { key: "infra",     label: "Server",    icon: Server },
+  { key: "danger",    label: "Danger",    icon: ShieldAlert },
 ];
+
+const EDITABLE_TABS = new Set(["branding", "finance", "referrals", "support"]);
 
 export default function AdminSettings() {
   const [s, setS] = useState(null);
   const [pn, setPn] = useState(null);
-  const [tab, setTab] = useState("general");
+  const [tab, setTab] = useState("branding");
 
   useEffect(() => {
     api.get("/admin/settings").then((r) => setS(r.data));
@@ -86,255 +104,122 @@ export default function AdminSettings() {
         testid="admin-settings-heading"
       />
 
-      {/* Tab bar */}
-      <div className="grid grid-cols-4 gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)] sticky top-2 z-30 backdrop-blur">
+      {/* Tab bar — 7 tabs, wraps on narrow screens. Sticky at top so admins
+          can jump between tabs while scrolling within a long section. */}
+      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 p-1.5 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)] sticky top-2 z-30 backdrop-blur">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             data-testid={`admin-settings-tab-${key}`}
-            className={`h-10 rounded-lg text-xs font-display font-700 transition-colors flex items-center justify-center gap-1.5 ${
+            className={`h-10 rounded-lg text-[11px] sm:text-xs font-display font-700 transition-colors flex items-center justify-center gap-1.5 px-1 ${
               tab === key
                 ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30"
                 : "text-[var(--nb-muted)] hover:text-white"
             }`}
           >
-            <Icon className="w-3.5 h-3.5" />
-            <span>{label}</span>
+            <Icon className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{label}</span>
           </button>
         ))}
       </div>
 
-      {tab === "general" && (
-      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4">
+      {/* ─── BRANDING ─── site identity + welcome experience */}
+      {tab === "branding" && (
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-5" data-testid="admin-branding-card">
+        <div>
+          <h2 className="font-display text-lg font-600">Brand identity</h2>
+          <p className="text-xs text-[var(--nb-muted)] mt-1">How your platform names itself and greets new signups.</p>
+        </div>
         <div>
           <Label>Site name</Label>
           <Input value={s.site_name} onChange={(e) => setS({ ...s, site_name: e.target.value })}
                  data-testid="setting-sitename"
                  className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
+          <p className="text-xs text-[var(--nb-muted)] mt-1">Shown in the app header, tab title and PWA manifest.</p>
         </div>
         <div>
           <Label>Welcome bonus (₦)</Label>
           <Input type="number" value={s.welcome_bonus} onChange={(e) => setS({ ...s, welcome_bonus: e.target.value })}
                  data-testid="setting-welcome"
-                 className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
+                 className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
+          <p className="text-xs text-[var(--nb-muted)] mt-1">Credited to every new signup's wallet. Signup UI updates instantly.</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Welcome pop-up message</Label>
+          <textarea
+            value={s.welcome_message || ""}
+            onChange={(e) => setS({ ...s, welcome_message: e.target.value })}
+            rows={3}
+            placeholder="Shown to users when they open or refresh the home page."
+            data-testid="setting-welcome-message"
+            className="mt-2 w-full rounded-md bg-[var(--nb-card2)] border border-[var(--nb-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[#0055FF]/40"
+          />
+        </div>
+      </Card>
+      )}
+
+      {/* ─── FINANCE ─── deposit/withdrawal limits, fees, payout mode */}
+      {tab === "finance" && (
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-5" data-testid="admin-finance-card">
+        <div>
+          <h2 className="font-display text-lg font-600">Deposit & withdrawal rules</h2>
+          <p className="text-xs text-[var(--nb-muted)] mt-1">Minimums, platform fee, payout automation and deposit shortcuts.</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label>Minimum deposit (₦)</Label>
             <Input type="number" value={s.min_deposit} onChange={(e) => setS({ ...s, min_deposit: e.target.value })}
                    data-testid="setting-mindep"
-                   className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
+                   className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
           </div>
           <div>
             <Label>Minimum withdrawal (₦)</Label>
             <Input type="number" value={s.min_withdrawal} onChange={(e) => setS({ ...s, min_withdrawal: e.target.value })}
                    data-testid="setting-minwd"
-                   className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11" />
+                   className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
+          </div>
+          <div>
+            <Label>Platform fee (%)</Label>
+            <Input type="number" step="0.01" min="0" max="100"
+                   value={s.withdrawal_fee_pct ?? 0}
+                   onChange={(e) => setS({ ...s, withdrawal_fee_pct: e.target.value })}
+                   data-testid="setting-withdrawal-fee"
+                   className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
+            <p className="text-xs text-[var(--nb-muted)] mt-1">Deducted from every withdrawal. 0 disables the fee.</p>
+          </div>
+          <div>
+            <Label>Bulk approve limit</Label>
+            <Input type="number" min="1" max="500"
+                   value={s.batch_approve_limit ?? 50}
+                   onChange={(e) => setS({ ...s, batch_approve_limit: e.target.value })}
+                   data-testid="setting-batch-limit"
+                   className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
+            <p className="text-xs text-[var(--nb-muted)] mt-1">Max withdrawals you can approve at once.</p>
           </div>
         </div>
 
-        <div className="pt-3 border-t border-[var(--nb-border)]">
-          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Support channels & hours</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>WhatsApp DM (wa.me link)</Label>
-              <Input
-                value={s.whatsapp_url || ""}
-                onChange={(e) => setS({ ...s, whatsapp_url: e.target.value })}
-                placeholder="https://wa.me/234XXXXXXXXXX"
-                data-testid="setting-whatsapp-url"
-                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
-              />
+        <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card2)]">
+          <input
+            type="checkbox"
+            checked={!!s.auto_payout_enabled}
+            onChange={(e) => setS({ ...s, auto_payout_enabled: e.target.checked })}
+            data-testid="setting-auto-payout"
+            className="mt-1 w-4 h-4 accent-[#0055FF]"
+          />
+          <div>
+            <div className="text-sm font-display font-600">
+              Auto-payout {s.auto_payout_enabled ? <span className="text-[#10B981]">(ON)</span> : <span className="text-[#F59E0B]">(OFF — manual approval)</span>}
             </div>
-            <div>
-              <Label>WhatsApp Channel</Label>
-              <Input
-                value={s.whatsapp_channel_url || ""}
-                onChange={(e) => setS({ ...s, whatsapp_channel_url: e.target.value })}
-                placeholder="https://whatsapp.com/channel/..."
-                data-testid="setting-whatsapp-channel-url"
-                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
-              />
-            </div>
-            <div>
-              <Label>Telegram DM (support)</Label>
-              <Input
-                value={s.telegram_url || ""}
-                onChange={(e) => setS({ ...s, telegram_url: e.target.value })}
-                placeholder="https://t.me/yoursupport"
-                data-testid="setting-telegram-url"
-                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
-              />
-            </div>
-            <div>
-              <Label>Telegram Channel</Label>
-              <Input
-                value={s.telegram_channel_url || ""}
-                onChange={(e) => setS({ ...s, telegram_channel_url: e.target.value })}
-                placeholder="https://t.me/yourchannel"
-                data-testid="setting-telegram-channel-url"
-                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
-              />
+            <div className="text-xs text-[var(--nb-muted)]">
+              When ON, user withdrawals fire the gateway immediately. When OFF, admin must approve manually — recommended for higher control.
             </div>
           </div>
-          <div className="mt-3">
-            <Label>Working hours (shown on customer support)</Label>
-            <Input
-              value={s.support_hours || ""}
-              onChange={(e) => setS({ ...s, support_hours: e.target.value })}
-              placeholder="Monday to Sunday, 10:00 AM to 5:00 PM"
-              data-testid="setting-support-hours"
-              className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
-            />
-          </div>
-          <p className="text-xs text-[var(--nb-muted)] mt-2">All four channels appear on the Customer Support page. Leave blank to hide a channel.</p>
-
-          <div className="mt-4">
-            <Label>Welcome pop-up message</Label>
-            <textarea
-              value={s.welcome_message || ""}
-              onChange={(e) => setS({ ...s, welcome_message: e.target.value })}
-              rows={3}
-              placeholder="Shown to users when they open or refresh the home page."
-              data-testid="setting-welcome-message"
-              className="mt-2 w-full rounded-md bg-[var(--nb-card2)] border border-[var(--nb-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[#0055FF]/40"
-            />
-          </div>
-        </div>
+        </label>
 
         <div className="pt-3 border-t border-[var(--nb-border)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Referral reward levels</div>
-            <label className="inline-flex items-center gap-2 text-xs text-[var(--nb-muted)] cursor-pointer" data-testid="setting-reflvl-req-inv">
-              <input
-                type="checkbox"
-                checked={!!s.referral_level_requires_investment}
-                onChange={(e) => setS({ ...s, referral_level_requires_investment: e.target.checked })}
-                className="accent-[#F5C518] w-4 h-4"
-              />
-              Only count referrals who have invested
-            </label>
-          </div>
-          <p className="text-xs text-[var(--nb-muted)] mb-3">Users see these as milestone bonuses on the Rewards page. Editing thresholds after users have claimed will not reverse past claims.</p>
-          <div className="space-y-2">
-            {(s.referral_levels || []).map((lvl, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center bg-[var(--nb-card2)] p-2 rounded-md border border-[var(--nb-border)]" data-testid={`setting-reflvl-row-${i}`}>
-                <div className="col-span-1 text-xs text-[var(--nb-muted)] tabular text-center">#{lvl.level}</div>
-                <Input
-                  value={lvl.name || ""}
-                  onChange={(e) => {
-                    const next = [...s.referral_levels]; next[i] = { ...lvl, name: e.target.value }; setS({ ...s, referral_levels: next });
-                  }}
-                  placeholder="Ignite"
-                  data-testid={`setting-reflvl-${i}-name`}
-                  className="col-span-3 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  value={lvl.min_referrals ?? ""}
-                  onChange={(e) => {
-                    const next = [...s.referral_levels]; next[i] = { ...lvl, min_referrals: Number(e.target.value) }; setS({ ...s, referral_levels: next });
-                  }}
-                  placeholder="Refs"
-                  data-testid={`setting-reflvl-${i}-min`}
-                  className="col-span-2 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm tabular"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  value={lvl.reward ?? ""}
-                  onChange={(e) => {
-                    const next = [...s.referral_levels]; next[i] = { ...lvl, reward: Number(e.target.value) }; setS({ ...s, referral_levels: next });
-                  }}
-                  placeholder="₦ reward"
-                  data-testid={`setting-reflvl-${i}-reward`}
-                  className="col-span-3 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm tabular"
-                />
-                <Input
-                  type="color"
-                  value={lvl.color || "#F5C518"}
-                  onChange={(e) => {
-                    const next = [...s.referral_levels]; next[i] = { ...lvl, color: e.target.value }; setS({ ...s, referral_levels: next });
-                  }}
-                  data-testid={`setting-reflvl-${i}-color`}
-                  className="col-span-2 bg-[var(--nb-card)] border-[var(--nb-border)] h-9 p-1"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = s.referral_levels.filter((_, j) => j !== i); setS({ ...s, referral_levels: next });
-                  }}
-                  data-testid={`setting-reflvl-${i}-remove`}
-                  className="col-span-1 h-9 grid place-items-center text-[var(--nb-muted)] hover:text-red-400"
-                  aria-label="Remove level"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                const cur = s.referral_levels || [];
-                const nextLevel = cur.length ? Math.max(...cur.map((l) => Number(l.level) || 0)) + 1 : 1;
-                setS({
-                  ...s,
-                  referral_levels: [...cur, { level: nextLevel, name: `Level ${nextLevel}`, icon: "gem", color: "#F5C518", min_referrals: 0, reward: 0 }],
-                });
-              }}
-              data-testid="setting-reflvl-add"
-              className="w-full rounded-md border border-dashed border-[var(--nb-border)] text-xs text-[var(--nb-muted)] hover:text-white hover:border-[#F5C518] py-2"
-            >
-              + Add another level
-            </button>
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-[var(--nb-border)]">
-          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Withdrawals</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Platform fee (%)</Label>
-              <Input type="number" step="0.01" min="0" max="100"
-                     value={s.withdrawal_fee_pct ?? 0}
-                     onChange={(e) => setS({ ...s, withdrawal_fee_pct: e.target.value })}
-                     data-testid="setting-withdrawal-fee"
-                     className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
-              <p className="text-xs text-[var(--nb-muted)] mt-1">Deducted from every withdrawal. 0 disables the fee.</p>
-            </div>
-            <div>
-              <Label>Bulk approve limit</Label>
-              <Input type="number" min="1" max="500"
-                     value={s.batch_approve_limit ?? 50}
-                     onChange={(e) => setS({ ...s, batch_approve_limit: e.target.value })}
-                     data-testid="setting-batch-limit"
-                     className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular" />
-              <p className="text-xs text-[var(--nb-muted)] mt-1">Max withdrawals you can approve at once.</p>
-            </div>
-          </div>
-          <label className="mt-4 flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!s.auto_payout_enabled}
-              onChange={(e) => setS({ ...s, auto_payout_enabled: e.target.checked })}
-              data-testid="setting-auto-payout"
-              className="mt-1 w-4 h-4 accent-[#0055FF]"
-            />
-            <div>
-              <div className="text-sm font-display font-600">
-                Auto-payout {s.auto_payout_enabled ? <span className="text-[#10B981]">(ON)</span> : <span className="text-[#F59E0B]">(OFF — manual approval)</span>}
-              </div>
-              <div className="text-xs text-[var(--nb-muted)]">
-                When ON, user withdrawals fire the gateway immediately. When OFF, admin must approve manually — recommended for higher control.
-              </div>
-            </div>
-          </label>
-        </div>
-
-        <div className="pt-3 border-t border-[var(--nb-border)]">
-          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Deposit page</div>
+          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Deposit page shortcuts</div>
           <Label>Quick amount presets (₦)</Label>
           <Input
             value={
@@ -349,9 +234,190 @@ export default function AdminSettings() {
           />
           <p className="text-xs text-[var(--nb-muted)] mt-1">Comma-separated. Rendered as chips on the user deposit page.</p>
         </div>
-
-        <Button onClick={save} data-testid="setting-save-btn" className="bg-[#0055FF] hover:bg-[#3377FF]">Save</Button>
       </Card>
+      )}
+
+      {/* ─── REFERRALS ─── milestone reward levels */}
+      {tab === "referrals" && (
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4" data-testid="admin-referrals-card">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-600">Referral reward levels</h2>
+            <p className="text-xs text-[var(--nb-muted)] mt-1">
+              Milestone bonuses users can claim from the Rewards page. Editing thresholds after users have claimed will not reverse past claims.
+            </p>
+          </div>
+        </div>
+        <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card2)]" data-testid="setting-reflvl-req-inv">
+          <input
+            type="checkbox"
+            checked={!!s.referral_level_requires_investment}
+            onChange={(e) => setS({ ...s, referral_level_requires_investment: e.target.checked })}
+            className="mt-1 accent-[#F5C518] w-4 h-4"
+          />
+          <div>
+            <div className="text-sm font-display font-600">Only count referrals who have invested</div>
+            <div className="text-xs text-[var(--nb-muted)]">
+              When ON, a signup counts toward a user's tier only after that referred user makes their first investment. When OFF, every signup counts.
+            </div>
+          </div>
+        </label>
+        <div className="space-y-2">
+          {(s.referral_levels || []).map((lvl, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2 items-center bg-[var(--nb-card2)] p-2 rounded-md border border-[var(--nb-border)]" data-testid={`setting-reflvl-row-${i}`}>
+              <div className="col-span-1 text-xs text-[var(--nb-muted)] tabular text-center">#{lvl.level}</div>
+              <Input
+                value={lvl.name || ""}
+                onChange={(e) => {
+                  const next = [...s.referral_levels]; next[i] = { ...lvl, name: e.target.value }; setS({ ...s, referral_levels: next });
+                }}
+                placeholder="Ignite"
+                data-testid={`setting-reflvl-${i}-name`}
+                className="col-span-3 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm"
+              />
+              <Input
+                type="number"
+                min="0"
+                value={lvl.min_referrals ?? ""}
+                onChange={(e) => {
+                  const next = [...s.referral_levels]; next[i] = { ...lvl, min_referrals: Number(e.target.value) }; setS({ ...s, referral_levels: next });
+                }}
+                placeholder="Refs"
+                data-testid={`setting-reflvl-${i}-min`}
+                className="col-span-2 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm tabular"
+              />
+              <Input
+                type="number"
+                min="0"
+                value={lvl.reward ?? ""}
+                onChange={(e) => {
+                  const next = [...s.referral_levels]; next[i] = { ...lvl, reward: Number(e.target.value) }; setS({ ...s, referral_levels: next });
+                }}
+                placeholder="₦ reward"
+                data-testid={`setting-reflvl-${i}-reward`}
+                className="col-span-3 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm tabular"
+              />
+              <Input
+                type="color"
+                value={lvl.color || "#F5C518"}
+                onChange={(e) => {
+                  const next = [...s.referral_levels]; next[i] = { ...lvl, color: e.target.value }; setS({ ...s, referral_levels: next });
+                }}
+                data-testid={`setting-reflvl-${i}-color`}
+                className="col-span-2 bg-[var(--nb-card)] border-[var(--nb-border)] h-9 p-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const next = s.referral_levels.filter((_, j) => j !== i); setS({ ...s, referral_levels: next });
+                }}
+                data-testid={`setting-reflvl-${i}-remove`}
+                className="col-span-1 h-9 grid place-items-center text-[var(--nb-muted)] hover:text-red-400"
+                aria-label="Remove level"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              const cur = s.referral_levels || [];
+              const nextLevel = cur.length ? Math.max(...cur.map((l) => Number(l.level) || 0)) + 1 : 1;
+              setS({
+                ...s,
+                referral_levels: [...cur, { level: nextLevel, name: `Level ${nextLevel}`, icon: "gem", color: "#F5C518", min_referrals: 0, reward: 0 }],
+              });
+            }}
+            data-testid="setting-reflvl-add"
+            className="w-full rounded-md border border-dashed border-[var(--nb-border)] text-xs text-[var(--nb-muted)] hover:text-white hover:border-[#F5C518] py-2"
+          >
+            + Add another level
+          </button>
+        </div>
+      </Card>
+      )}
+
+      {/* ─── SUPPORT ─── customer service channels + working hours */}
+      {tab === "support" && (
+      <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-5" data-testid="admin-support-card">
+        <div>
+          <h2 className="font-display text-lg font-600">Customer support channels</h2>
+          <p className="text-xs text-[var(--nb-muted)] mt-1">Users see these on the Customer Support page. Leave a URL blank to hide that channel.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label>WhatsApp DM (wa.me link)</Label>
+            <Input
+              value={s.whatsapp_url || ""}
+              onChange={(e) => setS({ ...s, whatsapp_url: e.target.value })}
+              placeholder="https://wa.me/234XXXXXXXXXX"
+              data-testid="setting-whatsapp-url"
+              className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+            />
+          </div>
+          <div>
+            <Label>WhatsApp Channel</Label>
+            <Input
+              value={s.whatsapp_channel_url || ""}
+              onChange={(e) => setS({ ...s, whatsapp_channel_url: e.target.value })}
+              placeholder="https://whatsapp.com/channel/..."
+              data-testid="setting-whatsapp-channel-url"
+              className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+            />
+          </div>
+          <div>
+            <Label>Telegram DM (support)</Label>
+            <Input
+              value={s.telegram_url || ""}
+              onChange={(e) => setS({ ...s, telegram_url: e.target.value })}
+              placeholder="https://t.me/yoursupport"
+              data-testid="setting-telegram-url"
+              className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+            />
+          </div>
+          <div>
+            <Label>Telegram Channel</Label>
+            <Input
+              value={s.telegram_channel_url || ""}
+              onChange={(e) => setS({ ...s, telegram_channel_url: e.target.value })}
+              placeholder="https://t.me/yourchannel"
+              data-testid="setting-telegram-channel-url"
+              className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Working hours</Label>
+          <Input
+            value={s.support_hours || ""}
+            onChange={(e) => setS({ ...s, support_hours: e.target.value })}
+            placeholder="Monday to Sunday, 10:00 AM to 5:00 PM"
+            data-testid="setting-support-hours"
+            className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+          />
+          <p className="text-xs text-[var(--nb-muted)] mt-1">Shown on the Customer Support hero. Free-form text.</p>
+        </div>
+      </Card>
+      )}
+
+      {/* Global Save button — only appears on editable tabs. Saves ALL settings
+          state in one shot so admins can tweak multiple tabs before persisting. */}
+      {EDITABLE_TABS.has(tab) && (
+        <div className="sticky bottom-3 z-30">
+          <div className="rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)] p-3 flex items-center justify-between gap-3 shadow-lg">
+            <div className="text-xs text-[var(--nb-muted)]">
+              Changes across every tab save together.
+            </div>
+            <Button
+              onClick={save}
+              data-testid="setting-save-btn"
+              className="bg-[#0055FF] hover:bg-[#3377FF] h-10 px-5 font-display font-700"
+            >
+              Save changes
+            </Button>
+          </div>
+        </div>
       )}
 
       {tab === "payments" && (
@@ -393,7 +459,12 @@ export default function AdminSettings() {
         </>
       )}
 
-      {tab === "danger" && <DangerZoneCard />}
+      {tab === "danger" && (
+        <div className="space-y-4">
+          <ForceLogoutCard />
+          <DangerZoneCard />
+        </div>
+      )}
     </div>
   );
 }
@@ -784,6 +855,149 @@ function ToggleChip({ label, value, disabled, onChange, testid }) {
 
 /* -------------------------------------------------------------------------- */
 /*  Danger Zone — wipe all user data                                          */
+/* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/*  Force-Logout card — invalidates every non-admin session platform-wide by  */
+/*  bumping settings.session_epoch. Admin sessions are exempt.                */
+/* -------------------------------------------------------------------------- */
+
+function ForceLogoutCard() {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [phrase, setPhrase] = useState("");
+  const [result, setResult] = useState(null);
+  const PHRASE = "LOGOUT ALL";
+
+  const submit = async () => {
+    if (phrase.trim() !== PHRASE) {
+      toast.error(`Type "${PHRASE}" exactly to confirm`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data } = await api.post("/admin/sessions/logout-all");
+      setResult(data);
+      toast.success(`Signed out ${data.affected_users} user${data.affected_users === 1 ? "" : "s"} platform-wide`);
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Force logout failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const close = () => {
+    if (busy) return;
+    setOpen(false);
+    setPhrase("");
+    setResult(null);
+  };
+
+  return (
+    <Card
+      className="bg-[#3d2a05] border border-[#F59E0B]/40 p-5 rounded-2xl"
+      data-testid="admin-force-logout-card"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl grid place-items-center bg-[#F59E0B]/20 border border-[#F59E0B]/40 shrink-0">
+          <LogOut className="w-5 h-5 text-[#F59E0B]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display text-lg font-700 text-white">Force logout all users</h3>
+          <p className="text-xs text-[#FDE68A] mt-1 leading-relaxed">
+            Signs out every currently logged-in user across every device and every browser.
+            They'll need to log in again on their next tap. Admin sessions (yours included)
+            are NOT affected. Useful after a policy change, token secret rotation, or a
+            security incident.
+          </p>
+
+          <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : close())}>
+            <DialogTrigger asChild>
+              <Button
+                className="mt-4 bg-[#F59E0B] hover:bg-[#d97706] text-black rounded-xl font-display font-700"
+                data-testid="open-force-logout-dialog-btn"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Force logout all users
+              </Button>
+            </DialogTrigger>
+            <DialogContent
+              className="bg-[var(--nb-card)] border-[var(--nb-border)] text-white max-w-md"
+              data-testid="force-logout-dialog"
+            >
+              {!result ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="font-display flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-[#F59E0B]" />
+                      Sign out every user?
+                    </DialogTitle>
+                    <DialogDescription className="text-[var(--nb-muted)] text-xs">
+                      Every non-admin session dies immediately. Type{" "}
+                      <span className="text-[#F59E0B] font-mono font-800">{PHRASE}</span>{" "}
+                      to confirm.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="py-2">
+                    <Input
+                      value={phrase}
+                      onChange={(e) => setPhrase(e.target.value)}
+                      placeholder={PHRASE}
+                      autoFocus
+                      data-testid="force-logout-confirm-input"
+                      className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 tabular"
+                    />
+                  </div>
+                  <DialogFooter className="gap-2">
+                    <Button
+                      onClick={close}
+                      variant="outline"
+                      className="border-[var(--nb-border)]"
+                      data-testid="force-logout-cancel-btn"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={submit}
+                      disabled={busy || phrase.trim() !== PHRASE}
+                      className="bg-[#F59E0B] hover:bg-[#d97706] text-black font-display font-700 disabled:opacity-40"
+                      data-testid="force-logout-confirm-btn"
+                    >
+                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <LogOut className="w-4 h-4 mr-2" />}
+                      Sign everyone out
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="font-display">All users signed out</DialogTitle>
+                    <DialogDescription className="text-[var(--nb-muted)] text-xs">
+                      {result.affected_users} session{result.affected_users === 1 ? "" : "s"} invalidated. Any pending client-side request will return 401 and the user will be redirected to login.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      onClick={close}
+                      className="bg-[#0055FF] hover:bg-[#3377FF] text-white"
+                      data-testid="force-logout-done-btn"
+                    >
+                      Done
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+
+/* -------------------------------------------------------------------------- */
+/*  Danger zone — nuclear wipe of all user-generated data. Guarded by phrase. */
 /* -------------------------------------------------------------------------- */
 
 function DangerZoneCard() {

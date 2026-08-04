@@ -70,6 +70,9 @@ def create_access_token(user_id: str, role: str) -> str:
         "sub": user_id,
         "role": role,
         "type": "access",
+        # `iat` (issued-at) is the anchor the "force logout all users" admin
+        # action uses to invalidate any token issued before session_epoch.
+        "iat": int(datetime.now(timezone.utc).timestamp()),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_MINUTES),
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -79,6 +82,7 @@ def create_refresh_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
         "type": "refresh",
+        "iat": int(datetime.now(timezone.utc).timestamp()),
         "exp": datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS),
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -171,6 +175,14 @@ async def get_current_user(request: Request) -> dict:
     user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Global "logout all users" gate — any non-admin token issued BEFORE the
+    # admin's last force-logout is considered expired. Admin tokens are exempt
+    # so an admin can't accidentally kick themselves out with this action.
+    if user.get("role") != "admin":
+        settings_doc = await db.settings.find_one({}) or {}
+        epoch = int(settings_doc.get("session_epoch") or 0)
+        if epoch and int(payload.get("iat") or 0) < epoch:
+            raise HTTPException(status_code=401, detail="Session revoked")
     return user
 
 
@@ -2388,6 +2400,30 @@ async def admin_reset_platform(payload: PlatformResetIn, admin: dict = Depends(g
         result["transactions_deleted"], result["investments_deleted"], result["coupons_reset"],
     )
     return {"ok": True, **result}
+
+
+@api.post("/admin/sessions/logout-all")
+async def admin_force_logout_all_users(admin: dict = Depends(get_admin_user)):
+    """Invalidate every currently-signed-in NON-ADMIN user session platform-wide.
+
+    Mechanism: bump `settings.session_epoch` to the current unix timestamp.
+    Every access token embeds `iat` (issued-at); `get_current_user` refuses
+    any non-admin token whose `iat` predates this epoch. Admins are exempt
+    so the caller doesn't kick themselves out.
+
+    Users' next API call returns 401 and the client's silent-refresh path
+    boots them to the login screen. No cookies to purge server-side because
+    JWTs are stateless.
+    """
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    await db.settings.update_one({}, {"$set": {"session_epoch": now_ts}}, upsert=True)
+    # Count currently active non-admin users for the confirmation toast.
+    active_users = await db.users.count_documents({"role": {"$ne": "admin"}})
+    logger.warning(
+        "Admin %s force-logged out all non-admin users (session_epoch=%d, users=%d)",
+        admin.get("email") or admin.get("_id"), now_ts, active_users,
+    )
+    return {"ok": True, "session_epoch": now_ts, "affected_users": active_users}
 
 
 @api.get("/admin/users/{uid}")
