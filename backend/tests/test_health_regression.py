@@ -28,7 +28,7 @@ def test_health_endpoint():
     assert r.status_code == 200, f"got {r.status_code}: {r.text[:200]}"
     j = r.json()
     assert j.get("status") == "ok"
-    assert j.get("service") == "naijainvest-api"
+    assert j.get("service") == "luckycartbox-api"
     assert "time" in j
 
 
