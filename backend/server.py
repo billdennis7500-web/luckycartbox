@@ -3156,32 +3156,75 @@ async def admin_server_ip(admin: dict = Depends(get_admin_user)):
     """Return the outbound egress IP that payment merchants will see on ALL
     server→gateway calls. This is the IP to whitelist at PayNow / SHPAY / 1SSPay.
 
-    When a static-IP proxy is configured (HTTPS_PROXY env var), the returned IP
-    is the proxy's static IP. When no proxy is set, it's the pod's ephemeral IP
-    (which rotates across restarts on non-static hosting).
+    When a static-IP proxy is configured (HTTPS_PROXY env var), we PARSE the
+    proxy host directly instead of calling an external ip-echo service. This
+    is deterministic and never returns "unknown" from a flaky third-party.
+    When no proxy is configured we fall back to a multi-service lookup with
+    a longer timeout so the pod's egress IP is still discoverable.
     """
     proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or ""
     proxied = bool(proxy_url)
-    # Redact credentials from the proxy URL for display
     display_proxy = None
+    proxy_host = None
+    proxy_ip_from_env = None
     if proxy_url:
         try:
             from urllib.parse import urlparse
             p = urlparse(proxy_url)
+            proxy_host = p.hostname
             display_proxy = f"{p.scheme}://***@{p.hostname}:{p.port}"
+            # If the proxy host is already a numeric IPv4, use it directly —
+            # this is the whole point of a static-IP proxy.
+            import re
+            if proxy_host and re.match(r"^\d{1,3}(\.\d{1,3}){3}$", proxy_host):
+                proxy_ip_from_env = proxy_host
         except Exception:
             display_proxy = "configured"
+
     outbound_ip = "unknown"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as c:
-            r = await c.get("https://api.ipify.org")
-            outbound_ip = r.text.strip() or "unknown"
-    except Exception:
-        pass
+    method = "unknown"
+
+    if proxy_ip_from_env:
+        # Deterministic — no external call needed. The proxy IP IS the egress IP.
+        outbound_ip = proxy_ip_from_env
+        method = "proxy_env"
+    elif proxy_host:
+        # Proxy configured as a hostname (not raw IP) — resolve it once.
+        try:
+            import socket
+            outbound_ip = socket.gethostbyname(proxy_host)
+            method = "proxy_dns"
+        except Exception:
+            pass
+
+    # Fallback: query a chain of ip-echo services with retries. Any one succeeding
+    # is enough. This only runs when no proxy is set OR proxy host DNS failed.
+    if outbound_ip == "unknown":
+        services = [
+            "https://api.ipify.org",
+            "https://ifconfig.me/ip",
+            "https://icanhazip.com",
+            "https://checkip.amazonaws.com",
+        ]
+        for svc in services:
+            try:
+                async with httpx.AsyncClient(timeout=8.0, trust_env=True) as c:
+                    r = await c.get(svc)
+                    ip = (r.text or "").strip().split("\n")[0].strip()
+                    # sanity check — must look like an IPv4
+                    import re
+                    if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip):
+                        outbound_ip = ip
+                        method = f"echo:{svc.split('//')[1].split('/')[0]}"
+                        break
+            except Exception:
+                continue
+
     return {
         "outbound_ip": outbound_ip,
         "static_proxy_configured": proxied,
         "proxy": display_proxy,
+        "resolution_method": method,
         "instructions": (
             "Whitelist this IP on your PayNow, SHPAY, and 1SSPay merchant dashboards. "
             "With a static proxy configured, this IP stays permanent."
