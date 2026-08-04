@@ -1,0 +1,38 @@
+{
+  "summary": "Full backend + frontend verification of Customer Support channel updates and new Referrer Reward Levels feature. 9/9 pytest cases pass (health, public/admin settings shape + persistence, referral_rewards GET, 404/400/success/dup claim on POST claim). Frontend: Customer Service page renders all 4 channel cards (cs-whatsapp, cs-whatsapp-channel, cs-telegram, cs-channel) + working hours strip showing 'Monday to Sunday, 10:00 AM to 5:00 PM'. Referrals page shows referrals-rewards-cta hero. Rewards page hero shows Current status: Ignite with progress bar 5/10 to Ascend, qualifying count = 5, total earned = ₦500, 5 tier cards render, Ignite CLAIMED pill present (claim-1 already fired during backend test). Admin Settings General tab has all channel URL/support hours inputs + editable Referral Levels list (add/remove + require-invested checkbox) — persistence verified via PUT then re-GET (Ignite reward 500→600→reset).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminSettings referral level rows", "issue": "data-testid uses 0-based array index (setting-reflvl-0-name .. setting-reflvl-4-name), but on-screen rows are labelled #1..#5 and the task acceptance spec expected setting-reflvl-1..5. Functionality works; only the testid numbering is inconsistent with the visible level number.", "selector": "setting-reflvl-{0..4}-name", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Rewards page hero (user at exactly threshold)", "issues": ["When count equals the previous tier's min_referrals exactly (e.g. 5 refs while sitting on Ignite), progress bar to next tier shows 0% even though the text says '5 / 10'. Formula `done = count - prev_min` yields 0 at the entry of a tier — visually confusing. Consider showing done = count - prev_min still but using span between current tier min and next tier min: 5/10 fills the bar at 50% based on absolute count."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_referral_rewards.py",
+    "/app/test_reports/pytest/iteration_19.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Reset regression user (+2348099887711) claimed_referral_levels to [] and refund the ₦500 credit (bonus_earnings + wallet_balance) if you want the next agent to re-exercise the Ignite claim UI. The Ignite tier is currently marked CLAIMED because backend test_claim_ignite_flow fired the claim endpoint.",
+    "OPTIONAL (LOW): Rename AdminSettings referral level row testids to 1-based (or use lvl.level) so setting-reflvl-1-name corresponds to Ignite (#1) etc.",
+    "OPTIONAL: Adjust rewards progress bar formula so 5/10 at Ascend threshold fills the bar to ~50% of the Ignite→Ascend span instead of 0% (currently reads 0% right after crossing into Ignite).",
+    "Pre-existing: settings.telegram_url stored as garbage 'httpggggg' in Atlas — admin may want to clear/correct."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 3859 lines. Splitting the referral-rewards block + admin settings into routers is overdue.",
+    "The atomic claim uses $addToSet + $inc on claimed_referral_levels — this correctly prevents double-claim under race. Good.",
+    "GET /api/referrals/rewards returns raw ints/floats without a Pydantic response model — okay for MVP but consider defining a ReferralRewardsOut model for consistency.",
+    "Rewards.jsx progress calculation on the client mirrors backend (uses next_level_needs); OK. But hero shows '5 more to unlock ₦1,500' — string composition looks correct.",
+    "AdminSettings referral-level array uses map index as key AND as testid; if admin removes a middle level, remaining testids re-index, which will confuse automated tests. Prefer stable keys tied to lvl.level."
+  ],
+  "updated_files": ["/app/backend/tests/test_referral_rewards.py", "/app/test_reports/iteration_19.json"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin billdennis750@gmail.com / djscan30 via /admin-login (button label 'Enter admin panel'). User +2348099887711 / pass1234.",
+  "seed_data_creation": "None new; regression user's 5 seeded gen1 investors already qualified Ignite. Backend test claimed Ignite (₦500 credited to wallet_balance + bonus_earnings, transaction referral_bonus added, claimed_referral_levels=[1]).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_referral_rewards.py exercises health, public_settings new fields, admin settings persistence for support URLs + referral_levels (bumps Ignite 500→600 then resets), and the full referrals/rewards + claim happy-path/duplicate/under-threshold/404 flows. It is idempotent across runs — the Ignite claim test skips gracefully once the level is already claimed and instead verifies the 'Reward already claimed' 400. To fully re-test the fresh claim UI, first run in MongoDB: db.users.updateOne({phone:'+2348099887711'},{$set:{claimed_referral_levels:[]},$inc:{wallet_balance:-500,bonus_earnings:-500}}). Admin login uses 'Enter admin panel' button (not 'Sign in'). Frontend has zero broken data-testids other than the 0-based referral-level rows noted above.",
+  "rca of the issue": "No new bug found — all requested behavior implemented correctly on backend and UI. Two low-priority polish items: 0-based testid numbering for admin referral level rows vs visible #1..#5 labels, and progress bar percentage stuck at 0% right after crossing into a tier because the formula measures progress from the current tier's min to the next tier's min rather than absolute progress along the span."
+}

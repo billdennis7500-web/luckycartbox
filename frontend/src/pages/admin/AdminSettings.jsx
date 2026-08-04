@@ -46,11 +46,24 @@ export default function AdminSettings() {
         min_withdrawal: Number(s.min_withdrawal),
         site_name: s.site_name,
         telegram_url: (s.telegram_url || "").trim(),
+        whatsapp_url: (s.whatsapp_url || "").trim(),
+        telegram_channel_url: (s.telegram_channel_url || "").trim(),
+        whatsapp_channel_url: (s.whatsapp_channel_url || "").trim(),
+        support_hours: (s.support_hours || "").trim(),
         welcome_message: (s.welcome_message || "").trim(),
         withdrawal_fee_pct: Number(s.withdrawal_fee_pct) || 0,
         auto_payout_enabled: !!s.auto_payout_enabled,
         deposit_quick_amounts: quickAmounts,
         batch_approve_limit: Math.max(1, Number(s.batch_approve_limit) || 50),
+        referral_levels: Array.isArray(s.referral_levels) ? s.referral_levels.map((l) => ({
+          level: Number(l.level) || 0,
+          name: String(l.name || "").trim() || `Level ${l.level}`,
+          icon: String(l.icon || "gem").trim(),
+          color: String(l.color || "#F5C518").trim(),
+          min_referrals: Math.max(0, Number(l.min_referrals) || 0),
+          reward: Math.max(0, Number(l.reward) || 0),
+        })) : undefined,
+        referral_level_requires_investment: !!s.referral_level_requires_investment,
       });
       toast.success("Settings saved");
       // Normalize the local state after save
@@ -122,16 +135,60 @@ export default function AdminSettings() {
         </div>
 
         <div className="pt-3 border-t border-[var(--nb-border)]">
-          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Community & welcome pop-up</div>
-          <Label>Telegram community URL</Label>
-          <Input
-            value={s.telegram_url || ""}
-            onChange={(e) => setS({ ...s, telegram_url: e.target.value })}
-            placeholder="https://t.me/your-community"
-            data-testid="setting-telegram-url"
-            className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
-          />
-          <p className="text-xs text-[var(--nb-muted)] mt-1">Shown as a "Join Telegram" chip on the user dashboard and welcome modal.</p>
+          <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)] mb-3">Support channels & hours</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label>WhatsApp DM (wa.me link)</Label>
+              <Input
+                value={s.whatsapp_url || ""}
+                onChange={(e) => setS({ ...s, whatsapp_url: e.target.value })}
+                placeholder="https://wa.me/234XXXXXXXXXX"
+                data-testid="setting-whatsapp-url"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+              />
+            </div>
+            <div>
+              <Label>WhatsApp Channel</Label>
+              <Input
+                value={s.whatsapp_channel_url || ""}
+                onChange={(e) => setS({ ...s, whatsapp_channel_url: e.target.value })}
+                placeholder="https://whatsapp.com/channel/..."
+                data-testid="setting-whatsapp-channel-url"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+              />
+            </div>
+            <div>
+              <Label>Telegram DM (support)</Label>
+              <Input
+                value={s.telegram_url || ""}
+                onChange={(e) => setS({ ...s, telegram_url: e.target.value })}
+                placeholder="https://t.me/yoursupport"
+                data-testid="setting-telegram-url"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+              />
+            </div>
+            <div>
+              <Label>Telegram Channel</Label>
+              <Input
+                value={s.telegram_channel_url || ""}
+                onChange={(e) => setS({ ...s, telegram_channel_url: e.target.value })}
+                placeholder="https://t.me/yourchannel"
+                data-testid="setting-telegram-channel-url"
+                className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <Label>Working hours (shown on customer support)</Label>
+            <Input
+              value={s.support_hours || ""}
+              onChange={(e) => setS({ ...s, support_hours: e.target.value })}
+              placeholder="Monday to Sunday, 10:00 AM to 5:00 PM"
+              data-testid="setting-support-hours"
+              className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11"
+            />
+          </div>
+          <p className="text-xs text-[var(--nb-muted)] mt-2">All four channels appear on the Customer Support page. Leave blank to hide a channel.</p>
 
           <div className="mt-4">
             <Label>Welcome pop-up message</Label>
@@ -143,6 +200,95 @@ export default function AdminSettings() {
               data-testid="setting-welcome-message"
               className="mt-2 w-full rounded-md bg-[var(--nb-card2)] border border-[var(--nb-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[#0055FF]/40"
             />
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-[var(--nb-border)]">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs uppercase tracking-widest text-[var(--nb-muted)]">Referral reward levels</div>
+            <label className="inline-flex items-center gap-2 text-xs text-[var(--nb-muted)] cursor-pointer" data-testid="setting-reflvl-req-inv">
+              <input
+                type="checkbox"
+                checked={!!s.referral_level_requires_investment}
+                onChange={(e) => setS({ ...s, referral_level_requires_investment: e.target.checked })}
+                className="accent-[#F5C518] w-4 h-4"
+              />
+              Only count referrals who have invested
+            </label>
+          </div>
+          <p className="text-xs text-[var(--nb-muted)] mb-3">Users see these as milestone bonuses on the Rewards page. Editing thresholds after users have claimed will not reverse past claims.</p>
+          <div className="space-y-2">
+            {(s.referral_levels || []).map((lvl, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center bg-[var(--nb-card2)] p-2 rounded-md border border-[var(--nb-border)]" data-testid={`setting-reflvl-row-${i}`}>
+                <div className="col-span-1 text-xs text-[var(--nb-muted)] tabular text-center">#{lvl.level}</div>
+                <Input
+                  value={lvl.name || ""}
+                  onChange={(e) => {
+                    const next = [...s.referral_levels]; next[i] = { ...lvl, name: e.target.value }; setS({ ...s, referral_levels: next });
+                  }}
+                  placeholder="Ignite"
+                  data-testid={`setting-reflvl-${i}-name`}
+                  className="col-span-3 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  value={lvl.min_referrals ?? ""}
+                  onChange={(e) => {
+                    const next = [...s.referral_levels]; next[i] = { ...lvl, min_referrals: Number(e.target.value) }; setS({ ...s, referral_levels: next });
+                  }}
+                  placeholder="Refs"
+                  data-testid={`setting-reflvl-${i}-min`}
+                  className="col-span-2 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm tabular"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  value={lvl.reward ?? ""}
+                  onChange={(e) => {
+                    const next = [...s.referral_levels]; next[i] = { ...lvl, reward: Number(e.target.value) }; setS({ ...s, referral_levels: next });
+                  }}
+                  placeholder="₦ reward"
+                  data-testid={`setting-reflvl-${i}-reward`}
+                  className="col-span-3 bg-[var(--nb-card)] border-[var(--nb-border)] text-white h-9 text-sm tabular"
+                />
+                <Input
+                  type="color"
+                  value={lvl.color || "#F5C518"}
+                  onChange={(e) => {
+                    const next = [...s.referral_levels]; next[i] = { ...lvl, color: e.target.value }; setS({ ...s, referral_levels: next });
+                  }}
+                  data-testid={`setting-reflvl-${i}-color`}
+                  className="col-span-2 bg-[var(--nb-card)] border-[var(--nb-border)] h-9 p-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = s.referral_levels.filter((_, j) => j !== i); setS({ ...s, referral_levels: next });
+                  }}
+                  data-testid={`setting-reflvl-${i}-remove`}
+                  className="col-span-1 h-9 grid place-items-center text-[var(--nb-muted)] hover:text-red-400"
+                  aria-label="Remove level"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const cur = s.referral_levels || [];
+                const nextLevel = cur.length ? Math.max(...cur.map((l) => Number(l.level) || 0)) + 1 : 1;
+                setS({
+                  ...s,
+                  referral_levels: [...cur, { level: nextLevel, name: `Level ${nextLevel}`, icon: "gem", color: "#F5C518", min_referrals: 0, reward: 0 }],
+                });
+              }}
+              data-testid="setting-reflvl-add"
+              className="w-full rounded-md border border-dashed border-[var(--nb-border)] text-xs text-[var(--nb-muted)] hover:text-white hover:border-[#F5C518] py-2"
+            >
+              + Add another level
+            </button>
           </div>
         </div>
 

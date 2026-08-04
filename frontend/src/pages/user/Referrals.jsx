@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Copy, Share2, Users, TrendingUp, Check, MessageCircle, Send, Twitter, Facebook } from "lucide-react";
+import { Copy, Share2, Users, TrendingUp, Check, MessageCircle, Send, Twitter, Facebook, Sparkles, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import LoadMore from "@/components/LoadMore";
 import { AmbientCard, SectionHeader, MicroLabel } from "@/components/design";
@@ -114,6 +115,52 @@ export default function Referrals() {
         subtitle="3-generation commissions across every invite you make."
         testid="referrals-heading"
       />
+
+      {/* Reward levels action card — links to the milestone-bonuses page */}
+      <Link
+        to="/rewards"
+        data-testid="referrals-rewards-cta"
+        className="group relative block rounded-2xl overflow-hidden p-4 sm:p-5"
+        style={{
+          background:
+            "linear-gradient(135deg,#1A1508 0%, #2A1F0C 60%, #3B2A10 100%)",
+          border: "1px solid rgba(245,197,24,0.35)",
+          boxShadow:
+            "0 10px 32px -12px rgba(245,197,24,0.45), inset 0 0 0 1px rgba(255,229,128,0.10)",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute -top-16 -right-10 w-56 h-56 rounded-full opacity-40 pointer-events-none blur-2xl"
+          style={{ background: "radial-gradient(closest-side,#F5C518,transparent)" }}
+        />
+        <div className="relative flex items-center gap-4">
+          <div
+            className="w-14 h-14 rounded-2xl grid place-items-center shrink-0"
+            style={{
+              background:
+                "linear-gradient(135deg,#FFE580 0%,#F5C518 60%,#C99700 100%)",
+              boxShadow: "0 8px 20px rgba(245,197,24,0.55)",
+              color: "#1A1508",
+            }}
+          >
+            <Sparkles className="w-6 h-6" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <MicroLabel tone="gold" className="!mt-0">Milestone bonuses</MicroLabel>
+            <div className="mt-0.5 font-display font-800 text-lg text-white truncate">Referral Reward Levels</div>
+            <div className="text-xs text-[var(--nb-muted)] truncate">
+              Unlock Ignite → Titan with each new active friend. Tap to see your progress.
+            </div>
+          </div>
+          <div
+            className="w-9 h-9 rounded-full grid place-items-center shrink-0 border border-[rgba(245,197,24,0.4)] text-[#F5C518] group-hover:bg-[rgba(245,197,24,0.15)] transition-colors"
+            aria-hidden
+          >
+            <ChevronRight className="w-4 h-4" />
+          </div>
+        </div>
+      </Link>
 
       {/* Hero card — purple/epic tone */}
       <AmbientCard tone="epic" testid="referral-hero-card">

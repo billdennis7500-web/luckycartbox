@@ -18,6 +18,7 @@ import DepositHistory from "@/pages/user/DepositHistory";
 import Withdraw from "@/pages/user/Withdraw";
 import WithdrawHistory from "@/pages/user/WithdrawHistory";
 import Referrals from "@/pages/user/Referrals";
+import Rewards from "@/pages/user/Rewards";
 import Coupon from "@/pages/user/Coupon";
 import Transactions from "@/pages/user/Transactions";
 import Profile from "@/pages/user/Profile";
@@ -87,6 +88,7 @@ function App() {
             <Route path="withdraw-history" element={<WithdrawHistory />} />
             <Route path="bank-account" element={<BindAccount />} />
             <Route path="referrals" element={<Referrals />} />
+            <Route path="rewards" element={<Rewards />} />
             <Route path="coupon" element={<Coupon />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="customer-service" element={<CustomerService />} />

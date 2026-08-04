@@ -18,9 +18,10 @@ import { ArrowLeft, MessageCircle, Send, Megaphone, Clock, ChevronDown, LifeBuoy
 import { SectionHeader, SoftCard, MicroLabel } from "@/components/design";
 
 const CHANNEL_TONE = {
-  whatsapp: { color: "#25D366", icon: MessageCircle, label: "WhatsApp",         sub: "Real-time private chat" },
-  telegram: { color: "#3AABE0", icon: Send,          label: "Telegram Support", sub: "Direct message our team" },
-  channel:  { color: "#F5C518", icon: Megaphone,     label: "Telegram Channel", sub: "Announcements & tips" },
+  whatsapp:      { color: "#25D366", icon: MessageCircle, label: "WhatsApp",         sub: "Real-time private chat" },
+  wachannel:     { color: "#128C7E", icon: Megaphone,     label: "WhatsApp Channel", sub: "Broadcast updates" },
+  telegram:      { color: "#3AABE0", icon: Send,          label: "Telegram Support", sub: "Direct message our team" },
+  channel:       { color: "#F5C518", icon: Megaphone,     label: "Telegram Channel", sub: "Announcements & tips" },
 };
 
 function ChannelCard({ tone, url, testid }) {
@@ -159,9 +160,10 @@ export default function CustomerService() {
       {/* Channels */}
       <SectionHeader title="Contact channels" />
       <div className="space-y-3">
-        <ChannelCard tone="whatsapp" url={settings.whatsapp_url}         testid="cs-whatsapp" />
-        <ChannelCard tone="telegram" url={settings.telegram_url}         testid="cs-telegram" />
-        <ChannelCard tone="channel"  url={settings.telegram_channel_url} testid="cs-channel" />
+        <ChannelCard tone="whatsapp"  url={settings.whatsapp_url}          testid="cs-whatsapp" />
+        <ChannelCard tone="wachannel" url={settings.whatsapp_channel_url}  testid="cs-whatsapp-channel" />
+        <ChannelCard tone="telegram"  url={settings.telegram_url}          testid="cs-telegram" />
+        <ChannelCard tone="channel"   url={settings.telegram_channel_url}  testid="cs-channel" />
       </div>
 
       {/* Working hours */}
@@ -177,7 +179,7 @@ export default function CustomerService() {
         <div className="flex-1 min-w-0">
           <MicroLabel tone="green" className="!mt-0">Working hours</MicroLabel>
           <div className="text-sm text-white font-display font-700 mt-0.5">
-            {settings.support_hours || "Monday to Sunday, 10:00 AM to 7:00 PM"}
+            {settings.support_hours || "Monday to Sunday, 10:00 AM to 5:00 PM"}
           </div>
         </div>
       </div>

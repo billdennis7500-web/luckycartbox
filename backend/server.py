@@ -194,12 +194,29 @@ DEFAULT_SETTINGS = {
     "telegram_url": "",
     "whatsapp_url": "",
     "telegram_channel_url": "",
-    "support_hours": "Monday to Sunday, 10:00 AM to 7:00 PM",
+    "whatsapp_channel_url": "",
+    "support_hours": "Monday to Sunday, 10:00 AM to 5:00 PM",
     "welcome_message": "Welcome to Luckycart Box — grow your money the smart way. Invest today, cash out tomorrow.",
     "withdrawal_fee_pct": 15.0,
     "auto_payout_enabled": False,
     "deposit_quick_amounts": [500, 1000, 2000, 5000, 10000, 20000],
     "batch_approve_limit": 50,
+    # Referral reward levels (milestone bonuses paid on top of the 3-gen
+    # commission network). Fully admin-editable from AdminSettings.
+    #   min_referrals — how many qualifying gen-1 refs unlock this level
+    #   reward         — naira credited to wallet when claimed
+    #   name / icon / color — cosmetic identity for the level card
+    "referral_levels": [
+        {"level": 1, "name": "Ignite",    "icon": "flame",   "color": "#F97316", "min_referrals": 5,   "reward": 500},
+        {"level": 2, "name": "Ascend",    "icon": "rocket",  "color": "#10B981", "min_referrals": 10,  "reward": 1500},
+        {"level": 3, "name": "Empire",    "icon": "trophy",  "color": "#F5C518", "min_referrals": 25,  "reward": 5000},
+        {"level": 4, "name": "Sovereign", "icon": "crown",   "color": "#8B5CF6", "min_referrals": 50,  "reward": 15000},
+        {"level": 5, "name": "Titan",     "icon": "gem",     "color": "#22D3EE", "min_referrals": 100, "reward": 50000},
+    ],
+    # When True, only referred users who have made at least one investment
+    # (has_invested=True) count toward the level thresholds. When False, any
+    # registered gen-1 referral counts.
+    "referral_level_requires_investment": True,
     # Admin-controlled gateway visibility. Each gateway can be toggled
     # independently for payin (deposits) and payout (withdrawals). Default:
     # every gateway on both directions is ON; admin can turn any off from the
@@ -1076,12 +1093,15 @@ class SettingsIn(BaseModel):
     telegram_url: Optional[str] = None
     whatsapp_url: Optional[str] = None
     telegram_channel_url: Optional[str] = None
+    whatsapp_channel_url: Optional[str] = None
     support_hours: Optional[str] = None
     welcome_message: Optional[str] = None
     withdrawal_fee_pct: Optional[float] = None
     auto_payout_enabled: Optional[bool] = None
     deposit_quick_amounts: Optional[List[float]] = None
     batch_approve_limit: Optional[int] = None
+    referral_levels: Optional[List[dict]] = None
+    referral_level_requires_investment: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -2113,6 +2133,134 @@ async def my_referrals(user: dict = Depends(get_current_user)):
         "gen3": [shape(u) for u in gen3_docs],
         "earnings": {"gen1": totals[1], "gen2": totals[2], "gen3": totals[3],
                      "total": totals[1] + totals[2] + totals[3]},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Referral reward levels (milestone bonuses on top of the 3-gen commission)
+# ---------------------------------------------------------------------------
+def _sorted_levels(settings: dict) -> list:
+    """Return the admin-configured levels sorted ascending by min_referrals."""
+    lvls = settings.get("referral_levels") or []
+    return sorted(
+        [l for l in lvls if isinstance(l, dict) and "min_referrals" in l and "reward" in l],
+        key=lambda l: (l.get("min_referrals", 0), l.get("level", 0)),
+    )
+
+
+async def _qualifying_referral_count(user_id: ObjectId, requires_investment: bool) -> int:
+    """Count gen-1 referrals for the given user, optionally filtered to those
+    who have invested at least once."""
+    q = {"referred_by": user_id}
+    if requires_investment:
+        q["has_invested"] = True
+    return await db.users.count_documents(q)
+
+
+@api.get("/referrals/rewards")
+async def referral_rewards(user: dict = Depends(get_current_user)):
+    """Return the user's progress across every admin-configured reward level."""
+    settings = await get_settings()
+    requires_inv = bool(settings.get("referral_level_requires_investment", True))
+    levels = _sorted_levels(settings)
+    count = await _qualifying_referral_count(user["_id"], requires_inv)
+
+    claimed = set(user.get("claimed_referral_levels") or [])
+    tiers = []
+    for lv in levels:
+        lvl_id = int(lv.get("level", 0))
+        min_r = int(lv.get("min_referrals", 0))
+        reward = float(lv.get("reward", 0))
+        eligible = count >= min_r
+        is_claimed = lvl_id in claimed
+        tiers.append({
+            "level": lvl_id,
+            "name": lv.get("name") or f"Level {lvl_id}",
+            "icon": lv.get("icon") or "gem",
+            "color": lv.get("color") or "#F5C518",
+            "min_referrals": min_r,
+            "reward": reward,
+            "unlocked": eligible,
+            "claimed": is_claimed,
+            "claimable": eligible and not is_claimed,
+        })
+
+    # Progress toward the next locked tier
+    next_tier = next((t for t in tiers if not t["unlocked"]), None)
+    prev_tier = next((t for t in reversed(tiers) if t["unlocked"]), None)
+    if next_tier:
+        prev_min = prev_tier["min_referrals"] if prev_tier else 0
+        span = max(1, next_tier["min_referrals"] - prev_min)
+        done = max(0, count - prev_min)
+        progress_pct = min(100.0, round(done * 100 / span, 1))
+    else:
+        progress_pct = 100.0 if tiers else 0.0
+
+    total_earned = sum(t["reward"] for t in tiers if t["claimed"])
+
+    return {
+        "count": count,
+        "requires_investment": requires_inv,
+        "tiers": tiers,
+        "current_level": prev_tier["level"] if prev_tier else 0,
+        "current_level_name": prev_tier["name"] if prev_tier else "Rookie",
+        "next_level": next_tier["level"] if next_tier else None,
+        "next_level_name": next_tier["name"] if next_tier else None,
+        "next_level_needs": (next_tier["min_referrals"] - count) if next_tier else 0,
+        "progress_pct": progress_pct,
+        "total_earned": total_earned,
+    }
+
+
+@api.post("/referrals/rewards/claim/{level_id}")
+async def referral_reward_claim(level_id: int, user: dict = Depends(get_current_user)):
+    """User claims a milestone reward they qualify for. Credits wallet."""
+    settings = await get_settings()
+    requires_inv = bool(settings.get("referral_level_requires_investment", True))
+    levels = _sorted_levels(settings)
+
+    tier = next((l for l in levels if int(l.get("level", 0)) == level_id), None)
+    if not tier:
+        raise HTTPException(status_code=404, detail="Reward level not found")
+
+    already_claimed = set(user.get("claimed_referral_levels") or [])
+    if level_id in already_claimed:
+        raise HTTPException(status_code=400, detail="Reward already claimed")
+
+    count = await _qualifying_referral_count(user["_id"], requires_inv)
+    if count < int(tier.get("min_referrals", 0)):
+        raise HTTPException(
+            status_code=400,
+            detail=f"You need {tier['min_referrals']} qualifying referrals to claim {tier.get('name','this reward')}",
+        )
+
+    reward = float(tier.get("reward", 0))
+
+    # Atomic claim: only credit if we successfully add the level_id to the set.
+    # Prevents double-claim via concurrent requests.
+    res = await db.users.update_one(
+        {"_id": user["_id"], "claimed_referral_levels": {"$ne": level_id}},
+        {"$addToSet": {"claimed_referral_levels": level_id},
+         "$inc": {"wallet_balance": reward, "bonus_earnings": reward}},
+    )
+    if res.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Reward already claimed")
+
+    await add_transaction(
+        user["_id"],
+        "referral_bonus",
+        reward,
+        note=f"{tier.get('name','Referral level')} milestone reward",
+        meta={"level": level_id, "level_name": tier.get("name"), "qualifying_referrals": count},
+    )
+
+    fresh = await db.users.find_one({"_id": user["_id"]})
+    return {
+        "ok": True,
+        "credited": reward,
+        "level": level_id,
+        "level_name": tier.get("name"),
+        "new_wallet_balance": fresh.get("wallet_balance", 0),
     }
 
 
@@ -3559,7 +3707,8 @@ async def public_settings():
         "telegram_url": s.get("telegram_url") or "",
         "whatsapp_url": s.get("whatsapp_url") or "",
         "telegram_channel_url": s.get("telegram_channel_url") or "",
-        "support_hours": s.get("support_hours") or "Monday to Sunday, 10:00 AM to 7:00 PM",
+        "whatsapp_channel_url": s.get("whatsapp_channel_url") or "",
+        "support_hours": s.get("support_hours") or "Monday to Sunday, 10:00 AM to 5:00 PM",
         "welcome_message": s.get("welcome_message") or "",
         "welcome_bonus": s.get("welcome_bonus") or 0,
         "min_deposit": s.get("min_deposit") or 0,
