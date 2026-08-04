@@ -5,8 +5,9 @@ import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Shield, TrendingUp, Lock } from "lucide-react";
+import { Shield, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function AdminLogin() {
   const { setUser } = useAuth();
@@ -41,9 +42,7 @@ export default function AdminLogin() {
         <div className="absolute -bottom-40 -right-40 w-[400px] h-[400px] rounded-full bg-[#0055FF]/15 blur-[120px]" />
 
         <Link to="/" className="flex items-center gap-2 relative z-10" data-testid="admin-login-brand">
-          <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
-            <TrendingUp className="w-5 h-5" />
-          </div>
+          <BrandLogo size={36} />
           <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
 

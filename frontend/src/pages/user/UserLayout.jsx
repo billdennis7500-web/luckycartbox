@@ -5,6 +5,7 @@ import { Home, Store, Users, User, TrendingUp, Shield, Boxes, LogIn, ArrowLeft, 
 import { toast } from "sonner";
 import { isImpersonatingTab } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const NAV = [
   { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
@@ -91,16 +92,7 @@ export default function UserLayout() {
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-[var(--nb-page)]/80 border-b border-[var(--nb-border)]">
         <div className="max-w-3xl mx-auto flex items-center justify-between px-5 py-4">
           <Link to="/dashboard" className="flex items-center gap-2" data-testid="user-brand-link">
-            <div
-              className="w-8 h-8 rounded-md grid place-items-center"
-              style={{
-                background: "linear-gradient(135deg,#FFE580,#F5C518)",
-                boxShadow: "0 4px 14px rgba(245,197,24,0.45)",
-                color: "#1A1508",
-              }}
-            >
-              <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
-            </div>
+            <BrandLogo size={32} />
             <span className="font-display font-bold text-lg">Luckycart Box</span>
           </Link>
           <div className="flex items-center gap-3">

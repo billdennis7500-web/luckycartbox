@@ -4,7 +4,8 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, Gift } from "lucide-react";
+import { Gift } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { toast } from "sonner";
 
 export default function Register() {
@@ -86,9 +87,7 @@ export default function Register() {
       <div className="hidden lg:flex flex-col justify-between p-12 border-l border-[var(--nb-border)] relative overflow-hidden order-1 lg:order-2">
         <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-[#0055FF]/20 blur-[140px]" />
         <Link to="/" className="flex items-center gap-2 relative z-10">
-          <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
-            <TrendingUp className="w-5 h-5" />
-          </div>
+          <BrandLogo size={36} />
           <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
         <div className="relative z-10">

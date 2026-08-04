@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users, PackageOpen, ArrowDownToLine, ArrowUpFromLine,
   Percent, Ticket, Landmark, Settings, LogOut, Shield, Menu, X, ExternalLink, Sun, Moon,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const NAV = [
   { to: "/admin", end: true, label: "Overview", icon: LayoutDashboard, key: null },
@@ -40,9 +41,7 @@ export default function AdminLayout() {
       <aside className={`fixed lg:sticky top-0 left-0 z-30 h-screen w-64 bg-[var(--nb-card)] border-r border-[var(--nb-border)] transform transition-transform ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <div className="flex items-center justify-between px-5 py-5 border-b border-[var(--nb-border)]">
           <Link to="/admin" className="flex items-center gap-2" data-testid="admin-brand-link">
-            <div className="w-8 h-8 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
-              <Shield className="w-4 h-4" />
-            </div>
+            <BrandLogo size={32} />
             <div>
               <div className="font-display font-bold text-lg leading-none">Admin</div>
               <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">Luckycart Box</div>

@@ -4,8 +4,8 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function Login() {
   const { login } = useAuth();
@@ -32,9 +32,7 @@ export default function Login() {
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-[var(--nb-border)] relative overflow-hidden">
         <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-[#0055FF]/20 blur-[140px]" />
         <Link to="/" className="flex items-center gap-2 relative z-10" data-testid="login-brand-link">
-          <div className="w-9 h-9 rounded-md bg-[#0055FF] grid place-items-center glow-primary">
-            <TrendingUp className="w-5 h-5" />
-          </div>
+          <BrandLogo size={36} />
           <span className="font-display font-bold text-xl">Luckycart Box</span>
         </Link>
         <div className="relative z-10">
