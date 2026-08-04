@@ -411,7 +411,7 @@ export default function Deposit() {
                   className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#10B981] text-white shadow"
                   data-testid="deposit-instant-recommended-badge"
                 >
-                  Fast
+                  Recommended
                 </span>
               </div>
             )}
@@ -423,14 +423,14 @@ export default function Deposit() {
                   tone={{ bg: "#8B5CF6", fg: "#FFFFFF" }}
                   icon={<Zap className="w-5 h-5" />}
                   label="Quick Pay"
-                  sub="Bank transfer"
+                  sub="Fast · Recommended"
                   testid="deposit-method-shpay"
                 />
                 <span
-                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#8B5CF6] text-white shadow"
-                  data-testid="deposit-shpay-badge"
+                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#10B981] text-white shadow"
+                  data-testid="deposit-shpay-recommended-badge"
                 >
-                  Auto
+                  Recommended
                 </span>
               </div>
             )}
@@ -442,14 +442,14 @@ export default function Deposit() {
                   tone={{ bg: "#F97316", fg: "#FFFFFF" }}
                   icon={<Zap className="w-5 h-5" />}
                   label="Fast Pay"
-                  sub="Bank transfer"
+                  sub="Fast · Recommended"
                   testid="deposit-method-onesspay"
                 />
                 <span
-                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#F97316] text-white shadow"
-                  data-testid="deposit-onesspay-badge"
+                  className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#10B981] text-white shadow"
+                  data-testid="deposit-onesspay-recommended-badge"
                 >
-                  Auto
+                  Recommended
                 </span>
               </div>
             )}
@@ -461,14 +461,14 @@ export default function Deposit() {
                   tone={{ bg: "#10B981", fg: "#FFFFFF" }}
                   icon={<Zap className="w-5 h-5" />}
                   label="Smart Pay"
-                  sub="Bank transfer"
+                  sub="Fast · Recommended"
                   testid="deposit-method-juntbest"
                 />
                 <span
                   className="absolute -top-1.5 -left-1.5 z-10 text-[9px] font-display font-700 uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#10B981] text-white shadow"
-                  data-testid="deposit-juntbest-badge"
+                  data-testid="deposit-juntbest-recommended-badge"
                 >
-                  Auto
+                  Recommended
                 </span>
               </div>
             )}

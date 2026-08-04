@@ -1,0 +1,23 @@
+{
+  "summary": "Verified deposit gateway labeling bug fix (backend + frontend) and 'Recommended' badge rollout across all 4 gateway tiles. 9/9 backend pytest cases pass and all frontend UI assertions confirmed via Playwright.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_deposit_gateway_labeling.py",
+    "/app/test_reports/pytest/iteration_18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still >3700 lines — splitting into routers remains a strong recommendation.",
+    "Login form input elements have no explicit type='text'/'tel' attribute on the phone field (only data-testid=login-phone-input). Adding type='tel' + inputmode='numeric' would improve mobile UX.",
+    "Radix DialogContent warnings ('DialogContent requires a DialogTitle') showing in console on user dashboard — add VisuallyHidden DialogTitle to silence a11y warnings."
+  ],
+  "updated_files": ["/app/backend/tests/test_deposit_gateway_labeling.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: billdennis750@gmail.com / djscan30. User: phone 08099887711 (or +2348099887711) / pass1234.",
+  "seed_data_creation": "Created 4 new pending deposits (₦600 each) via /api/deposits for methods paynow-auto, shpay-auto, onesspay-auto, juntbest-auto — all landed in Atlas DB with correct gateway labels (paynow/shpay/onesspay/juntbest). These now appear in admin deposits list under UI Tester.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_deposit_gateway_labeling.py is reusable — it exercises health, public settings, products (auth required), plus the 4 gateway create->fetch flow and the historical mislabel guard. Frontend fixes verified visually: all 4 tiles on /deposit show green 'RECOMMENDED' corner badge + 'Fast · Recommended' sub; /deposit-history renders distinct colored chips (Instant Pay/Quick Pay/Fast Pay/Smart Pay) with data-testid dhist-method-<gw>-<id>; /admin/deposits shows user_name+phone + gateway-pill-<gw>-<id> pills. 4 test deposits were created during backend run (₦600 x 4) — main agent may want to delete them if they clutter admin view.",
+  "rca of the issue": "Original bug: server.py hardcoded gateway='manual' when creating deposit, then only overwrote it AFTER a successful gateway API response. When outbound proxy IP wasn't whitelisted by PayNow/SHPAY/1SSPay/JuntBest, the row stayed as 'manual', hiding the user's actual choice. Fix at server.py:1405-1411 derives _initial_gateway from method prefix BEFORE any external call, so failures preserve the correct label. Historical rows were healed by a one-time migration (74 rows: 15 paynow, 33 shpay, 15 onesspay, 11 juntbest). Verified via GET /api/admin/deposits — zero rows with gateway='manual' AND method starting with any known gateway prefix."
+}

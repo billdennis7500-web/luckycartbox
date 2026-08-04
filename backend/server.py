@@ -1402,6 +1402,14 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
     if payload.amount < settings["min_deposit"]:
         raise HTTPException(400, f"Minimum deposit is ₦{settings['min_deposit']:.0f}")
 
+    # Derive the gateway label from the method prefix up-front. This ensures
+    # even if the downstream gateway API call fails, the deposit row still
+    # shows the gateway the user PICKED (PayNow / SHPAY / 1SSPay / JuntBest)
+    # in the admin table — not "manual". Only genuine payment-account
+    # transfers stay labeled manual.
+    _mp = (payload.method or "").split("-")[0]
+    _initial_gateway = _mp if _mp in GATEWAY_KEYS else "manual"
+
     doc = {
         "user_id": user["_id"],
         "user_name": user["name"],
@@ -1410,7 +1418,7 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
         "method": payload.method,
         "reference": payload.reference or "",
         "status": "pending",
-        "gateway": "manual",
+        "gateway": _initial_gateway,
         "created_at": now_utc().isoformat(),
     }
 

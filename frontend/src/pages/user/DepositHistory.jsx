@@ -33,16 +33,36 @@ function StatusBadge({ status }) {
 }
 
 function MethodTag({ d }) {
-  if (d.gateway === "paynow") {
+  // Match every configured gateway with its own tinted chip so users see
+  // which route their deposit went through (Instant Pay / Quick Pay /
+  // Fast Pay / Smart Pay). Only true bank-transfer deposits fall through
+  // to the neutral "Manual bank" chip.
+  const GATEWAYS = {
+    paynow:   { label: "Instant Pay", color: "#0055FF" },
+    shpay:    { label: "Quick Pay",   color: "#8B5CF6" },
+    onesspay: { label: "Fast Pay",    color: "#F97316" },
+    juntbest: { label: "Smart Pay",   color: "#10B981" },
+  };
+  const g = GATEWAYS[d.gateway];
+  if (g) {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-[#0055FF]/30 bg-[#0055FF]/10 text-[#0055FF]">
-        <Zap className="w-3 h-3" /> Instant
+      <span
+        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border"
+        style={{
+          borderColor: `${g.color}55`,
+          background: `${g.color}1A`,
+          color: g.color,
+        }}
+        data-testid={`dhist-method-${d.gateway}-${d.id}`}
+      >
+        <Zap className="w-3 h-3" /> {g.label}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-[var(--nb-border)] bg-[var(--nb-card2)] text-[var(--nb-muted)]">
-      <Landmark className="w-3 h-3" /> {d.payment_account_bank || "Manual"}
+    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-[var(--nb-border)] bg-[var(--nb-card2)] text-[var(--nb-muted)]"
+          data-testid={`dhist-method-manual-${d.id}`}>
+      <Landmark className="w-3 h-3" /> {d.payment_account_bank || "Manual bank"}
     </span>
   );
 }
