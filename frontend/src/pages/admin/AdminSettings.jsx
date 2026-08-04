@@ -386,7 +386,12 @@ export default function AdminSettings() {
       </div>
       )}
 
-      {tab === "infra" && <ServerIPCard />}
+      {tab === "infra" && (
+        <>
+          <ServerIPCard />
+          <WebhookUrlsCard />
+        </>
+      )}
 
       {tab === "danger" && <DangerZoneCard />}
     </div>
@@ -489,6 +494,169 @@ function ServerIPCard() {
     </Card>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Webhook URLs card — one-tap copy of the exact callback URLs each payment  */
+/*  gateway needs in its merchant portal. Base URL comes from                  */
+/*  window.location.origin so admins get the correct URL for whichever         */
+/*  environment they're viewing (preview or production custom domain).         */
+/* -------------------------------------------------------------------------- */
+
+const WEBHOOK_GATEWAYS = [
+  {
+    key: "paynow",
+    label: "PayNow · Instant Pay",
+    color: "#0055FF",
+    portal_field_hint: 'Set in the PayNow dashboard fields labeled "Payin Notify URL" and "Payout Notify URL".',
+    urls: [
+      { role: "Payin (deposit)",   path: "/api/webhooks/paynow/payin" },
+      { role: "Payout (withdraw)", path: "/api/webhooks/paynow/payout" },
+    ],
+  },
+  {
+    key: "shpay",
+    label: "SHPAY · Quick Pay",
+    color: "#8B5CF6",
+    portal_field_hint: 'One unified notify URL — SHPAY posts both payin and payout events to it.',
+    urls: [
+      { role: "Unified (payin + payout)", path: "/api/shpay/webhook" },
+    ],
+  },
+  {
+    key: "onesspay",
+    label: "1SSPay · Fast Pay",
+    color: "#F97316",
+    portal_field_hint: 'Set in the 1SSPay merchant dashboard under Callback Settings.',
+    urls: [
+      { role: "Payin (deposit)",   path: "/api/onesspay/webhook/payin" },
+      { role: "Payout (withdraw)", path: "/api/onesspay/webhook/payout" },
+    ],
+  },
+  {
+    key: "juntbest",
+    label: "JuntPay · Smart Pay",
+    color: "#10B981",
+    portal_field_hint: 'JuntPay portal → Push address (recommended: single unified URL).',
+    urls: [
+      { role: "Unified (recommended)", path: "/api/juntbest/webhook", recommended: true },
+      { role: "Payin only",            path: "/api/juntbest/webhook/payin" },
+      { role: "Payout only",           path: "/api/juntbest/webhook/payout" },
+    ],
+  },
+];
+
+function WebhookUrlsCard() {
+  const [origin, setOrigin] = useState("");
+  const [copiedPath, setCopiedPath] = useState(null);
+
+  useEffect(() => {
+    setOrigin(typeof window !== "undefined" ? window.location.origin : "");
+  }, []);
+
+  const copyUrl = async (path) => {
+    const full = `${origin}${path}`;
+    try {
+      await navigator.clipboard.writeText(full);
+      setCopiedPath(path);
+      toast.success(`Copied ${full}`);
+      setTimeout(() => setCopiedPath(null), 1500);
+    } catch {
+      toast.error("Copy failed — select the text and copy manually");
+    }
+  };
+
+  return (
+    <Card
+      className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-4"
+      data-testid="admin-webhook-urls-card"
+    >
+      <div>
+        <h2 className="font-display text-lg font-600">Webhook URLs for Merchant Portals</h2>
+        <p className="text-xs text-[var(--nb-muted)] mt-1">
+          Paste these into each gateway's callback / notify URL field so deposits and payouts auto-approve.
+          URLs use this admin panel's origin — <span className="text-white tabular">{origin || "—"}</span>.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {WEBHOOK_GATEWAYS.map((g) => (
+          <div
+            key={g.key}
+            className="rounded-xl border border-[var(--nb-border)] bg-[var(--nb-card2)] p-4"
+            data-testid={`webhook-group-${g.key}`}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-9 h-9 rounded-lg grid place-items-center shrink-0"
+                style={{ background: `${g.color}20`, color: g.color, border: `1px solid ${g.color}40` }}
+              >
+                <span className="font-display font-800 text-[10px]">{g.key.slice(0, 2).toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-display font-700 text-white truncate">{g.label}</div>
+                <div className="text-[11px] text-[var(--nb-muted)]">{g.portal_field_hint}</div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {g.urls.map((u) => {
+                const full = `${origin}${u.path}`;
+                const isCopied = copiedPath === u.path;
+                return (
+                  <div
+                    key={u.path}
+                    className="rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card)] p-2 flex items-center gap-2"
+                    data-testid={`webhook-row-${g.key}-${u.path.split("/").pop()}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-display font-800 tracking-widest text-[var(--nb-muted)]">
+                          {u.role}
+                        </span>
+                        {u.recommended && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded font-display font-800 uppercase tracking-wider"
+                            style={{ background: `${g.color}22`, color: g.color, border: `1px solid ${g.color}55` }}
+                          >
+                            Recommended
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 text-xs font-mono text-white truncate select-all" title={full}>
+                        {full}
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => copyUrl(u.path)}
+                      size="sm"
+                      className={`h-9 px-3 shrink-0 text-xs border transition-colors ${
+                        isCopied
+                          ? "bg-[#10B981]/20 border-[#10B981]/60 text-[#10B981]"
+                          : "bg-[var(--nb-card2)] hover:bg-[var(--nb-border)] text-white border-[var(--nb-border)]"
+                      }`}
+                      data-testid={`webhook-copy-${g.key}-${u.path.split("/").pop()}`}
+                    >
+                      {isCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-[#F5C518]/30 bg-[#F5C518]/8 p-3">
+        <div className="text-[11px] text-[var(--nb-muted)] leading-relaxed">
+          <span className="text-[#F5C518] font-display font-700">Reminder:</span> also whitelist{" "}
+          <span className="text-white font-mono">46.20.101.18</span> as your outbound IP in each merchant portal (see the Server IP card above), then run a{" "}
+          <span className="text-white">₦100 test deposit</span> end-to-end. Auto-approved in Admin ⇒ the loop works. Stays Pending ⇒ check the portal's webhook log.
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 
 /* -------------------------------------------------------------------------- */
 /*  Payment Gateway toggles — admin can enable/disable each gateway for       */
