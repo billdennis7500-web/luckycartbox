@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { api, formatNaira } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogFooter,
+  Dialog, DialogContent, DialogFooter, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
   ArrowDownToLine, ArrowUpFromLine, Ticket, Sparkles, Gift, TrendingUp, Wallet,
@@ -271,8 +271,15 @@ export default function Dashboard() {
       <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
         <DialogContent
           data-testid="welcome-dialog"
+          aria-describedby="welcome-dialog-desc"
           className="bg-transparent border-0 text-white max-w-md w-[calc(100vw-2rem)] rounded-2xl overflow-hidden p-0"
         >
+          {/* Screen-reader-only DialogTitle + Description satisfy Radix a11y
+              requirements without altering the visual design. */}
+          <DialogTitle className="sr-only">Welcome back, {firstName}</DialogTitle>
+          <DialogDescription id="welcome-dialog-desc" className="sr-only">
+            {welcomeMsg || "Welcome message from Luckycart Box."}
+          </DialogDescription>
           <div className="relative rounded-2xl overflow-hidden"
                style={{ boxShadow: "0 24px 80px -20px rgba(245,197,24,0.55), 0 0 0 1px rgba(245,197,24,0.25)" }}>
             {/* Dashed gold accent */}
