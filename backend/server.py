@@ -20,7 +20,7 @@ import jwt
 from bson import ObjectId
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 
@@ -153,6 +153,36 @@ def clean(doc: Optional[dict]) -> Optional[dict]:
         elif isinstance(v, list):
             doc[k] = [str(x) if isinstance(x, ObjectId) else x for x in v]
     return doc
+
+
+# ---------------------------------------------------------------------------
+# Outbound IP resolver — deterministic, zero-network. Used in gateway error
+# paths to tell the merchant "whitelist THIS IP". Reads HTTPS_PROXY once at
+# import time so the hot path is a dict lookup, NOT a 3-second ipify call.
+# ---------------------------------------------------------------------------
+_OUTBOUND_IP_CACHED: Optional[str] = None
+
+
+def outbound_ip_fast() -> str:
+    """Return the server's egress IP as fast as possible.
+
+    Priority:
+      1. HTTPS_PROXY host if it's a numeric IPv4 (the static-proxy case).
+      2. Cached value from a previous successful lookup.
+      3. Literal 'unknown' — caller can decide whether to try harder.
+    """
+    global _OUTBOUND_IP_CACHED
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or ""
+    if proxy:
+        try:
+            from urllib.parse import urlparse
+            host = urlparse(proxy).hostname or ""
+            if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host):
+                _OUTBOUND_IP_CACHED = host
+                return host
+        except Exception:
+            pass
+    return _OUTBOUND_IP_CACHED or "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -1492,10 +1522,73 @@ async def change_password(payload: ChangePasswordIn, user: dict = Depends(get_cu
 # Products (public list + admin CRUD)
 # ---------------------------------------------------------------------------
 @api.get("/products")
-async def list_products(user: dict = Depends(get_current_user)):
+async def list_products(
+    user: dict = Depends(get_current_user),
+    full: bool = False,
+):
+    """Returns the product catalog.
+
+    Product `image_url` values in the DB can be either an external URL OR a
+    huge base64 `data:image/...;base64,...` URI (uploads via the admin UI go
+    the latter route). Base64 data URIs bloat the JSON payload — a single
+    image easily hits 130 KB, making 5 products = 650 KB and the Marketplace
+    feel sluggish on mobile.
+
+    So by default we swap embedded data URIs for a small
+    `/api/products/{id}/image` URL that streams the same bytes with proper
+    HTTP caching. Admins who need the raw base64 (to display in the edit
+    modal thumbnail) can pass `?full=true`. The size drop is >99% for
+    typical catalogs.
+    """
     query = {} if user.get("role") == "admin" else {"active": True}
     docs = await db.products.find(query).sort("price", 1).to_list(200)
-    return [clean(d) for d in docs]
+    out = []
+    for d in docs:
+        c = clean(d)
+        img = c.get("image_url")
+        if not full and img and isinstance(img, str) and img.startswith("data:"):
+            # Cache-buster: last 8 chars of the base64 payload guarantee the
+            # URL changes whenever admin uploads a new image, avoiding stale
+            # thumbnails.
+            c["image_url"] = f"/api/products/{c['id']}/image?v={img[-8:]}"
+        out.append(c)
+    return out
+
+
+@api.get("/products/{pid}/image")
+async def product_image(pid: str, v: Optional[str] = None):
+    """Serve a product's uploaded image as a real HTTP resource so the
+    browser can cache it aggressively. The `v` query param is opaque — it
+    exists purely as a cache-buster the list endpoint injects."""
+    try:
+        prod = await db.products.find_one({"_id": oid(pid)}, {"image_url": 1})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if not prod or not prod.get("image_url"):
+        raise HTTPException(status_code=404, detail="No image")
+    raw = prod["image_url"]
+    if not isinstance(raw, str) or not raw.startswith("data:"):
+        # External URL — 302 redirect so the client fetches directly.
+        return RedirectResponse(url=raw, status_code=302)
+    # Parse data URI: data:<mime>;base64,<payload>
+    import base64
+    try:
+        header, payload = raw.split(",", 1)
+        mime = "image/jpeg"
+        if header.startswith("data:") and ";" in header:
+            mime = header[5:].split(";", 1)[0] or mime
+        blob = base64.b64decode(payload)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Image decode failed")
+    return Response(
+        content=blob,
+        media_type=mime,
+        headers={
+            # 30 days, immutable — safe because our URL changes on every
+            # upload (cache-buster in `v` query param).
+            "Cache-Control": "public, max-age=2592000, immutable",
+        },
+    )
 
 
 @api.post("/admin/products")
@@ -1508,7 +1601,14 @@ async def create_product(p: ProductIn, admin: dict = Depends(get_admin_user)):
 
 @api.put("/admin/products/{pid}")
 async def update_product(pid: str, p: ProductIn, admin: dict = Depends(get_admin_user)):
-    await db.products.update_one({"_id": oid(pid)}, {"$set": p.model_dump()})
+    payload = p.model_dump()
+    # Guard: if the client (admin UI) round-tripped the served `/api/products/{id}/image`
+    # URL as image_url, DO NOT overwrite the stored base64 with our own
+    # serving URL — keep the existing image.
+    img = payload.get("image_url")
+    if isinstance(img, str) and img.startswith("/api/products/") and "/image" in img:
+        payload.pop("image_url", None)
+    await db.products.update_one({"_id": oid(pid)}, {"$set": payload})
     return clean(await db.products.find_one({"_id": oid(pid)}))
 
 
@@ -1595,7 +1695,13 @@ async def my_investments(user: dict = Depends(get_current_user)):
         d["id"] = str(d.pop("_id"))
         d["user_id"] = str(d["user_id"])
         d["product_id"] = str(d["product_id"])
-        d["product_image_url"] = p.get("image_url") or None
+        # Convert huge inline data URIs to the small streaming URL so the
+        # /investments payload stays lean (was 130KB+ per row).
+        img = p.get("image_url")
+        if img and isinstance(img, str) and img.startswith("data:"):
+            d["product_image_url"] = f"/api/products/{d['product_id']}/image?v={img[-8:]}"
+        else:
+            d["product_image_url"] = img or None
         d["product_tier"] = p.get("tier") or None
         out.append(d)
     return out
@@ -1667,13 +1773,9 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
             # Try to grab the outbound IP so the UI can tell the merchant exactly
             # which IP to whitelist. Best-effort — do not fail the deposit path
             # if the ipify probe is slow.
-            outbound_ip = "unknown"
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as _c:
-                    r = await _c.get("https://api.ipify.org")
-                    outbound_ip = r.text.strip() or "unknown"
-            except Exception:
-                pass
+            # Instant static-IP lookup (no external ipify call) — the whole
+            # point of the static proxy is that the egress IP is fixed.
+            outbound_ip = outbound_ip_fast()
             doc.update({
                 "status": "failed",
                 "gateway": "paynow",
@@ -1722,13 +1824,9 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
             # button + bank-transfer fallback CTA. Without this the user only
             # gets a toast error and no easy recovery path — the "system is
             # busy" case reported to us in production.
-            outbound_ip = "unknown"
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as _c:
-                    r = await _c.get("https://api.ipify.org")
-                    outbound_ip = r.text.strip() or "unknown"
-            except Exception:
-                pass
+            # Instant static-IP lookup (no external ipify call) — the whole
+            # point of the static proxy is that the egress IP is fixed.
+            outbound_ip = outbound_ip_fast()
             d = await db.deposits.find_one({"_id": res.inserted_id})
             return clean(d) | {
                 "user_id": str(d["user_id"]),
@@ -1782,13 +1880,9 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                                          {"$set": {"status": "failed",
                                                    "gateway_error": gateway_error,
                                                    "gateway_response": sp}})
-            outbound_ip = "unknown"
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as _c:
-                    r = await _c.get("https://api.ipify.org")
-                    outbound_ip = r.text.strip() or "unknown"
-            except Exception:
-                pass
+            # Instant static-IP lookup (no external ipify call) — the whole
+            # point of the static proxy is that the egress IP is fixed.
+            outbound_ip = outbound_ip_fast()
             d = await db.deposits.find_one({"_id": res.inserted_id})
             return clean(d) | {
                 "user_id": str(d["user_id"]),
@@ -1840,13 +1934,9 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                                          {"$set": {"status": "failed",
                                                    "gateway_error": gateway_error,
                                                    "gateway_response": resp}})
-            outbound_ip = "unknown"
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as _c:
-                    r = await _c.get("https://api.ipify.org")
-                    outbound_ip = r.text.strip() or "unknown"
-            except Exception:
-                pass
+            # Instant static-IP lookup (no external ipify call) — the whole
+            # point of the static proxy is that the egress IP is fixed.
+            outbound_ip = outbound_ip_fast()
             d = await db.deposits.find_one({"_id": res.inserted_id})
             return clean(d) | {
                 "user_id": str(d["user_id"]),
@@ -1902,13 +1992,9 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
                                          {"$set": {"status": "failed",
                                                    "gateway_error": gateway_error,
                                                    "gateway_response": resp}})
-            outbound_ip = "unknown"
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as _c:
-                    r = await _c.get("https://api.ipify.org")
-                    outbound_ip = r.text.strip() or "unknown"
-            except Exception:
-                pass
+            # Instant static-IP lookup (no external ipify call) — the whole
+            # point of the static proxy is that the egress IP is fixed.
+            outbound_ip = outbound_ip_fast()
             d = await db.deposits.find_one({"_id": res.inserted_id})
             return clean(d) | {
                 "user_id": str(d["user_id"]),

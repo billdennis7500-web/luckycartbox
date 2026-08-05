@@ -71,7 +71,7 @@ export default function AdminProducts() {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
-  const load = () => api.get("/products").then((r) => { setItems(r.data); setVisible(9); });
+  const load = () => api.get("/products?full=true").then((r) => { setItems(r.data); setVisible(9); });
   useEffect(() => { load(); }, []);
 
   const save = async () => {

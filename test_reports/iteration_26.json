@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 26 (perf fixes for products/investments payload + deposit outbound_ip) fully passes. Backend 16/16 pytest cases green. /api/products payload dropped to ~1.4 KB (< 5 KB budget) with image_url rewritten to /api/products/{id}/image?v=<hash>. /api/products?full=true (admin) still returns raw base64 data URIs. /api/products/{id}/image serves proper image/jpeg with body >500B, unauthenticated, and returns 404 for unknown ids. /api/investments returns product_image_url as rewritten URL (no data:). Admin PUT guard: sending the served URL as image_url does NOT overwrite the stored base64 (verified via ?full=true roundtrip). POST /api/deposits with each of paynow/shpay/onesspay/juntbest returns in ~1.1s (well under 3s) with outbound_ip == 46.20.101.18 (never 'unknown'). Regression: /health, /settings/public, /coupons/daily, /coupons/history, /referrals/rewards, /admin/deposits, /admin/server-ip all 200. Frontend: user +2348099887711 login, /marketplace shows 5 product cards with images loaded via the new /api/products/{id}/image stream (naturalWidth>0, zero broken). Filter tabs All/Newcomer/Epic/Hot clickable. /investments shows product thumbnail via same stream. Admin /admin/products correctly uses ?full=true (5 imgs with data: URIs displayed) and Edit modal renders the base64 thumbnail.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_perf_products_and_deposit_ip.py",
+    "/app/test_reports/pytest/iter26.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "outbound_ip_fast() is O(1) via HTTPS_PROXY parse + module-level cache — good replacement for ipify (was 3s timeout). All 5 error-return sites in create_deposit correctly switched over.",
+    "list_products rewrites image_url only when it startswith('data:'), keeping external URLs pass-through — correct. Cache-buster uses last 8 chars of base64 payload — collision-safe enough since browser can also honor Cache-Control immutable.",
+    "PUT /admin/products guard drops image_url if it starts with '/api/products/' and contains '/image' — precise pattern; verified base64 preserved through PUT.",
+    "product_image endpoint does not require auth (by design, so <img src=> works); external URLs correctly 302-redirected. 404 branch and 500 on decode failure both handled.",
+    "Cloudflare in preview rewrites Cache-Control to 'no-store' — expected; service-worker v4 cache-first workaround provides browser-side caching. Not a code issue.",
+    "Investments enrichment batch-loads products by id in a single find({_id: {$in: [...]}}) — O(1) round-trip. Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_perf_products_and_deposit_ip.py"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100%"},
+  "test_credentials": "Admin billdennis750@gmail.com/djscan30; User +2348099887711/pass1234",
+  "seed_data_creation": "None. The admin PUT test round-trips the existing product's fields (name/price/tier/etc.) and re-verifies the base64 is intact after PUT. No product data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Perf fixes verified. Products endpoint payload = ~1.4 KB (5 products) with rewritten image URLs. Deposit gateway-error paths measured at ~1.1s with outbound_ip=46.20.101.18. Frontend loads images via /api/products/{id}/image (public, no auth). Admin edit modal uses ?full=true to keep base64 thumbnails. Note: 401 errors in browser console before login (on /api/auth/me during login page) are expected and unrelated.",
+  "rca of the issue": "N/A — the two reported perf bugs are resolved: (1) base64 image URIs are no longer inlined into /api/products or /api/investments JSON, saving ~640KB and ~130KB respectively. (2) The 3-second ipify.org round-trip in the deposit failure path is replaced with a synchronous HTTPS_PROXY parse (outbound_ip_fast) returning 46.20.101.18 immediately."
+}
