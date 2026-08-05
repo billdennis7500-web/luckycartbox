@@ -881,3 +881,32 @@ Switched to `asyncio.gather(...)` which accepts any awaitable (motor Futures, co
 - `/api/referrals` → still HTTP 200 (was already using `gather` correctly) ✓
 - New regression suite `tests/test_investments_regression.py` — 3 tests pass.
 - All 34 backend tests green (was 32, added 3 new tests).
+
+## 2026-02-05 · 1SSPay payout diagnostic + balance pre-check
+
+### User report
+"1SSPay payout is not working — admin approves the withdrawal, nothing happens, then eventually it fails silently."
+
+### Root cause (VERIFIED live)
+NOT a code/bank-code/proxy issue — 1SSPay keeps two SEPARATE balances:
+- `balance`: money received from user deposits, awaiting settlement (₦1,102.40)
+- `payoutBalance`: funds actually available to disburse (₦0.00)
+
+Until the merchant clicks "Settle" in the 1SSPay dashboard (or the daily auto-settle runs), payin funds don't move to `payoutBalance`. Every payout submits `code=200` but silently fails downstream 5-15 min later with `status=3` and `failMsg: None`. Admin sees a rejected withdrawal with no explanation.
+
+### Delivered
+1. **Balance pre-check** in `_onesspay_payout_withdrawal` — before dispatching, we call `onesspay.get_balance()` and abort with `HTTPException(400)` if `payoutBalance < payout_amount`. Message includes ALL the naira figures:
+   > *"1SSPay has no available payout balance right now (only ₦0.00 available; ₦1,102.40 in payin still to settle, ₦9.45 waiting to settle). Settle your payin balance in the 1SSPay merchant dashboard first, then retry — or try another gateway."*
+2. **Persist last_gateway_attempt** on the withdrawal doc so admin UI can surface the failure. Matches the JuntPay pattern.
+3. **Better payout-response logging** — WARNING log with wid, bank_code, account, amount, code, msg, full response.
+4. **Reconcile-loop failure enrichment** — when 1SSPay returns `failMsg: None`, `reconcile_pending_onesspay_withdrawals` now attaches a balance snapshot as the failure reason so admin knows the payout balance was empty at reconcile time.
+5. **Auto-router gracefully falls through** — since the balance-precheck raises `HTTPException`, the general `/admin/withdrawals/{wid}/approve` router logs the failure and tries the next enabled gateway (JuntPay). Existing behaviour, verified.
+
+### Verified live
+- `GET /api/admin/onesspay/health` → `balance: 1102.40, payoutBalance: 0.00` (confirms the diagnosis)
+- Synthetic payout dispatch → `HTTP 400: 1SSPay has no available payout balance right now (only ₦0.00 available...)`  
+- 2 new regression tests in `tests/test_onesspay_balance_precheck.py` pass.
+- All 28 pre-existing tests still green.
+
+### Action for user
+The 1SSPay balance issue is NOT a code bug — it's an operational state at the 1SSPay merchant portal. To unblock actual payouts, please log into the 1SSPay merchant dashboard and settle the pending payin balance (₦1,102.40) — that will move funds into `payoutBalance`. My fix ensures admin sees a clear diagnostic message next time this happens.

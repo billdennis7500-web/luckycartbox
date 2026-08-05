@@ -873,13 +873,29 @@ async def reconcile_pending_onesspay_withdrawals() -> int:
                                           "Withdrawal paid out (1SSPay reconciled)")
             settled += 1
         elif status in ("3", "5"):
+            # Enrich the failure message with a balance snapshot so admin can
+            # tell whether the failure was a balance issue or a bank/account
+            # rejection. `failMsg` from 1SSPay is often None even when the
+            # payout fails downstream.
+            fail_hint = data.get("failMsg") or ""
+            try:
+                bal_snap = await onesspay.get_balance()
+                bd = bal_snap.get("data") or {}
+                if not fail_hint and float(bd.get("payoutBalance") or 0) == 0:
+                    fail_hint = (
+                        f"1SSPay reported no failure reason. Their payout balance is ₦0 — "
+                        f"₦{float(bd.get('balance') or 0):,.2f} in payin still to settle. "
+                        f"Please settle the payin balance in the 1SSPay merchant dashboard."
+                    )
+            except Exception:
+                pass
             await db.users.update_one({"_id": w["user_id"]},
                                       {"$inc": {"wallet_balance": float(w["amount"])}})
             await db.withdrawals.update_one(
                 {"_id": w["_id"], "status": "processing"},
                 {"$set": {"status": "rejected", "processed_at": now_utc().isoformat(),
                           "gateway_query": data,
-                          "gateway_error": data.get("failMsg") or "1SSPay reported failure"}},
+                          "gateway_error": fail_hint or "1SSPay reported failure (no reason returned)"}},
             )
             await add_transaction(w["user_id"], "withdrawal_refund", float(w["amount"]),
                                   "Withdrawal failed - refunded (1SSPay reconciled)",
@@ -2268,12 +2284,53 @@ async def _onesspay_payout_withdrawal(w: dict, note: str = "") -> dict:
     stored `bank_code` is in PayNow/SHPAY format, admin can either provide the
     1SSPay code manually via the `w["onesspay_bank_code"]` override or the
     caller must map it before calling this helper.
+
+    IMPORTANT: 1SSPay keeps payin and payout balances SEPARATE. Money from user
+    deposits sits in `balance` (settlement pending) — it only moves to
+    `payoutBalance` after the merchant settles it in the 1SSPay dashboard. If
+    `payoutBalance < payout_amount`, the payout gets submitted with code=200
+    but silently fails downstream (`status=3`) 5-15 min later. We do a
+    pre-flight balance check so admin sees a clear error immediately.
     """
     payout_amount = float(w.get("payout_amount") or w.get("amount") or 0)
     order_no = f"OW{str(w['_id'])[-15:]}{int(datetime.now().timestamp())}"
     bank_code = w.get("onesspay_bank_code") or w.get("bank_code") or ""
     if not bank_code:
         raise HTTPException(400, "This withdrawal has no bank code — user must re-bind their bank first.")
+
+    # Pre-flight: check the payout balance. Skip on any transient error — the
+    # downstream API call has its own error handling and we don't want a
+    # temporary balance-check failure to block a valid payout.
+    try:
+        bal_resp = await onesspay.get_balance()
+        if int(bal_resp.get("code") or 0) == 200:
+            bal_data = bal_resp.get("data") or {}
+            payout_bal = float(bal_data.get("payoutBalance") or 0)
+            if payout_bal < payout_amount:
+                pending = float(bal_data.get("balance") or 0)
+                waiting = float(bal_data.get("waitSettle") or 0)
+                await db.withdrawals.update_one(
+                    {"_id": w["_id"]},
+                    {"$set": {"last_gateway_attempt": {
+                        "gateway": "onesspay",
+                        "code": "insufficient_payout_balance",
+                        "message": f"1SSPay payoutBalance={payout_bal:.2f} < required {payout_amount:.2f}",
+                        "balance_snapshot": bal_data,
+                        "at": now_utc().isoformat(),
+                    }}},
+                )
+                raise HTTPException(
+                    400,
+                    f"1SSPay has no available payout balance right now "
+                    f"(only ₦{payout_bal:,.2f} available; ₦{pending:,.2f} in payin still to settle, "
+                    f"₦{waiting:,.2f} waiting to settle). Settle your payin balance in the 1SSPay "
+                    f"merchant dashboard first, then retry — or try another gateway.",
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("1SSPay balance pre-check failed — proceeding with payout anyway")
+
     resp = await onesspay.create_payout(
         order_no=order_no,
         amount=payout_amount,
@@ -2282,8 +2339,28 @@ async def _onesspay_payout_withdrawal(w: dict, note: str = "") -> dict:
         bank_code=bank_code,
         phone=(w.get("user_phone") or "").lstrip("+")[-10:] or None,
     )
-    if int(resp.get("code") or 0) != 200:
-        raise HTTPException(400, f"1SSPay declined: {resp.get('msg') or 'unknown'}")
+    code = int(resp.get("code") or 0)
+    if code != 200:
+        raw_msg = resp.get("msg") or "unknown"
+        logger.warning(
+            "1SSPay payout REJECTED wid=%s bank_code=%s account=%s name=%s amount=%s → code=%s msg=%s full=%s",
+            w["_id"], bank_code, w.get("account_number"), w.get("account_name"),
+            payout_amount, code, raw_msg, resp,
+        )
+        try:
+            await db.withdrawals.update_one(
+                {"_id": w["_id"]},
+                {"$set": {"last_gateway_attempt": {
+                    "gateway": "onesspay",
+                    "code": code,
+                    "message": raw_msg,
+                    "bank_code_sent": bank_code,
+                    "at": now_utc().isoformat(),
+                }}},
+            )
+        except Exception:
+            pass
+        raise HTTPException(400, f"1SSPay declined (code {code}): {raw_msg}")
     data = resp.get("data") or {}
     await db.withdrawals.update_one(
         {"_id": w["_id"]},
