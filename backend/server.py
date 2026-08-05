@@ -1810,14 +1810,14 @@ async def invest(payload: InvestIn, user: dict = Depends(get_current_user)):
 
 @api.get("/investments")
 async def my_investments(user: dict = Depends(get_current_user)):
-    # Kick off the investments list read IN PARALLEL with profit-drop probe.
-    # Both use indexed `user_id` reads on the same collection so Atlas serves
-    # them concurrently. Saves ~150-250 ms of Atlas RTT per page load.
-    invs_task = asyncio.create_task(
-        db.investments.find({"user_id": user["_id"]}).sort("created_at", -1).to_list(500)
+    # Run the investments-list read IN PARALLEL with the profit-drop probe.
+    # Both operate on the same collection with an indexed user_id filter, so
+    # Atlas serves them concurrently. `asyncio.gather` accepts any awaitable
+    # (motor futures included), while `create_task` needs a native coroutine.
+    docs, user = await asyncio.gather(
+        db.investments.find({"user_id": user["_id"]}).sort("created_at", -1).to_list(500),
+        process_profit_drops(user),
     )
-    user = await process_profit_drops(user)
-    docs = await invs_task
     # Batch-load product images + tiers so the UI can show thumbnails + tier badges.
     prod_ids = list({d["product_id"] for d in docs})
     prods = {}

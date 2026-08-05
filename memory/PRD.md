@@ -861,3 +861,23 @@ Repeat page visits now render in **~0 ms** (sessionStorage cache) with backgroun
 - `POST /api/paynow/retry` for admin returns full body with `outbound_ip:"46.20.101.18"` ✓
 - `POST /api/deposits` creates deposit and no `outbound_ip` in response ✓
 - Frontend `yarn build` passes.
+
+## 2026-02-05 · HOTFIX: `/api/investments` was 500-ing (P0 regression)
+
+### Root cause
+My earlier perf refactor did:
+```python
+invs_task = asyncio.create_task(
+    db.investments.find(...).sort(...).to_list(500)
+)
+```
+Motor's `.to_list()` returns a `Future` (via `loop.run_in_executor`), NOT a native `coroutine`. `asyncio.create_task` rejects Futures with `TypeError: a coroutine was expected, got <Future pending>`. Every `/api/investments` call 500'd → Warehouse/My Purchases page showed no active investments.
+
+### Fix
+Switched to `asyncio.gather(...)` which accepts any awaitable (motor Futures, coroutines, tasks). Both the investments-list read and profit-drop probe now run concurrently without a Future→Task coercion.
+
+### Verified
+- `/api/investments` → HTTP 200 (was 500), returns active investment ("Starter Plan", drops 7/30) ✓
+- `/api/referrals` → still HTTP 200 (was already using `gather` correctly) ✓
+- New regression suite `tests/test_investments_regression.py` — 3 tests pass.
+- All 34 backend tests green (was 32, added 3 new tests).
