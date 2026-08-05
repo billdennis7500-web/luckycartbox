@@ -1057,3 +1057,48 @@ Live-tested against JuntPay API — all 6 candidate wayCodes fail except one:
 
 ### Redeploy needed
 Production is still broken until user redeploys — the new hard-guard is what makes their existing withdrawals go through. Optional: they can also remove/set `JUNTBEST_PAYOUT_WAY_CODE=BANK_TRANSFER` in their Emergent env panel for cleanliness.
+
+## 2026-02-05 · Shareable brand infographic pages (Rewards Showcase + How It Works)
+
+### User request
+Requested LuckyPop-style promotional/infographic pages but adapted to Luckycart Box's brand, features, and copy — keeping OUR dark+gold aesthetic.
+
+### Delivered
+
+**1. `/rewards-showcase` — "Spread the Wealth & Get Paid"**
+- Poster-style hero with gold trumpet chip, radial glow accents, dashed top/bottom borders.
+- **5-tier ladder** rendered dynamically from `/api/settings/public`:
+  - **1 Ignite** (5 refs → ₦1,000) — orange flame
+  - **2 Ascend** (10 refs → ₦1,500) — emerald rocket
+  - **3 Empire** (25 refs → ₦5,000) — gold trophy
+  - **4 Sovereign** (50 refs → ₦15,000) — purple crown
+  - **5 Titan** (100 refs → ₦50,000) — cyan gem
+- "All tiers stack = ₦72,500" infinity pill (auto-computed from live tier data).
+- "The Ultimate Wealth Loop" motivational card.
+- **Share arsenal** — invite-link copy + big WhatsApp + Telegram share buttons pre-populated with a warm pitch template.
+- Gold CTA "Track your progress" → `/rewards`.
+- 3 trust pills: 100% Authentic / Secure & Safe / Instant Rewards.
+
+**2. `/how-it-works` — "How to Turn [siteName] into Your Daily Naira Machine"**
+- Poster-style hero with "THE PLAYBOOK" chip.
+- **3 numbered pillars** with color-coded left ornament badges (gold, emerald, purple):
+  1. Compound Daily — Skip the Get-Rich-Quick Trap
+  2. Show Up Daily — Build the Rhythm
+  3. Build Your Team — Real Leverage
+- Motivational trophy banner.
+- **"Your action plan for today"** — 4-step checklist personalised with the live welcome bonus amount.
+- Two CTAs: gold "Browse the Shop" + secondary "See Referral Rewards".
+- 2×2 trust-pill grid: Low risk / Daily discipline / Build your team / Think global.
+
+### Backend
+- `/api/settings/public` now exposes `referral_levels` and `referral_level_requires_investment` so the showcase page renders without an admin session.
+
+### Discovery / nav
+- New promo CTA card at the top of `/referrals` linking to `/rewards-showcase`.
+- New menu row on Profile → "How it works" (gold tint) linking to `/how-it-works`.
+
+### Verified
+- Frontend `yarn build` passes.
+- Screenshots confirm both pages render correctly with tiers loading dynamically from settings.
+- All 5 tiers correctly show ₦1,000 → ₦50,000 with matching icons and color-coded halos.
+- Total stacked reward (₦72,500) computed live.

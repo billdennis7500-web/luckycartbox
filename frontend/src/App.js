@@ -28,6 +28,8 @@ import Investments from "@/pages/user/Investments";
 import CustomerService from "@/pages/user/CustomerService";
 import Level from "@/pages/user/Level";
 import About from "@/pages/user/About";
+import HowItWorks from "@/pages/user/HowItWorks";
+import RewardsShowcase from "@/pages/user/RewardsShowcase";
 import ChangePassword from "@/pages/user/ChangePassword";
 import ImpersonateBootstrap from "@/pages/ImpersonateBootstrap";
 
@@ -96,6 +98,8 @@ function App() {
             <Route path="customer-service" element={<CustomerService />} />
             <Route path="level" element={<Level />} />
             <Route path="about" element={<About />} />
+            <Route path="how-it-works" element={<HowItWorks />} />
+            <Route path="rewards-showcase" element={<RewardsShowcase />} />
             <Route path="change-password" element={<ChangePassword />} />
             <Route path="profile" element={<Profile />} />
           </Route>

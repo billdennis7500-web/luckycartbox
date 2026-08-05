@@ -4616,6 +4616,10 @@ async def public_settings():
         "withdrawal_fee_pct": s.get("withdrawal_fee_pct") or 0,
         "auto_payout_enabled": bool(s.get("auto_payout_enabled")),
         "deposit_quick_amounts": s.get("deposit_quick_amounts") or [500, 1000, 2000, 5000, 10000, 20000],
+        # Referral level tiers — surfaced publicly so the promo/showcase page
+        # renders dynamically without needing an admin session.
+        "referral_levels": s.get("referral_levels") or [],
+        "referral_level_requires_investment": bool(s.get("referral_level_requires_investment", True)),
     }
 
 
