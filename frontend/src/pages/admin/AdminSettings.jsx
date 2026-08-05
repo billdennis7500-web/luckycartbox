@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { Copy, AlertTriangle, Trash2, Loader2, Sparkles, Wallet, MessageCircle, Award, CreditCard, Server, ShieldAlert, LogOut, History } from "lucide-react";
 import { SectionHeader } from "@/components/design";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 /**
  * Admin Settings tab layout — grouped by concern rather than a single
@@ -1203,16 +1204,15 @@ function SettingsHistoryCard() {
   };
 
   return (
-    <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-3" data-testid="settings-history-card">
-      <div>
-        <h2 className="font-display text-lg font-600 flex items-center gap-2">
-          <History className="w-4 h-4 text-[#F5C518]" /> Settings history &amp; restore
-        </h2>
-        <p className="text-xs text-[var(--nb-muted)] mt-1">
-          Every settings change is snapshotted here. If a value gets accidentally reset (deploy, misclick, teammate), tap <span className="text-white">Restore</span> to roll back instantly.
-        </p>
-      </div>
-
+    <CollapsibleCard
+      title="Settings history & restore"
+      subtitle={`Every settings change is snapshotted here. Tap a row's Restore to roll back instantly.${rows.length ? `  (${rows.length} change${rows.length===1?'':'s'} recorded)` : ""}`}
+      icon={History}
+      iconColor="#F5C518"
+      storageKey="settings-history"
+      defaultOpen={false}
+      testid="settings-history-card"
+    >
       {loading ? (
         <div className="text-sm text-[var(--nb-muted)]">Loading history…</div>
       ) : rows.length === 0 ? (
@@ -1280,7 +1280,7 @@ function SettingsHistoryCard() {
           );})}
         </div>
       )}
-    </Card>
+    </CollapsibleCard>
   );
 }
 
