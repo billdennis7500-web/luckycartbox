@@ -1,9 +1,13 @@
-"""Generate two branded flyers for Luckycart Box using Gemini Nano Banana.
+"""Generate a full set of branded flyers for Luckycart Box using
+Gemini Nano Banana. Portrait format (2:3, WhatsApp/IG story friendly).
 
-Flyer 1: 5-tier referral rewards showcase (adapted from LuckyPop reference)
-Flyer 2: "How to build LCB into your long-term business" 3-pillar infographic
-
-Portrait format (2:3 / 1080x1620) — sized for WhatsApp status, IG story, Telegram.
+Covers all platform benefits with the CORRECT product data:
+  - Box tiers ₦3K – ₦200K
+  - 15% daily profit
+  - 90-day cycle (regular boxes) OR 95-day cycle (premium)
+  - ₦1,000 welcome bonus
+  - 5-tier referral rewards up to ₦72,500 stacked
+  - 4 payment gateways for instant deposits & withdrawals
 """
 import asyncio
 import base64
@@ -12,10 +16,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv("/app/backend/.env")
-
-# The .env sets HTTPS_PROXY (for payment gateways). Unset it here — LLM
-# calls need direct egress or they hit the IPRoyal proxy which blocks
-# LLM API hostnames.
+# Kill proxy vars — LLM egress must be direct, not via IPRoyal.
 for k in ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"):
     os.environ.pop(k, None)
 
@@ -25,125 +26,179 @@ OUTPUT_DIR = Path("/app/generated_flyers")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
-FLYER_1_PROMPT = """
-Create a premium PORTRAIT promotional flyer / poster (2:3 aspect ratio, vertical) for a Nigerian
-investment app called "LUCKYCART BOX".
-
-Style: Luxury dark theme with gold accents. Deep black background (#0B0906) with subtle radial
-glows. Bold, high-contrast, poster-quality infographic. Zero purple — this brand is gold + dark.
-
-HEADER (top ~15%):
-- Small gold pill chip: "DAILY REFERRAL CASH BONUS" in tiny uppercase gold letters
-- Big serif+sans hero headline: "SPREAD THE WEALTH & GET PAID."
-  Split across two lines with "SPREAD THE WEALTH" in bright white and "& GET PAID." in bright gold (#F5C518).
-- One-line subtitle: "5 LIVE milestone bonuses — the more friends you bring, the more free cash you unlock."
-
-MIDDLE (5-TIER LADDER, ~60%):
-Show a 5-step reward ladder / staircase, each step being a distinct hexagonal or rounded medallion
-labelled with:
-  Level 1 IGNITE — Invite 5 friends — ₦1,000 cash — flame icon in orange
-  Level 2 ASCEND — Invite 10 friends — ₦1,500 cash — rocket icon in emerald green
-  Level 3 EMPIRE — Invite 25 friends — ₦5,000 cash — trophy icon in gold
-  Level 4 SOVEREIGN — Invite 50 friends — ₦15,000 cash — crown icon in royal purple
-  Level 5 TITAN — Invite 100 friends — ₦50,000 cash — gem icon in cyan
-
-Each medallion should have a small number badge (1-5) on top, the tier name in gold caps under
-it, "Invite X friends" in white beneath, and a gold "₦XXX" cash reward pill at the bottom.
-Ladder ascends from left/bottom to right/top OR shows as a 5-card vertical/grid stack.
-
-MIDDLE-BOTTOM (~10%):
-Gold-outlined banner card: "THE ULTIMATE WEALTH LOOP" — "All 5 tiers stack. Invite 100 friends
-and pocket ₦72,500 pure cash." (small infinity ∞ icon inline).
-
-BOTTOM (~15%):
-- 3 tiny trust pills side-by-side: "100% AUTHENTIC · SECURE & SAFE · INSTANT REWARDS" each with
-  a small icon (shield, lock, lightning).
-- Very bottom: brand mark line "LUCKYCART BOX — Rewards That Pay Daily"
-
-Overall look: premium marketing poster, sharp geometry, tight kerning, gold hairline dashes as
-top/bottom accents, small radial glow bloom in top-right corner. NO stock photos of people.
-Design must be text-safe and readable on a phone screen at 1080x1620px.
+COMMON_STYLE = """
+STYLE (critical, do not deviate):
+- PORTRAIT 2:3 aspect ratio (~1080x1620 phone-story friendly).
+- Deep black background (#0B0906) with subtle top-right gold radial glow.
+- Palette: gold (#F5C518) + warm gold light (#FFE580) + emerald (#10B981) as
+  the ONLY colored accent. NO purple, NO violet, NO neon.
+- Modern high-contrast poster / infographic feel.
+- Small gold pill chip at the very top with the section label.
+- Bold sans-serif hero headline in two lines (mix of white + gold).
+- Gold hairline-dashed accents at the very top and very bottom of the poster.
+- Brand mark line at the bottom: "LUCKYCART BOX" in gold caps.
+- All text must be crisp, high-contrast, readable at phone-screen size.
+- No stock people photos, no random icons — geometric badges and clean
+  symbols only.
 """
 
 
-FLYER_2_PROMPT = """
-Create a premium PORTRAIT promotional flyer / poster (2:3 aspect ratio, vertical) for a Nigerian
-investment app called "LUCKYCART BOX".
+FLYERS = [
+    {
+        "id": "01_playbook",
+        "session": "flyer-playbook-v2",
+        "prompt": f"""
+Create a PORTRAIT promotional flyer for a Nigerian investment app called "LUCKYCART BOX".
 
-Style: Same luxury dark + gold theme as sibling flyer. Deep black background (#0B0906) with
-subtle radial glows. NO purple / violet — brand is gold + dark + a single emerald accent.
+{COMMON_STYLE}
 
-HEADER (top ~15%):
-- Small gold pill chip: "THE PLAYBOOK" in tiny uppercase gold letters
-- Big hero headline over 3 lines:
-   "HOW TO TURN"
-   "LUCKYCART BOX" (in bright gold #F5C518)
-   "INTO YOUR DAILY NAIRA MACHINE"
-- Subtitle: "3 core habits to turn your box into daily cash flow — not a get-rich-quick play, but a real long-term business."
+TOP:
+- Gold pill chip: "THE PLAYBOOK"
+- Hero (3 lines): "HOW TO TURN" / "LUCKYCART BOX" (in gold) / "INTO YOUR DAILY NAIRA MACHINE"
+- Sub: "3 core habits to turn your box into daily naira cash flow — this is a 90 to 95-day compounding business, not a get-rich-quick play."
 
-MIDDLE (3 PILLARS, ~65%):
-Three big rectangular horizontal cards stacked vertically. Each has a large numbered gold circle
-on the LEFT (bold 1, 2, 3), and a heading + short paragraph on the right.
+MIDDLE — 3 numbered gold-medallion pillar cards stacked vertically:
+1) COMPOUND DAILY OVER 90-95 DAYS — accent gold.
+   Body: "Every box pays 15% daily for 90 days (or 95 days on premium tiers). Small daily drops snowball into serious naira compounded over the full cycle."
+   Small icon: trending-up chart.
+2) SHOW UP DAILY — accent emerald.
+   Body: "Log in daily, claim your Daily Bonus Drop, and check the Marketplace. Just 5 minutes a day. Consistent action separates a hobby from a business."
+   Small icon: calendar.
+3) BUILD YOUR TEAM — accent gold (warm).
+   Body: "Share your referral link. Earn 3-tier commissions on every friend PLUS stack up to ₦72,500 in milestone bonuses. Your network becomes your net worth."
+   Small icon: users/people.
 
-Card 1 (accent gold #F5C518): 
-  TITLE: "COMPOUND DAILY — SKIP THE GET-RICH-QUICK TRAP"
-  Body: "Treat every investment as a small, low-risk cashflow move. Your daily profits compound over 30 days — small wins snowball into serious monthly returns."
-  Small icon: trending-up chart
+BOTTOM:
+- Banner: "Real earnings aren't built on a single lucky day — but on 90 days of daily discipline."
+- 4 mini pills: "LOW RISK · DAILY DISCIPLINE · TEAM LEVERAGE · REAL RESULTS"
+- Brand mark: "LUCKYCART BOX — Real people. Real earnings."
+""",
+    },
+    {
+        "id": "02_earnings",
+        "session": "flyer-earnings-v2",
+        "prompt": f"""
+Create a PORTRAIT promotional flyer for a Nigerian investment app called "LUCKYCART BOX".
 
-Card 2 (accent emerald #10B981):
-  TITLE: "SHOW UP DAILY — BUILD THE RHYTHM"
-  Body: "Log in daily, claim your Daily Bonus Drop, and check the Marketplace. Just 5 minutes a day. Consistent action separates a hobby from a business."
-  Small icon: calendar
+{COMMON_STYLE}
 
-Card 3 (accent gold with warm tint):
-  TITLE: "BUILD YOUR TEAM — REAL LEVERAGE"
-  Body: "Share your referral link. Earn 3-tier commissions on every friend PLUS up to ₦72,500 in milestone bonuses. Your network becomes your net worth."
-  Small icon: people/users
+TOP:
+- Gold pill chip: "DAILY EARNINGS ENGINE"
+- Hero (2 lines): "EARN 15% DAILY" / "FOR UP TO 95 DAYS." with the "15% DAILY" and "95 DAYS" in bright gold.
+- Sub: "Pick a box, watch it pay you back every day — full 90-day cycle for regular boxes, 95-day cycle for premium."
 
-BOTTOM (~15%):
-- Motivational quote banner: "Real earnings aren't built on a single lucky day, but on daily persistence."
-- 4 mini pills in a row: "LOW RISK · DAILY DISCIPLINE · TEAM BUILDING · REAL RESULTS"
-- Bottom mark: "LUCKYCART BOX — Real people. Real earnings."
+MIDDLE — Grid of 7 box tiers, each a rounded gold-outlined card with a small box icon, tier name, price, and expected total return over the full cycle:
+- LUCKY CART — ₦3,000 stake — 90 days × 15% = ₦40,500 total
+- LUCKY CART EXCLUSIVE — ₦5,000 — 90 days × 15% = ₦67,500
+- LUCKYCART EXCHANGE — ₦20,000 — 90 days × 15% = ₦270,000
+- LUCKYCART MYSTERY — ₦50,000 — 90 days × 15% = ₦675,000
+- LUCKYCART BOX — ₦100,000 — 90 days × 15% = ₦1,350,000
+- LUCKYCART TREASURES — ₦150,000 — 95 days × 15% = ₦2,137,500 (premium; mark PREMIUM)
+- LUCKYCART MUSEUM — ₦200,000 — 95 days × 15% = ₦2,850,000 (premium; mark PREMIUM)
 
-Overall look: premium marketing infographic, poster quality. Sharp geometry, gold hairline dashes
-as top/bottom accents, subtle radial glow bloom in top-right. NO stock photos of people. Text
-must be crisp and readable at 1080x1620px on a phone.
-"""
+Layout 2 columns × 4 rows (last row single centered card if needed). Each card must
+clearly show: tier name (gold), stake amount (white bold), daily rate ("15%/day"),
+duration ("90d" or "95d" as tiny pill), and TOTAL RETURN in bright gold.
+
+BOTTOM:
+- Banner: "Compound smart. Cashflow daily. Cash out anytime."
+- 3 trust pills: "SECURE PAYOUTS · 4 GATEWAYS · INSTANT WITHDRAWALS"
+- Brand mark: "LUCKYCART BOX — Boxes That Pay Every Day."
+""",
+    },
+    {
+        "id": "03_welcome",
+        "session": "flyer-welcome-v2",
+        "prompt": f"""
+Create a PORTRAIT promotional flyer for a Nigerian investment app called "LUCKYCART BOX".
+
+{COMMON_STYLE}
+
+TOP:
+- Gold pill chip: "NEW-MEMBER OFFER"
+- Hero (2 lines): "GET ₦1,000 FREE." / "START EARNING TODAY."
+  ("₦1,000 FREE" in giant bright gold letters filling half the top area).
+- Sub: "Sign up in 60 seconds. Claim your welcome bonus. Buy your first box. Watch daily naira roll into your wallet for the next 90 days."
+
+MIDDLE — 3 numbered horizontal cards, each with a gold circle number badge on left and copy on right:
+1) SIGN UP — Small green check icon.
+   "Register with your phone. No paperwork. Instant ₦1,000 welcome bonus credited to your wallet."
+2) ACTIVATE A BOX — Small gold shopping-bag icon.
+   "Grab a starter box from just ₦3,000. Every box pays 15% daily for 90 days — that's ₦40,500 in total returns on a single ₦3,000 stake."
+3) CASH OUT DAILY — Small emerald bank icon.
+   "Withdraw to your Nigerian bank via 4 automated gateways. No delays, no drama, instant naira in your account."
+
+BOTTOM:
+- Trumpet banner: "Sign up bonus + Daily earnings + Referral cash = Real freedom."
+- Big bright gold CTA pill: "JOIN LUCKYCART BOX TODAY →"
+- Brand mark: "LUCKYCART BOX — Where Naira Meets Freedom."
+""",
+    },
+    {
+        "id": "04_overview",
+        "session": "flyer-overview-v2",
+        "prompt": f"""
+Create a PORTRAIT promotional flyer for a Nigerian investment app called "LUCKYCART BOX".
+
+{COMMON_STYLE}
+
+TOP:
+- Gold pill chip: "WHY LUCKYCART BOX"
+- Hero (3 lines): "5 REASONS" / "NIGERIANS ARE" (in white) / "WAKING UP RICHER" (in gold).
+- Sub: "One app. Five ways to grow your naira. All the daily-cashflow power in your pocket."
+
+MIDDLE — 5 rounded rectangular benefit cards, alternating gold + emerald accents, each with a bold icon on the left and clean copy on the right:
+
+1) [icon: gold gift-box] DAILY EARNINGS ENGINE
+   "Every box you buy pays you 15% every day for 90 to 95 days. Watch your wallet grow while you sleep."
+
+2) [icon: emerald hand-cash] ₦1,000 WELCOME BONUS
+   "Sign up today and we credit your wallet with ₦1,000 — free naira to spend on your first box."
+
+3) [icon: gold users] 3-TIER REFERRALS
+   "Invite friends. Get paid on every friend they refer, and every friend those friends refer. Passive network income."
+
+4) [icon: emerald trophy] MILESTONE BONUSES
+   "Unlock 5 stacking cash rewards — from ₦1,000 up to ₦72,500 pure cash — as your team grows."
+
+5) [icon: gold shield-check] INSTANT SECURE WITHDRAWALS
+   "4 payment gateways, direct to your Nigerian bank. Automated. Encrypted. No admin delay."
+
+BOTTOM:
+- Trumpet banner: "Sign up. Show up daily. Stack up cash for 90 days."
+- 3 mini pills: "TRUSTED · INSTANT · REWARDING"
+- Brand mark line: "LUCKYCART BOX — Nigeria's Smart Wealth Partner."
+""",
+    },
+]
 
 
-async def gen(prompt: str, out_name: str, session_id: str):
+async def gen(flyer_cfg):
     api_key = os.getenv("EMERGENT_LLM_KEY")
     if not api_key:
-        raise RuntimeError("EMERGENT_LLM_KEY not set in /app/backend/.env")
-    chat = LlmChat(api_key=api_key, session_id=session_id,
-                   system_message="You are an expert graphic designer producing production-ready branded marketing flyers.")
+        raise RuntimeError("EMERGENT_LLM_KEY not set")
+    chat = LlmChat(api_key=api_key, session_id=flyer_cfg["session"],
+                   system_message="You are an award-winning graphic designer producing production-ready branded marketing flyers.")
     chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
-
-    text, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
-
+    text, images = await chat.send_message_multimodal_response(UserMessage(text=flyer_cfg["prompt"]))
+    name = f"luckycart_{flyer_cfg['id']}"
     if not images:
-        print(f"[{out_name}] NO IMAGES returned. Text response: {text[:200]}")
+        print(f"[{name}] NO IMAGES — text: {text[:180]}")
         return None
-
-    # Save first image
-    img = images[0]
-    print(f"[{out_name}] mime={img['mime_type']}  saving...")
-    image_bytes = base64.b64decode(img['data'])
-    path = OUTPUT_DIR / f"{out_name}.png"
+    path = OUTPUT_DIR / f"{name}.png"
     with open(path, "wb") as f:
-        f.write(image_bytes)
-    size = path.stat().st_size / 1024
-    print(f"[{out_name}] SAVED: {path}  ({size:.1f} KB)")
+        f.write(base64.b64decode(images[0]["data"]))
+    print(f"[{name}] {path.stat().st_size / 1024:.1f} KB → {path}")
     return path
 
 
 async def main():
-    print("=" * 60)
-    print("Generating 2 branded flyers via Gemini Nano Banana…")
-    print("=" * 60)
-    await gen(FLYER_1_PROMPT, "luckycart_rewards_flyer",   session_id="flyer-rewards-01")
-    await gen(FLYER_2_PROMPT, "luckycart_playbook_flyer",  session_id="flyer-playbook-01")
-    print("\nAll flyers written to:", OUTPUT_DIR)
+    # Fire all 4 in parallel to save time
+    print("Generating 4 flyers via Gemini Nano Banana in parallel…")
+    results = await asyncio.gather(*[gen(f) for f in FLYERS])
+    print("\nGenerated:")
+    for r in results:
+        if r: print(" ", r)
 
 
 if __name__ == "__main__":
