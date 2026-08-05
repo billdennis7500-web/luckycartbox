@@ -783,3 +783,36 @@ User added a fourth payment gateway ("JuntBest — Smart Pay") with real merchan
 - Deposit page (both themes) now shows 4 method tiles (Instant / Quick / Fast / **Smart**).
 - Outbound IP JuntBest sees is `46.20.101.18` (the IPRoyal static proxy). Whitelist that on the JuntBest merchant dashboard if they require IP restriction.
 
+
+## 2026-02-05 · JuntPay payout bank-code fix (P0 recurring bug)
+
+### Root cause
+User-reported: "I approved a withdrawal via JuntPay but it never went through — admin dashboard just kept showing failed." Root cause found in the server logs:
+```
+Payout via juntbest failed for withdrawal 6a72ff786d1bd7915eb68a03: JuntBest declined: BANK_NOT_SUPPORTED
+```
+The `translate_bank_code(bank_name, "juntbest", ...)` helper was using the LEGACY static `NIGERIAN_BANKS` list in `juntbest.py` — codes formatted as `80000xxx` (e.g. OPay `80000030`). But **JuntPay v1 rejects those codes**. The API's live `/api/v1/merchant/queryBankCode` returns **812 CBN-format 6-digit codes** (OPay `100004`, Kuda `090267`, Access Bank `000014`, etc.). Every JuntPay payout was silently rejected as `BANK_NOT_SUPPORTED`.
+
+### Delivered
+1. **`translate_bank_code()` for `juntbest`** rewritten to use `juntbest.list_banks_async()` (live list, 1-hour cache, proxy-retry-aware). Falls back to the static `NIGERIAN_BANKS` only if the live API is unreachable (rare — proxy 403).
+2. **Removed the `80000xxx` fast-path** — JuntPay uses 6-digit CBN codes now, so a code like `80000030` bound to the user's account must be re-translated via bank name.
+3. **Bank alias map** (`_BANK_ALIASES`) for common Nigerian bank naming variants: `UBA` ↔ `United Bank For Africa`, `FCMB` ↔ `First City Monument Bank`, `GTBank` ↔ `Guaranty Trust Bank`, `Kuda Bank` ↔ `Kuda MFB`, etc. Alias resolution is **exact-match only** — short aliases like `UBA` and `FCMB` must not fuzzy-match wallet variants (`UBA MONI`, `FCMB Easy Account`).
+4. **Ordered resolution**: (1) exact name match → (2) alias exact match → (3) fuzzy substring (only when key ≥ 5 chars, sorted by shortest target name to prefer `Access Bank` over `Access Bank (Diamond)`).
+5. **`_juntbest_warm_bank_cache()` background task** in startup — fetches JuntPay's live bank list on boot so the first payout attempt doesn't hit a cold cache. Retries every 5 min if the initial call fails.
+6. **`_juntbest_payout_withdrawal()` error surfacing** now logs full response body + persists `last_gateway_attempt` (gateway/code/message/bank_code_sent/at) on the withdrawal doc so admin UI can display the exact JuntPay rejection reason.
+7. **`GET /api/juntbest/banks`** now returns the live list (812 banks) instead of the stale 45-bank static one.
+
+### Verified live
+- **JuntPay payout accepted end-to-end**: `create_payout(order_sn=TEST…, amount=100, bank_code=100004)` → `{code:0, msg:"SUCCESS", transferId:"T2084934771888730114"}`. No more `BANK_NOT_SUPPORTED`.
+- Bank code translator: OPay NG0204 → 100004 ✓, UBA NG0033 → 000004 ✓ (not the wallet 000040), FCMB NG0214 → 000003 ✓ (not FCMB MFB 090409), GTBank NG0058 → 000013 ✓, Kuda 80000028 → 090267 ✓.
+- Startup log: `JuntPay bank cache warmed: 812 banks`.
+- `/api/juntbest/banks` returns `{enabled:true, gateway_ready:true, bank_count:812}` with proper `{code, name}` shape.
+- 14 new regression tests in `tests/test_juntpay_bank_translation.py` — all pass. `tests/test_juntpay_fix.py` (11 tests) — all pass.
+
+### Deferred (still valid)
+- Bank Code Validator on user Withdraw page (show which gateways support the bound bank before submit).
+- Gateway health widget on Admin Overview (green/amber/red pills).
+- PWA install-nudge banner on Dashboard.
+- SMS OTP for phone verification.
+- `server.py` router split (~4515 lines).
+- `/api/version` endpoint + discreet frontend footer with commit hash.

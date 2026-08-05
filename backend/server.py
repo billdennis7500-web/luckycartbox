@@ -421,6 +421,40 @@ def _normalize_bank_name(name: str) -> str:
     return " ".join(n.split())
 
 
+# Common Nigerian-bank aliases — some gateways spell the same bank differently
+# ("Guaranty Trust Bank" vs "GTBank", "UBA" vs "United Bank For Africa"). When
+# an exact/fuzzy match fails we try each alias against the target bank list.
+_BANK_ALIASES: Dict[str, List[str]] = {
+    "guaranty trust bank":     ["gtbank", "gtb", "guaranty trust", "gt bank"],
+    "gtbank":                  ["guaranty trust bank", "gtb", "guaranty trust", "gt bank"],
+    "gtb":                     ["gtbank", "guaranty trust bank"],
+    "united bank for africa":  ["uba"],
+    "uba":                     ["united bank for africa"],
+    "first city monument bank":["fcmb"],
+    "fcmb":                    ["first city monument bank"],
+    "first bank of nigeria":   ["first bank", "firstbank"],
+    "stanbic ibtc bank":       ["stanbic ibtc", "stanbic"],
+    "moniepoint mfb":          ["moniepoint"],
+    "moniepoint":              ["moniepoint mfb"],
+    "kuda bank":               ["kuda mfb", "kuda microfinance bank", "kuda"],
+    "kuda mfb":                ["kuda bank", "kuda microfinance bank", "kuda"],
+    "opay":                    ["opay paycom", "opay digital services"],
+    "palmpay":                 ["palmpay limited"],
+    "polaris bank":            ["polaris"],
+    "wema bank":               ["wema"],
+    "sterling bank":           ["sterling"],
+    "fidelity bank":           ["fidelity"],
+    "zenith bank":             ["zenith"],
+    "access bank":             ["access bank plc"],
+    "ecobank nigeria":         ["ecobank"],
+    "union bank of nigeria":   ["union bank"],
+    "keystone bank":           ["keystone"],
+    "jaiz bank":               ["jaiz"],
+    "citibank nigeria":        ["citibank", "citi bank"],
+    "titan trust bank":        ["titan trust"],
+}
+
+
 async def translate_bank_code(bank_name: str, target_gateway: str,
                               *, current_code: Optional[str] = None) -> Optional[str]:
     """Given a bank NAME (e.g. 'OPay'), return the target gateway's bank code.
@@ -432,8 +466,13 @@ async def translate_bank_code(bank_name: str, target_gateway: str,
     if current_code:
         if target_gateway == "paynow"   and current_code.startswith("NG0"):  return current_code
         if target_gateway == "onesspay" and current_code.startswith("NR0"):  return current_code
-        if target_gateway == "juntbest" and current_code.startswith("80000") and len(current_code) == 8:
-            return current_code
+        # JuntPay v1 uses 6-digit CBN-format bank codes (e.g. "000014" Access,
+        # "100004" OPay, "090267" Kuda). The legacy "80000xxx" static codes are
+        # NOT accepted by the new API. Skip fast-path for juntbest and always
+        # resolve via bank name against the live list (`list_banks_async`).
+        # NOTE: SHPAY also uses digit codes but its length range is 4-6 and
+        # doesn't overlap with JuntPay's canonical NNNNNN shape enough to
+        # trust — so we keep SHPAY on a name-based lookup too when it errors.
         if target_gateway == "shpay"    and current_code.isdigit() and 4 <= len(current_code) <= 6:
             return current_code
     key = _normalize_bank_name(bank_name)
@@ -450,14 +489,41 @@ async def translate_bank_code(bank_name: str, target_gateway: str,
                 return b["code"]
         return None
     if target_gateway == "juntbest":
-        for b in juntbest.NIGERIAN_BANKS:
+        # JuntPay v1 uses live CBN-format codes returned by
+        # /api/v1/merchant/queryBankCode (see juntbest.list_banks_async).
+        # Always resolve via live list; fall back to static only if the API
+        # is unreachable (rare — proxy 403 during fetch).
+        try:
+            banks = await juntbest.list_banks_async()
+        except Exception:
+            banks = juntbest.NIGERIAN_BANKS
+        if not banks:
+            banks = juntbest.NIGERIAN_BANKS
+        # 1) Exact match on the raw bank name
+        for b in banks:
             if _normalize_bank_name(b["name"]) == key:
                 return b["code"]
-        # fuzzy fallback — substring match either direction
-        for b in juntbest.NIGERIAN_BANKS:
-            nb = _normalize_bank_name(b["name"])
-            if key in nb or nb in key:
-                return b["code"]
+        # 2) Alias exact-match (handles "UBA" ↔ "United Bank For Africa",
+        #    "FCMB" ↔ "First City Monument Bank", "GTBank" ↔ "Guaranty Trust
+        #    Bank"). Only exact — short aliases must not fuzzy-match wallets
+        #    like "UBA MONI" or "FCMB MFB".
+        for alias in _BANK_ALIASES.get(key, []):
+            alias_key = _normalize_bank_name(alias)
+            for b in banks:
+                if _normalize_bank_name(b["name"]) == alias_key:
+                    return b["code"]
+        # 3) Fuzzy substring — only if the key is long enough that a substring
+        #    hit is meaningful (>=5 chars). Prefer shorter target names so
+        #    "Access Bank" wins over "Access Bank (Diamond)".
+        if len(key) >= 5:
+            candidates = []
+            for b in banks:
+                nb = _normalize_bank_name(b["name"])
+                if key in nb or nb in key:
+                    candidates.append((len(nb), b["code"]))
+            if candidates:
+                candidates.sort()
+                return candidates[0][1]
         return None
     if target_gateway == "shpay":
         try:
@@ -662,6 +728,27 @@ async def startup():
     asyncio.create_task(_onesspay_reconcile_cron())
     asyncio.create_task(_juntbest_reconcile_cron())
     asyncio.create_task(_auto_coupon_cron())
+    # Warm the JuntPay bank cache so the first payout attempt doesn't hit a
+    # cold cache + a flaky-proxy 403. Non-blocking — failures fall back to
+    # the static list at request time.
+    asyncio.create_task(_juntbest_warm_bank_cache())
+
+
+async def _juntbest_warm_bank_cache():
+    """Fire-and-forget: fetch the JuntPay bank list once so translate_bank_code
+    can respond instantly on the first withdrawal approval. Retries every 5
+    minutes if the initial call fails (usually IPRoyal 403)."""
+    await asyncio.sleep(10)
+    while True:
+        try:
+            if juntbest.enabled():
+                banks = await juntbest.list_banks_async(force=True)
+                if banks and len(banks) > 50:
+                    logger.info("JuntPay bank cache warmed: %d banks", len(banks))
+                    return
+        except Exception:
+            logger.exception("JuntPay bank cache warm-up failed")
+        await asyncio.sleep(5 * 60)
 
 
 async def _paynow_reconcile_cron():
@@ -2191,8 +2278,29 @@ async def _juntbest_payout_withdrawal(w: dict, note: str = "") -> dict:
         remark=note or f"Luckycart Box payout for {w.get('user_name') or 'user'}",
     )
     # JuntBest returns {code: 0, message, data:{platform_osn,...}}. Success is 0.
-    if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
-        raise HTTPException(400, f"JuntBest declined: {resp.get('message') or 'unknown'}")
+    code = resp.get("code") if resp.get("code") is not None else -1
+    if int(code) != 0:
+        raw_msg = resp.get("message") or resp.get("msg") or "unknown"
+        logger.warning(
+            "JuntPay payout REJECTED wid=%s bank_code=%s account=%s name=%s amount=%s → code=%s msg=%s full=%s",
+            w["_id"], bank_code, w.get("account_number"), w.get("account_name"),
+            payout_amount, code, raw_msg, resp,
+        )
+        # Persist the raw response on the withdrawal so admin UI can show it.
+        try:
+            await db.withdrawals.update_one(
+                {"_id": w["_id"]},
+                {"$set": {"last_gateway_attempt": {
+                    "gateway": "juntbest",
+                    "code": code,
+                    "message": raw_msg,
+                    "bank_code_sent": bank_code,
+                    "at": now_utc().isoformat(),
+                }}},
+            )
+        except Exception:
+            pass
+        raise HTTPException(400, f"JuntPay declined (code {code}): {raw_msg}")
     data = resp.get("data") or {}
     await db.withdrawals.update_one(
         {"_id": w["_id"]},
@@ -3589,10 +3697,16 @@ async def juntbest_status(user: dict = Depends(get_current_user)):
 
 @api.get("/juntbest/banks")
 async def juntbest_banks(user: dict = Depends(get_current_user)):
-    """Static bank list (80000xxx codes)."""
+    """Live JuntPay bank list (CBN-format codes like 000014, 100004, 090267).
+    Cached for 1h in juntbest.list_banks_async; falls back to a small static
+    list only if the live API is unreachable."""
     if not juntbest.enabled():
         return {"enabled": False, "gateway_ready": False, "data": []}
-    return {"enabled": True, "gateway_ready": True, "data": juntbest.list_banks()}
+    try:
+        banks = await juntbest.list_banks_async()
+    except Exception:
+        banks = juntbest.list_banks()
+    return {"enabled": True, "gateway_ready": True, "data": banks or []}
 
 
 # ---------------------------------------------------------------------------
