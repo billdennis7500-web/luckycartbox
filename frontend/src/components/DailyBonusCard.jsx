@@ -161,7 +161,7 @@ export default function DailyBonusCard({ hasInvested }) {
             <MicroLabel tone="gold" className="!mt-0">Daily bonus · Redeem code</MicroLabel>
             <div className="font-display font-800 text-white text-lg leading-tight">
               {canRedeem
-                ? `Grab today's FREE ${formatNaira(data.amount)} bonus 🎁`
+                ? "Grab today's mystery bonus 🎁"
                 : already
                   ? "You claimed today's bonus"
                   : soldOut
@@ -177,7 +177,7 @@ export default function DailyBonusCard({ hasInvested }) {
             <div className="rounded-xl bg-[var(--nb-card2)] border border-[var(--nb-border)] p-3 flex items-center gap-2" data-testid="daily-bonus-code-row">
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] uppercase tracking-widest text-[var(--nb-muted)]">
-                  Bonus code · redeem to get {formatNaira(data.amount)} free
+                  Bonus code · redeem to reveal your reward
                 </div>
                 <div className="font-mono font-800 text-white text-lg tracking-widest truncate" data-testid="daily-bonus-code">
                   {data.code}
@@ -199,7 +199,7 @@ export default function DailyBonusCard({ hasInvested }) {
               className="mt-2 text-[11px] text-[var(--nb-muted)] leading-relaxed"
               data-testid="daily-bonus-explainer"
             >
-              This is a FREE redeem code. Tap <span className="text-white font-display font-700">Redeem</span> below (or paste it on the Redeem page) to add {formatNaira(data.amount)} to your wallet — one claim per person, while today's slots last.
+              This is a FREE redeem code. Tap <span className="text-white font-display font-700">Redeem</span> below (or paste it on the Redeem page) to reveal today's mystery amount and land it straight in your wallet — one claim per person, while today's slots last.
             </div>
             <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-[var(--nb-muted)]">
               <span className="inline-flex items-center gap-1">
@@ -218,7 +218,7 @@ export default function DailyBonusCard({ hasInvested }) {
               {redeeming ? "Claiming…" : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Redeem {formatNaira(data.amount)}
+                  Reveal my reward
                 </>
               )}
             </Button>

@@ -2921,11 +2921,16 @@ async def get_daily_coupon(user: dict = Depends(get_current_user)):
     already = user["_id"] in coupon.get("used_by", [])
     can_redeem = user.get("has_invested", False) and not already and remaining > 0
 
+    # Keep the exact naira amount SECRET until the user actually redeems —
+    # this turns the daily drop into a proper mystery-box moment. Once
+    # they've claimed, we surface it so they see what they got. Curious
+    # devs opening DevTools shouldn't be able to peek at today's reward.
+    reveal_amount = already
     return {
         **base,
         "available": True,
         "code": coupon["code"],
-        "amount": float(coupon.get("amount", 0)),
+        "amount": float(coupon.get("amount", 0)) if reveal_amount else None,
         "max_uses": max_uses,
         "used_count": used_count,
         "remaining": remaining,
