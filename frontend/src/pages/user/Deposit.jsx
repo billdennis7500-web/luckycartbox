@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Copy, Zap, CheckCircle2, Loader2, Clock, X, Landmark, ArrowRight, Inbox, RefreshCw,
+  Sparkles, TrendingUp, Wallet, PartyPopper,
 } from "lucide-react";
+import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { SectionHeader } from "@/components/design";
@@ -286,6 +288,22 @@ export default function Deposit() {
     return () => pollRef.current && clearInterval(pollRef.current);
   }, [waitDep, waitState, refresh]);
 
+  // Fire a golden confetti burst the moment the deposit lands in the wallet —
+  // adds a "yes, it really worked" celebratory feel to the flow. Two staggered
+  // shots feel more organic than a single blast.
+  useEffect(() => {
+    if (waitState !== "approved") return;
+    const gold = ["#F5C518", "#FFE580", "#F97316", "#10B981", "#7C3AED"];
+    try {
+      confetti({
+        particleCount: 90, spread: 70, origin: { y: 0.35 }, colors: gold, scalar: 0.9,
+      });
+      setTimeout(() => confetti({
+        particleCount: 60, spread: 100, origin: { y: 0.4 }, colors: gold, scalar: 0.8,
+      }), 220);
+    } catch {}
+  }, [waitState]);
+
   const isInstant = method === "instant-pay";
   const isShpay = method === "shpay-pay";
   const isOnesspay = method === "onesspay-pay";
@@ -345,15 +363,14 @@ export default function Deposit() {
         toast.success("Gateway is back online — try Instant Pay now!");
         setGatewayReady(true);
         closeWait();
-        // Refresh the deposit form so submit will create a real checkout
         setMethod("instant-pay");
       } else {
-        // Update the drawer copy with the outbound IP so admin knows what to whitelist
+        // Do NOT surface backend infrastructure details (IPs, dashboards) to
+        // end-users — just prompt them to try another method.
         setWaitDep((w) => w ? { ...w, gateway_message:
-          `Our payment gateway is still rejecting requests from this server (IP ${data.outbound_ip || "unknown"}). Add this IP to your PayNow merchant dashboard whitelist, then tap Retry.`,
-          outbound_ip: data.outbound_ip,
+          "Our payment gateway is still warming up. Please try a bank transfer below, or tap Retry again in a minute.",
         } : w);
-        toast.info("Still unavailable — whitelist our IP at PayNow first.");
+        toast.info("Still unavailable — try a bank transfer or retry in a moment.");
       }
     } catch (err) {
       toast.error(formatApiError(err.response?.data?.detail) || "Retry failed");
@@ -697,21 +714,6 @@ export default function Deposit() {
                   <div className="text-xs text-[var(--nb-muted)] mt-1.5 leading-relaxed max-w-md mx-auto">
                     {waitDep.gateway_message || "Our payment gateway is finalising server access checks. This usually clears in a few minutes."}
                   </div>
-                  {waitDep.outbound_ip && (
-                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--nb-card)] border border-[var(--nb-border)] text-xs tabular text-white">
-                      <span className="text-[var(--nb-muted)]">Server IP:</span>
-                      <span className="font-display font-700">{waitDep.outbound_ip}</span>
-                      <button
-                        type="button"
-                        onClick={() => copy(waitDep.outbound_ip)}
-                        className="text-[#0055FF] hover:text-[#3377FF]"
-                        data-testid="copy-outbound-ip"
-                        aria-label="Copy server IP"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
                   <div className="mt-4 flex flex-col gap-2">
                     <Button
                       onClick={retryGateway}
@@ -772,15 +774,110 @@ export default function Deposit() {
               )}
 
               {waitState === "approved" && (
-                <div className="rounded-xl border border-[#10B981]/40 bg-[#10B981]/10 p-6 text-center" data-testid="approved-state">
-                  <CheckCircle2 className="w-8 h-8 text-[#10B981] mx-auto" />
-                  <div className="mt-3 font-display font-600">Wallet credited</div>
-                  <div className="text-xs text-[var(--nb-muted)] mt-1">
-                    {formatNaira(waitDep.amount)} is now in your wallet. Go invest.
+                <div
+                  className="relative rounded-2xl overflow-hidden"
+                  data-testid="approved-state"
+                  style={{ boxShadow: "0 24px 60px -12px rgba(16,185,129,0.45), 0 0 0 1px rgba(245,197,24,0.35)" }}
+                >
+                  {/* Dashed accent lines top/bottom (matches the marketplace aesthetic) */}
+                  <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
+                       style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.85 }} />
+                  <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
+                       style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.85 }} />
+
+                  {/* Glassmorphic gold-radial hero */}
+                  <div
+                    className="relative overflow-hidden"
+                    style={{
+                      background: "linear-gradient(160deg,#1E1B0A 0%,#221E10 45%,#0B0906 100%)",
+                    }}
+                  >
+                    {/* Radial glows */}
+                    <div className="pointer-events-none absolute -top-24 -right-24 w-64 h-64 rounded-full opacity-40 blur-3xl"
+                         style={{ background: "radial-gradient(circle,#F5C518 0%,transparent 70%)" }} />
+                    <div className="pointer-events-none absolute -bottom-20 -left-20 w-64 h-64 rounded-full opacity-30 blur-3xl"
+                         style={{ background: "radial-gradient(circle,#10B981 0%,transparent 70%)" }} />
+
+                    <div className="relative px-6 pt-8 pb-4 text-center">
+                      {/* Animated success ring */}
+                      <div className="relative mx-auto w-24 h-24 grid place-items-center">
+                        <div className="absolute inset-0 rounded-full animate-ping"
+                             style={{ background: "radial-gradient(circle,rgba(16,185,129,0.35),transparent 65%)" }} />
+                        <div className="absolute inset-1 rounded-full"
+                             style={{ background: "radial-gradient(circle,rgba(16,185,129,0.25),transparent 70%)" }} />
+                        <div
+                          className="relative w-20 h-20 rounded-full grid place-items-center"
+                          style={{
+                            background: "linear-gradient(135deg,#10B981 0%,#059669 100%)",
+                            boxShadow: "0 12px 40px -8px rgba(16,185,129,0.7), inset 0 2px 10px rgba(255,255,255,0.25)",
+                          }}
+                        >
+                          <CheckCircle2 className="w-10 h-10 text-white" strokeWidth={2.4} />
+                        </div>
+                      </div>
+
+                      {/* Trumpet chip */}
+                      <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-display font-800 uppercase tracking-widest text-[10px]"
+                           style={{
+                             background: "linear-gradient(135deg,#FFE580,#F5C518)",
+                             color: "#1A1508",
+                             boxShadow: "0 4px 12px -2px rgba(245,197,24,0.55)",
+                           }}
+                           data-testid="approved-badge">
+                        <PartyPopper className="w-3 h-3" /> Wallet Credited
+                      </div>
+
+                      <div className="mt-3 font-display font-800 text-white text-2xl tracking-tight leading-tight">
+                        You're funded!
+                      </div>
+                      <div className="mt-1 text-[12px] text-[var(--nb-muted)] leading-snug max-w-xs mx-auto">
+                        Your Luckycart Box wallet just got a fresh top-up. Ready to invest?
+                      </div>
+
+                      {/* Big amount */}
+                      <div className="mt-5 mx-auto max-w-sm rounded-2xl px-5 py-4"
+                           style={{
+                             background: "linear-gradient(135deg,rgba(245,197,24,0.18),rgba(16,185,129,0.12))",
+                             border: "1px solid rgba(245,197,24,0.45)",
+                             boxShadow: "inset 0 1px 12px rgba(245,197,24,0.15)",
+                           }}>
+                        <div className="text-[10px] uppercase tracking-widest font-display font-700 text-[#F5C518]/80 flex items-center justify-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Amount received
+                        </div>
+                        <div className="mt-1 font-display font-800 text-4xl tabular text-white tracking-tight"
+                             data-testid="approved-amount">
+                          {formatNaira(waitDep.amount)}
+                        </div>
+                        <div className="mt-1 text-[10px] text-[var(--nb-muted)] tabular">
+                          Deposit ref: {String(waitDep.id || "").slice(-10).toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action grid — invest / view wallet */}
+                    <div className="relative px-4 pb-5 pt-2 grid grid-cols-2 gap-2">
+                      <Link
+                        to="/marketplace"
+                        onClick={closeWait}
+                        data-testid="approved-cta-invest"
+                        className="h-11 rounded-xl inline-flex items-center justify-center gap-2 font-display font-800 text-sm text-[#1A1508] active:scale-[0.98] transition"
+                        style={{
+                          background: "linear-gradient(135deg,#FFE580 0%,#F5C518 100%)",
+                          boxShadow: "0 8px 20px -6px rgba(245,197,24,0.55)",
+                        }}
+                      >
+                        <TrendingUp className="w-4 h-4" /> Start earning
+                      </Link>
+                      <Link
+                        to="/dashboard"
+                        onClick={closeWait}
+                        data-testid="approved-cta-wallet"
+                        className="h-11 rounded-xl inline-flex items-center justify-center gap-2 font-display font-700 text-sm text-white bg-[var(--nb-card2)] border border-[var(--nb-border)] active:scale-[0.98] transition hover:border-[#F5C518]/40"
+                      >
+                        <Wallet className="w-4 h-4" /> View wallet
+                      </Link>
+                    </div>
                   </div>
-                  <Link to="/marketplace" onClick={closeWait} className="inline-flex mt-3 text-xs text-[#0055FF] hover:underline items-center gap-1">
-                    Browse products <ArrowRight className="w-3 h-3" />
-                  </Link>
                 </div>
               )}
 

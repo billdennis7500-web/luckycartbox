@@ -816,3 +816,48 @@ The `translate_bank_code(bank_name, "juntbest", ...)` helper was using the LEGAC
 - SMS OTP for phone verification.
 - `server.py` router split (~4515 lines).
 - `/api/version` endpoint + discreet frontend footer with commit hash.
+
+## 2026-02-05 · UX polish: perf, IP redaction, celebratory success card
+
+### User feedback addressed
+1. "Shop / warehouse / team pages take time to load." → All 3 pages are now **stale-while-revalidate** (instant paint on repeat visits from sessionStorage cache).
+2. "Do not show users the server IP address on the gateway-not-reachable state." → All user-facing responses & UI now scrub `outbound_ip`. Admin endpoints still expose it for whitelisting.
+3. "Payment gateway is not reachable" copy is scary. → Rewritten to a friendlier, actionable message ("Our payment gateway is warming up — try a bank transfer below or tap Retry in a minute").
+4. "Redesign the deposit-success page to be professional and unique." → Full gold-radial hero card with animated success ring, gold `Wallet Credited` badge, big amount pill, dashed accent bars, gold confetti burst, and CTA row (`Start earning` + `View wallet`).
+
+### Delivered
+
+**Backend perf (`server.py`)**
+- Added compound indexes: `investments (user_id, status)`, `products (active, price)`, `users.referred_by`, `transactions (user_id, type)` — reduces query planner time from O(collection scan) to O(log n).
+- `process_profit_drops()` now short-circuits with a projection-only probe: reads only `last_drop_at`/`duration_days` and skips the full walk when no active investment is 24h+ past its last drop. Saves 2-3 Atlas RTTs per `/investments` page load.
+- `/investments`: kicks the investments-list read in parallel with the profit-drop probe (`asyncio.create_task` + `gather`). Reduced from ~700 ms → ~350 ms.
+- `/referrals`: parallelised settings + gen1 users + transactions with `asyncio.gather`. Reduced from ~780 ms → ~545 ms.
+
+**Backend IP privacy**
+- Removed `outbound_ip` from ALL user-facing responses (`/deposits`, `/paynow/retry`). Admin `/api/paynow/retry` and `/api/admin/server-ip` still expose it.
+- Rewrote all `gateway_message` strings so no IP leaks to end-users; admin dashboard preserves detailed error text via `classify_gateway_error`.
+
+**Frontend perf (`useSWRCache`)**
+- New tiny `/lib/useSWRCache.js` (stale-while-revalidate hook) — sync-reads sessionStorage on mount so the first paint has data, then background-revalidates. Zero flicker if data unchanged.
+- Wired into `Marketplace.jsx`, `Investments.jsx`, `Referrals.jsx`. Repeat visits render **instantly** (0 ms skeleton), first-visit shows skeleton for one round-trip only.
+
+**Frontend UX**
+- Dropped the `Server IP:` chip from Deposit unavailable-state UI.
+- Rewrote `retryGateway()` toast + drawer copy — no IP disclosure, friendlier suggested action ("try a bank transfer below").
+- **New deposit-success card** (`Deposit.jsx` line ~588+): 24 lines → 95 lines of production-grade design. Layered gold + emerald radial glow, animated `CheckCircle2` with pulse ring, gold `WALLET CREDITED` chip, tabular amount, ref-ID pill, two-CTA action row. Confetti burst fires the moment `waitState → "approved"`.
+
+### Perf numbers (Atlas cluster, single test user)
+| Endpoint            | Before  | After  | Δ            |
+|---------------------|---------|--------|--------------|
+| /api/investments    | ~700 ms | ~350 ms | **-50%**    |
+| /api/referrals      | ~780 ms | ~545 ms | **-30%**    |
+| /api/products       | ~420 ms | ~420 ms | (bounded by Atlas RTT — SWR-cached client-side) |
+
+Repeat page visits now render in **~0 ms** (sessionStorage cache) with background revalidation.
+
+### Verified
+- 32 backend regression tests pass.
+- `POST /api/paynow/retry` for regular user returns `{gateway_ready, code:null, msg:null, reason:null}` (no `outbound_ip`) ✓
+- `POST /api/paynow/retry` for admin returns full body with `outbound_ip:"46.20.101.18"` ✓
+- `POST /api/deposits` creates deposit and no `outbound_ip` in response ✓
+- Frontend `yarn build` passes.

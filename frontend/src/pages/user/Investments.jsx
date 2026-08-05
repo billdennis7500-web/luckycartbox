@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
+import useSWRCache from "@/lib/useSWRCache";
 import { TrendingUp, CheckCircle2, Sparkles, Timer, Calendar, ChevronRight, Coins } from "lucide-react";
 import { AmbientCard, SectionHeader, MicroLabel, PillCTA, TIER_TOKENS } from "@/components/design";
 
@@ -231,16 +232,10 @@ function InvestmentCard({ inv }) {
 }
 
 export default function Investments() {
-  const [invs, setInvs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: invs = [], loading } =
+    useSWRCache("investments", () => api.get("/investments").then((r) => r.data), { fallback: [] });
   const [tab, setTab] = useState("active");
   const [, setNowTick] = useState(0);
-
-  const load = () => {
-    setLoading(true);
-    api.get("/investments").then((r) => setInvs(r.data)).finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
 
   // Ticker: force a re-render every second so the countdown seconds tick live
   // without extra API calls.

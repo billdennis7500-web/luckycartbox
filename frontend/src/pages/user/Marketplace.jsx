@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { api, formatNaira, formatApiError } from "@/lib/api";
+import useSWRCache from "@/lib/useSWRCache";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,17 +61,12 @@ export default function Marketplace() {
   const { user, refresh } = useAuth();
   const { theme } = useTheme();
   const isLight = theme === "light";
-  const [products, setProducts] = useState([]);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const { data: products = [], loading: initialLoading, refetch: reloadProducts, setData: setProducts } =
+    useSWRCache("mkt:products", () => api.get("/products").then((r) => r.data), { fallback: [] });
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(6);
   const [filter, setFilter] = useState("all");
-
-  const load = () => api.get("/products")
-    .then((r) => setProducts(r.data))
-    .finally(() => setInitialLoading(false));
-  useEffect(() => { load(); }, []);
 
   const invest = async () => {
     if (!selected) return;
@@ -80,7 +76,7 @@ export default function Marketplace() {
       toast.success(`Bought ${selected.name} for ${formatNaira(selected.price)}`);
       setSelected(null);
       await refresh();
-      load();
+      reloadProducts();
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Purchase failed");
     } finally { setLoading(false); }

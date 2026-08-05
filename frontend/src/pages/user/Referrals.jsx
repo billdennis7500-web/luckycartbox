@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
+import useSWRCache from "@/lib/useSWRCache";
 import { Button } from "@/components/ui/button";
 import { Copy, Share2, Users, TrendingUp, Check, MessageCircle, Send, Twitter, Facebook, Sparkles, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -8,15 +9,11 @@ import LoadMore from "@/components/LoadMore";
 import { AmbientCard, SectionHeader, MicroLabel } from "@/components/design";
 
 export default function Referrals() {
-  const [data, setData] = useState(null);
+  const { data } = useSWRCache("referrals", () => api.get("/referrals").then((r) => r.data));
   const [copied, setCopied] = useState(false);
   const [gen, setGen] = useState("gen1");
   const [visible, setVisible] = useState(10);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    api.get("/referrals").then((r) => setData(r.data));
-  }, []);
 
   useEffect(() => {
     // reset pagination on tab change
