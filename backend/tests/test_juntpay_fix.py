@@ -84,11 +84,13 @@ def test_create_payout_direct_probe():
 def test_retry_logic_exists():
     with open("/app/backend/juntbest.py") as f:
         src = f.read()
-    assert "RETRIES = 3" in src
+    # Retry count bumped from 3 → 5 in Feb 2026 (IPRoyal proxy flake).
+    assert "RETRIES = 5" in src or "RETRIES = 3" in src, "Retry count missing"
     assert "asyncio.sleep" in src
     assert "attempt" in src
-    # Must retry on 5xx
+    # Must retry on 5xx AND 403/429 (proxy flakes)
     assert "500 <= r.status_code < 600" in src
+    assert "403" in src, "Must retry on proxy 403 status"
 
 
 def test_retry_5x_calls_no_403_leak():

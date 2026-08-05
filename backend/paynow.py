@@ -11,6 +11,7 @@ Common request/response fields envelope: {"code": 0, "data": ..., "msg": ""}.
 import os
 import json
 import time
+import asyncio
 import hashlib
 import logging
 from typing import Any, Dict, Optional
@@ -128,14 +129,34 @@ async def _post(path: str, biz: Dict[str, Any]) -> Dict[str, Any]:
     body = sign_payload(biz)
     url = cfg["base"] + path
     logger.info("PayNow POST %s payload=%s", path, {k: v for k, v in body.items() if k != "sign"})
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.post(url, json=body, headers={"Content-Type": "application/json"})
-    try:
-        data = r.json()
-    except Exception:
-        data = {"code": r.status_code, "msg": r.text, "data": None}
-    logger.info("PayNow response %s", data)
-    return _observe_response(data)
+    # The IPRoyal static-IP proxy intermittently returns 403 Forbidden on
+    # PayNow hostnames (provider-side rate limiting / blacklist churn).
+    # Retry up to 5 times with exponential backoff so a single flaky hop
+    # doesn't cause "Payment gateway not reachable" to bubble up to end users.
+    # We retry on BOTH network exceptions AND 403/5xx status codes since the
+    # proxy sometimes returns 403 as an HTTP response instead of a ProxyError.
+    RETRIES = 5
+    for attempt in range(1, RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                r = await client.post(url, json=body, headers={"Content-Type": "application/json"})
+            if r.status_code in (403, 429) or 500 <= r.status_code < 600:
+                logger.warning("PayNow %s HTTP %s (attempt %d/%d)", path, r.status_code, attempt, RETRIES)
+                if attempt < RETRIES:
+                    await asyncio.sleep(0.5 * attempt)
+                    continue
+            try:
+                data = r.json()
+            except Exception:
+                data = {"code": r.status_code, "msg": r.text, "data": None}
+            logger.info("PayNow response %s", data)
+            return _observe_response(data)
+        except Exception as exc:
+            logger.warning("PayNow %s attempt %d/%d failed: %s", path, attempt, RETRIES, exc)
+            if attempt < RETRIES:
+                await asyncio.sleep(0.5 * attempt)
+                continue
+            raise
 
 
 # PayNow occasionally returns transient "system is busy" / "please try again"

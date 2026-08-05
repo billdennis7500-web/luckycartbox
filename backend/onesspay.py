@@ -22,6 +22,7 @@ app can treat all three gateways symmetrically.
 """
 import os
 import time
+import asyncio
 import hmac
 import base64
 import hashlib
@@ -119,15 +120,32 @@ async def _post(path: str, biz: Dict[str, Any], timeout: float = 20.0) -> Dict[s
     url = cfg["base"] + path
     log_form = {k: v for k, v in form.items() if k != "sign"}
     logger.info("1SSPay POST %s payload=%s", path, log_form)
-    async with httpx.AsyncClient(timeout=timeout) as c:
-        r = await c.post(url, data=form,
-                         headers={"Content-Type": "application/x-www-form-urlencoded"})
-    try:
-        data = r.json()
-    except Exception:
-        data = {"code": r.status_code, "msg": r.text, "data": None}
-    logger.info("1SSPay response %s", data)
-    return data
+    # IPRoyal proxy retry — 5 attempts with exponential backoff. Matches
+    # PayNow / SHPAY / JuntPay. Retry on both network exceptions and
+    # 403/429/5xx HTTP status codes since the proxy returns 403 either way.
+    RETRIES = 5
+    for attempt in range(1, RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as c:
+                r = await c.post(url, data=form,
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+            if r.status_code in (403, 429) or 500 <= r.status_code < 600:
+                logger.warning("1SSPay %s HTTP %s (attempt %d/%d)", path, r.status_code, attempt, RETRIES)
+                if attempt < RETRIES:
+                    await asyncio.sleep(0.5 * attempt)
+                    continue
+            try:
+                data = r.json()
+            except Exception:
+                data = {"code": r.status_code, "msg": r.text, "data": None}
+            logger.info("1SSPay response %s", data)
+            return data
+        except Exception as exc:
+            logger.warning("1SSPay %s attempt %d/%d failed: %s", path, attempt, RETRIES, exc)
+            if attempt < RETRIES:
+                await asyncio.sleep(0.5 * attempt)
+                continue
+            raise
 
 
 # ---------------------------------------------------------------------------

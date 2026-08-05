@@ -19,6 +19,7 @@ rest of the app can treat both gateways symmetrically.
 """
 import os
 import time
+import asyncio
 import hashlib
 import logging
 from datetime import datetime
@@ -154,14 +155,31 @@ async def _post(path: str, biz: Dict[str, Any]) -> Dict[str, Any]:
     body = sign_payload(biz)
     url = cfg["base"] + path
     logger.info("SHPAY POST %s payload=%s", path, {k: v for k, v in body.items() if k != "sign"})
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.post(url, json=body, headers={"Content-Type": "application/json"})
-    try:
-        data = r.json()
-    except Exception:
-        data = {"success": False, "code": r.status_code, "message": r.text}
-    logger.info("SHPAY response %s", data)
-    return data
+    # IPRoyal proxy retry — 5 attempts with exponential backoff. The proxy
+    # returns 403 intermittently (sometimes as an exception, sometimes as an
+    # HTTP status). We retry on both, matching PayNow / 1SSPay / JuntPay.
+    RETRIES = 5
+    for attempt in range(1, RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                r = await client.post(url, json=body, headers={"Content-Type": "application/json"})
+            if r.status_code in (403, 429) or 500 <= r.status_code < 600:
+                logger.warning("SHPAY %s HTTP %s (attempt %d/%d)", path, r.status_code, attempt, RETRIES)
+                if attempt < RETRIES:
+                    await asyncio.sleep(0.5 * attempt)
+                    continue
+            try:
+                data = r.json()
+            except Exception:
+                data = {"success": False, "code": r.status_code, "message": r.text}
+            logger.info("SHPAY response %s", data)
+            return data
+        except Exception as exc:
+            logger.warning("SHPAY %s attempt %d/%d failed: %s", path, attempt, RETRIES, exc)
+            if attempt < RETRIES:
+                await asyncio.sleep(0.5 * attempt)
+                continue
+            raise
 
 
 async def _get(path: str, biz: Dict[str, Any]) -> Dict[str, Any]:
@@ -169,14 +187,29 @@ async def _get(path: str, biz: Dict[str, Any]) -> Dict[str, Any]:
     body = sign_payload(biz)
     url = cfg["base"] + path
     logger.info("SHPAY GET %s query=%s", path, {k: v for k, v in body.items() if k != "sign"})
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.get(url, params=body)
-    try:
-        data = r.json()
-    except Exception:
-        data = {"success": False, "code": r.status_code, "message": r.text}
-    logger.info("SHPAY response %s", data)
-    return data
+    # Same proxy retry as _post.
+    RETRIES = 5
+    for attempt in range(1, RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                r = await client.get(url, params=body)
+            if r.status_code in (403, 429) or 500 <= r.status_code < 600:
+                logger.warning("SHPAY GET %s HTTP %s (attempt %d/%d)", path, r.status_code, attempt, RETRIES)
+                if attempt < RETRIES:
+                    await asyncio.sleep(0.5 * attempt)
+                    continue
+            try:
+                data = r.json()
+            except Exception:
+                data = {"success": False, "code": r.status_code, "message": r.text}
+            logger.info("SHPAY response %s", data)
+            return data
+        except Exception as exc:
+            logger.warning("SHPAY GET %s attempt %d/%d failed: %s", path, attempt, RETRIES, exc)
+            if attempt < RETRIES:
+                await asyncio.sleep(0.5 * attempt)
+                continue
+            raise
 
 
 # ---------------------------------------------------------------------------

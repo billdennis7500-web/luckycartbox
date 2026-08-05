@@ -203,9 +203,10 @@ async def _post(path: str, body: Dict[str, Any], timeout: float = 20.0) -> Dict[
 
     # The IPRoyal proxy occasionally returns a 403 (ProxyError) or 5xx on
     # JuntPay hostnames — likely provider-side rate limiting or transient
-    # blacklist churn. Retry up to 3 attempts with exponential backoff so a
+    # blacklist churn. Retry up to 5 attempts with exponential backoff so a
     # single flaky proxy hop doesn't cascade into a failed withdrawal.
-    RETRIES = 3
+    # We retry on BOTH network exceptions AND 403/429/5xx status codes.
+    RETRIES = 5
     last_exc: Optional[Exception] = None
     for attempt in range(1, RETRIES + 1):
         try:
@@ -217,10 +218,10 @@ async def _post(path: str, body: Dict[str, Any], timeout: float = 20.0) -> Dict[
                     data = r.json()
                 except Exception:
                     data = {"code": -1, "msg": f"non-json response: {r.text[:200]}", "data": None}
-                if r.status_code != 200:
+                if r.status_code in (403, 429) or 500 <= r.status_code < 600:
                     logger.warning("JuntPay %s HTTP %s: %s (attempt %d/%d)", path, r.status_code, data, attempt, RETRIES)
-                    if 500 <= r.status_code < 600 and attempt < RETRIES:
-                        await asyncio.sleep(0.6 * attempt)
+                    if attempt < RETRIES:
+                        await asyncio.sleep(0.5 * attempt)
                         continue
                 return data
         except Exception as exc:
@@ -229,7 +230,7 @@ async def _post(path: str, body: Dict[str, Any], timeout: float = 20.0) -> Dict[
             # Retry — these are almost always transient hops through IPRoyal.
             logger.warning("JuntPay %s attempt %d/%d failed: %s", path, attempt, RETRIES, exc)
             if attempt < RETRIES:
-                await asyncio.sleep(0.6 * attempt)
+                await asyncio.sleep(0.5 * attempt)
                 continue
             logger.exception("JuntPay %s exhausted retries", path)
             return {"code": -1, "msg": f"network error: {exc}", "data": None}

@@ -1861,6 +1861,155 @@ async def my_investments(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Deposits
 # ---------------------------------------------------------------------------
+
+# --- Per-gateway payin helpers ------------------------------------------
+# Each returns a uniform dict:
+#   {"ok": True,  "checkout_url", "merchant_order_no", "platform_order_no", "gateway_response"}
+#   {"ok": False, "gateway_error": "<user-friendly reason>", "gateway_response"?: ...}
+# Never raises. The dispatcher below cascades gateways on {"ok": False}.
+
+async def _payin_paynow(user: dict, amount: float, order_no: str) -> Dict[str, Any]:
+    if paynow.ip_blocked():
+        return {"ok": False, "gateway_error": paynow.ip_block_note() or "PayNow IP not whitelisted"}
+    name_parts = (user.get("name") or "").split()
+    first = name_parts[0] if name_parts else "User"
+    last = " ".join(name_parts[1:]) or first
+    try:
+        pn = await paynow.create_payin(
+            order_no, amount, payer_key=user["phone"],
+            first_name=first, last_name=last,
+        )
+    except Exception as e:
+        logger.exception("PayNow create_payin failed")
+        return {"ok": False, "gateway_error": f"PayNow unreachable: {e}"}
+    data = pn.get("data") or {}
+    checkout_url = data.get("link")
+    if pn.get("code") != 0 or not checkout_url:
+        return {"ok": False, "gateway_error": pn.get("msg") or "PayNow declined (no checkout link)",
+                "gateway_response": pn}
+    return {"ok": True, "checkout_url": checkout_url, "merchant_order_no": order_no,
+            "platform_order_no": data.get("orderNo"), "gateway_response": pn}
+
+
+async def _payin_shpay(user: dict, amount: float, order_no: str) -> Dict[str, Any]:
+    u_phone = (user.get("phone") or "").lstrip("+")
+    u_name  = user.get("name") or "User"
+    u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
+    try:
+        sp = await shpay.create_payin(
+            order_no, amount,
+            payer_name=u_name,
+            payer_mobile=u_phone[-10:] if u_phone else None,
+            payer_email=u_email,
+            subject="Wallet deposit",
+            body=f"Luckycart Box deposit for {u_name}",
+        )
+    except Exception as e:
+        logger.exception("SHPAY create_payin failed")
+        return {"ok": False, "gateway_error": f"SHPAY unreachable: {e}"}
+    if not sp.get("success"):
+        return {"ok": False, "gateway_error": sp.get("message") or "SHPAY declined the order",
+                "gateway_response": sp}
+    result = sp.get("result") or {}
+    checkout_url = result.get("link")
+    if not checkout_url:
+        return {"ok": False, "gateway_error": "SHPAY returned no checkout link", "gateway_response": sp}
+    return {"ok": True, "checkout_url": checkout_url, "merchant_order_no": order_no,
+            "platform_order_no": result.get("transNo"), "gateway_response": sp}
+
+
+async def _payin_onesspay(user: dict, amount: float, order_no: str) -> Dict[str, Any]:
+    u_phone = (user.get("phone") or "").lstrip("+")
+    u_name  = user.get("name") or "User"
+    u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
+    try:
+        resp = await onesspay.create_payin(
+            order_no=order_no, amount=amount, name=u_name,
+            phone=u_phone[-10:] if u_phone else "0000000000",
+            email=u_email,
+        )
+    except Exception as e:
+        logger.exception("1SSPay create_payin failed")
+        return {"ok": False, "gateway_error": f"1SSPay unreachable: {e}"}
+    if int(resp.get("code") or 0) != 200:
+        return {"ok": False, "gateway_error": resp.get("msg") or "1SSPay declined the order",
+                "gateway_response": resp}
+    data = resp.get("data") or {}
+    checkout_url = data.get("jumpUrl")
+    if not checkout_url:
+        return {"ok": False, "gateway_error": "1SSPay returned no jumpUrl", "gateway_response": resp}
+    return {"ok": True, "checkout_url": checkout_url, "merchant_order_no": order_no,
+            "platform_order_no": data.get("payNo"), "gateway_response": resp}
+
+
+async def _payin_juntbest(user: dict, amount: float, order_no: str) -> Dict[str, Any]:
+    u_phone = (user.get("phone") or "").lstrip("+")
+    u_name  = user.get("name") or "User"
+    u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
+    redirect_url = (os.environ.get("FRONTEND_URL") or "").rstrip("/") + "/deposit"
+    try:
+        resp = await juntbest.create_payin(
+            order_sn=order_no, amount=amount, name=u_name,
+            phone=u_phone[-10:] if u_phone else "0000000000",
+            email=u_email, remark=f"Luckycart Box deposit for {u_name}",
+            redirect_url=redirect_url,
+        )
+    except Exception as e:
+        logger.exception("JuntBest create_payin failed")
+        return {"ok": False, "gateway_error": f"JuntBest unreachable: {e}"}
+    if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
+        return {"ok": False, "gateway_error": resp.get("message") or "JuntBest declined the order",
+                "gateway_response": resp}
+    data = resp.get("data") or {}
+    checkout_url = data.get("pay_url") or data.get("url")
+    if not checkout_url:
+        return {"ok": False, "gateway_error": "JuntBest returned no pay_url", "gateway_response": resp}
+    return {"ok": True, "checkout_url": checkout_url, "merchant_order_no": order_no,
+            "platform_order_no": data.get("platform_osn"), "gateway_response": resp}
+
+
+_GATEWAY_PAYIN_MAP: Dict[str, Any] = {
+    "paynow":   (paynow, _payin_paynow, "D"),
+    "shpay":    (shpay, _payin_shpay, "S"),
+    "onesspay": (onesspay, _payin_onesspay, "O"),
+    "juntbest": (juntbest, _payin_juntbest, "JB"),
+}
+
+
+async def _dispatch_deposit(preferred: str, user: dict, amount: float,
+                            oid_str: str) -> Dict[str, Any]:
+    """Try `preferred` gateway first; if it fails or is disabled, cascade
+    through the other enabled+allowed gateways in priority order. Returns
+    the first success dict OR (if all failed) `{"ok": False, "tried": [...],
+    "errors": [...]}` with the aggregated errors so the caller can decide
+    what user-facing message to show.
+    """
+    order_of_pref = [preferred] + [g for g in ("paynow", "shpay", "onesspay", "juntbest")
+                                    if g != preferred]
+    tried: List[str] = []
+    errors: List[str] = []
+    for gw in order_of_pref:
+        module, fn, prefix = _GATEWAY_PAYIN_MAP[gw]
+        if not module.enabled():
+            continue
+        if not await gateway_payin_allowed(gw):
+            continue
+        tried.append(gw)
+        order_no = f"{prefix}{oid_str[-16:]}{int(datetime.now().timestamp())}"
+        result = await fn(user, amount, order_no)
+        if result.get("ok"):
+            result["gateway"] = gw
+            return result
+        err_reason = result.get("gateway_error") or "unknown"
+        errors.append(f"{gw}: {err_reason}")
+        logger.info("Deposit cascade — %s failed for user=%s: %s",
+                    gw, user.get("phone"), err_reason)
+    return {"ok": False, "tried": tried, "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Deposits — user endpoints
+# ---------------------------------------------------------------------------
 @api.get("/payment-accounts")
 async def user_payment_accounts(user: dict = Depends(get_current_user)):
     docs = await db.payment_accounts.find({"active": True}).to_list(50)
@@ -1912,260 +2061,57 @@ async def create_deposit(payload: DepositCreateIn, user: dict = Depends(get_curr
     if method_prefix in GATEWAY_KEYS and not await gateway_payin_allowed(method_prefix):
         raise HTTPException(400, "This payment option is temporarily unavailable. Please choose another method.")
 
-    # If Paynow auto-flow is enabled AND user chose it (method starts with "paynow"),
-    # create the payin at PayNow and store the checkout URL.
-    if paynow.enabled() and (payload.method or "").startswith("paynow"):
-        # If the server IP is currently not whitelisted at PayNow, we can't produce
-        # a real checkout link. Rather than throw, return a well-formed deposit that
-        # tells the UI to show a friendly inline "gateway unavailable" state inside
-        # the checkout drawer (with a bank-transfer fallback CTA). This keeps the
-        # Instant Pay tile visible to users and stops the "why is it missing?" bug.
-        if paynow.ip_blocked():
-            # Try to grab the outbound IP so the UI can tell the merchant exactly
-            # which IP to whitelist. Best-effort — do not fail the deposit path
-            # if the ipify probe is slow.
-            # Instant static-IP lookup (no external ipify call) — the whole
-            # point of the static proxy is that the egress IP is fixed.
-            outbound_ip = outbound_ip_fast()
-            doc.update({
-                "status": "failed",
-                "gateway": "paynow",
-                "gateway_error": paynow.ip_block_note() or "Gateway IP not whitelisted",
-            })
-            res = await db.deposits.insert_one(doc)
-            d = await db.deposits.find_one({"_id": res.inserted_id})
-            return clean(d) | {
-                "user_id": str(d["user_id"]),
-                "gateway": "paynow",
-                "checkout_url": None,
-                "gateway_ready": False,
-                "gateway_message": "Our payment gateway is warming up on our servers. Please try a bank transfer below or tap Retry in a minute.",
-            }
-
+    # Auto-cascade for gateway-backed deposits: try user's picked gateway
+    # first, then silently fall through to the others so a single flaky
+    # gateway doesn't strand the user on "not reachable". Only if ALL
+    # enabled gateways refuse do we surface a diagnostic message.
+    if method_prefix in GATEWAY_KEYS:
         res = await db.deposits.insert_one(doc)
-        merchant_order_no = f"D{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
-        name_parts = (user.get("name") or "").split()
-        first = name_parts[0] if name_parts else "User"
-        last = " ".join(name_parts[1:]) or first
-        try:
-            pn = await paynow.create_payin(
-                merchant_order_no, float(payload.amount),
-                payer_key=user["phone"], first_name=first, last_name=last,
+        result = await _dispatch_deposit(method_prefix, user, float(payload.amount),
+                                          str(res.inserted_id))
+        if result.get("ok"):
+            gw = result["gateway"]
+            await db.deposits.update_one(
+                {"_id": res.inserted_id},
+                {"$set": {"gateway": gw,
+                          "merchant_order_no": result.get("merchant_order_no"),
+                          "platform_order_no": result.get("platform_order_no"),
+                          "checkout_url": result.get("checkout_url"),
+                          "gateway_response": result.get("gateway_response")}},
             )
-        except Exception as e:
-            logger.exception("PayNow create_payin failed")
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
-            # 400 (not 502) so Cloudflare passes our message through instead of
-            # replacing the response body with its own error page.
-            raise HTTPException(400, f"Payment gateway is not reachable right now. Please try a bank transfer or retry in a minute.")
-
-        pn_data = pn.get("data") or {}
-        checkout_url = pn_data.get("link")
-        platform_order_no = pn_data.get("orderNo")
-        if pn.get("code") != 0 or not checkout_url:
-            gateway_error = pn.get("msg") or "no checkout link"
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed",
-                                                   "gateway_error": gateway_error,
-                                                   "gateway_response": pn}})
-            # Return the same well-formed "gateway_ready=false" shape as the
-            # IP-block branch so the frontend opens the drawer with the retry
-            # button + bank-transfer fallback CTA. Without this the user only
-            # gets a toast error and no easy recovery path — the "system is
-            # busy" case reported to us in production.
-            # Instant static-IP lookup (no external ipify call) — the whole
-            # point of the static proxy is that the egress IP is fixed.
-            outbound_ip = outbound_ip_fast()
             d = await db.deposits.find_one({"_id": res.inserted_id})
-            return clean(d) | {
-                "user_id": str(d["user_id"]),
-                "gateway": "paynow",
-                "checkout_url": None,
-                "gateway_ready": False,
-                "gateway_message": (
-                    f"Instant Pay is momentarily unavailable ({gateway_error}). "
-                    "Please try again in a few seconds, or pick a bank transfer option."
-                ),
-            }
-
+            return clean(d) | {"user_id": str(d["user_id"])}
+        # All gateways failed — save the diagnostic bundle so admin can see
+        # exactly which gateway failed and why, then return a friendly-fallback
+        # response the UI can render.
+        tried = result.get("tried") or []
+        errors = result.get("errors") or []
+        combined_error = " | ".join(errors) if errors else "no gateways enabled"
         await db.deposits.update_one(
             {"_id": res.inserted_id},
-            {"$set": {"gateway": "paynow", "merchant_order_no": merchant_order_no,
-                      "platform_order_no": platform_order_no, "checkout_url": checkout_url,
-                      "gateway_response": pn}},
+            {"$set": {"status": "failed",
+                      "gateway_error": combined_error,
+                      "gateway_cascade_tried": tried}},
         )
         d = await db.deposits.find_one({"_id": res.inserted_id})
-        return clean(d) | {"user_id": str(d["user_id"])}
-
-    # SHPAY auto-flow — mirrors PayNow. Users pick this by choosing method "shpay-auto".
-    if shpay.enabled() and (payload.method or "").startswith("shpay"):
-        res = await db.deposits.insert_one(doc)
-        out_trade_no = f"S{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
-        # Defensive lookups — user record may be missing name / email in edge cases
-        # (registration-in-progress, admin-created placeholder, migrated data).
-        u_phone = (user.get("phone") or "").lstrip("+")
-        u_name  = user.get("name") or "User"
-        u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
-        try:
-            sp = await shpay.create_payin(
-                out_trade_no,
-                float(payload.amount),
-                payer_name=u_name,
-                payer_mobile=u_phone[-10:] if u_phone else None,
-                payer_email=u_email,
-                subject="Wallet deposit",
-                body=f"Luckycart Box deposit for {u_name}",
+        if not tried:
+            friendly = (
+                "No payment gateway is currently active. Please try a bank transfer below."
             )
-        except Exception as e:
-            logger.exception("SHPAY create_payin failed")
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
-            raise HTTPException(400, "SHPAY is not reachable right now. Please try a bank transfer or retry in a minute.")
-
-        if not sp.get("success"):
-            gateway_error = sp.get("message") or "SHPAY declined the order"
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed",
-                                                   "gateway_error": gateway_error,
-                                                   "gateway_response": sp}})
-            # Instant static-IP lookup (no external ipify call) — the whole
-            # point of the static proxy is that the egress IP is fixed.
-            outbound_ip = outbound_ip_fast()
-            d = await db.deposits.find_one({"_id": res.inserted_id})
-            return clean(d) | {
-                "user_id": str(d["user_id"]),
-                "gateway": "shpay",
-                "checkout_url": None,
-                "gateway_ready": False,
-                "gateway_message": classify_gateway_error("shpay", gateway_error),
-            }
-
-        sp_result = sp.get("result") or {}
-        checkout_url = sp_result.get("link")
-        trans_no = sp_result.get("transNo")
-        await db.deposits.update_one(
-            {"_id": res.inserted_id},
-            {"$set": {"gateway": "shpay",
-                      "merchant_order_no": out_trade_no,
-                      "platform_order_no": trans_no,
-                      "checkout_url": checkout_url,
-                      "gateway_response": sp}},
-        )
-        d = await db.deposits.find_one({"_id": res.inserted_id})
-        return clean(d) | {"user_id": str(d["user_id"])}
-
-    # 1SSPay auto-flow — third gateway. Users pick method "onesspay-auto".
-    if onesspay.enabled() and (payload.method or "").startswith("onesspay"):
-        res = await db.deposits.insert_one(doc)
-        order_no = f"O{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
-        u_phone = (user.get("phone") or "").lstrip("+")
-        u_name  = user.get("name") or "User"
-        u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
-        try:
-            resp = await onesspay.create_payin(
-                order_no=order_no,
-                amount=float(payload.amount),
-                name=u_name,
-                phone=u_phone[-10:] if u_phone else "0000000000",
-                email=u_email,
+        else:
+            friendly = (
+                "All Instant Pay options are momentarily unavailable. "
+                "Please try a bank transfer below, or tap Retry in a minute."
             )
-        except Exception as e:
-            logger.exception("1SSPay create_payin failed")
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
-            raise HTTPException(400, "1SSPay is not reachable right now. Please try another payment option.")
+        return clean(d) | {
+            "user_id": str(d["user_id"]),
+            "gateway": _initial_gateway,
+            "checkout_url": None,
+            "gateway_ready": False,
+            "gateway_message": friendly,
+        }
 
-        if int(resp.get("code") or 0) != 200:
-            gateway_error = resp.get("msg") or "1SSPay declined the order"
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed",
-                                                   "gateway_error": gateway_error,
-                                                   "gateway_response": resp}})
-            # Instant static-IP lookup (no external ipify call) — the whole
-            # point of the static proxy is that the egress IP is fixed.
-            outbound_ip = outbound_ip_fast()
-            d = await db.deposits.find_one({"_id": res.inserted_id})
-            return clean(d) | {
-                "user_id": str(d["user_id"]),
-                "gateway": "onesspay",
-                "checkout_url": None,
-                "gateway_ready": False,
-                "gateway_message": classify_gateway_error("onesspay", gateway_error),
-            }
-
-        data = resp.get("data") or {}
-        checkout_url = data.get("jumpUrl")
-        pay_no = data.get("payNo")
-        await db.deposits.update_one(
-            {"_id": res.inserted_id},
-            {"$set": {"gateway": "onesspay",
-                      "merchant_order_no": order_no,
-                      "platform_order_no": pay_no,
-                      "checkout_url": checkout_url,
-                      "gateway_response": resp}},
-        )
-        d = await db.deposits.find_one({"_id": res.inserted_id})
-        return clean(d) | {"user_id": str(d["user_id"])}
-
-    # JuntBest auto-flow — fourth gateway. Users pick method "juntbest-pay".
-    if juntbest.enabled() and (payload.method or "").startswith("juntbest"):
-        res = await db.deposits.insert_one(doc)
-        order_sn = f"JB{str(res.inserted_id)[-16:]}{int(datetime.now().timestamp())}"
-        u_phone = (user.get("phone") or "").lstrip("+")
-        u_name  = user.get("name") or "User"
-        u_email = user.get("email") or f"{u_phone or 'user'}@luckycartbox.local"
-        redirect_url = (os.environ.get("FRONTEND_URL") or "").rstrip("/") + "/deposit"
-        try:
-            resp = await juntbest.create_payin(
-                order_sn=order_sn,
-                amount=float(payload.amount),
-                name=u_name,
-                phone=u_phone[-10:] if u_phone else "0000000000",
-                email=u_email,
-                remark=f"Luckycart Box deposit for {u_name}",
-                redirect_url=redirect_url,
-            )
-        except Exception as e:
-            logger.exception("JuntBest create_payin failed")
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed", "gateway_error": str(e)}})
-            raise HTTPException(400, "JuntBest is not reachable right now. Please try another payment option.")
-
-        # JuntBest success is code == 0. Anything else = declined.
-        if int(resp.get("code") if resp.get("code") is not None else -1) != 0:
-            gateway_error = resp.get("message") or "JuntBest declined the order"
-            await db.deposits.update_one({"_id": res.inserted_id},
-                                         {"$set": {"status": "failed",
-                                                   "gateway_error": gateway_error,
-                                                   "gateway_response": resp}})
-            # Instant static-IP lookup (no external ipify call) — the whole
-            # point of the static proxy is that the egress IP is fixed.
-            outbound_ip = outbound_ip_fast()
-            d = await db.deposits.find_one({"_id": res.inserted_id})
-            return clean(d) | {
-                "user_id": str(d["user_id"]),
-                "gateway": "juntbest",
-                "checkout_url": None,
-                "gateway_ready": False,
-                "gateway_message": classify_gateway_error("juntbest", gateway_error),
-            }
-
-        data = resp.get("data") or {}
-        checkout_url = data.get("pay_url") or data.get("url")
-        platform_osn = data.get("platform_osn")
-        await db.deposits.update_one(
-            {"_id": res.inserted_id},
-            {"$set": {"gateway": "juntbest",
-                      "merchant_order_no": order_sn,
-                      "platform_order_no": platform_osn,
-                      "checkout_url": checkout_url,
-                      "gateway_response": resp}},
-        )
-        d = await db.deposits.find_one({"_id": res.inserted_id})
-        return clean(d) | {"user_id": str(d["user_id"])}
-
-    # Manual flow (existing behavior)
+    # Manual flow (bank transfer to a payment_account)
     res = await db.deposits.insert_one(doc)
     return clean(await db.deposits.find_one({"_id": res.inserted_id}))
 
@@ -3891,6 +3837,68 @@ async def admin_onesspay_health(admin: dict = Depends(get_admin_user)):
         return {"enabled": True, "outbound_ip": outbound_ip, "error": str(e)}
     return {"enabled": True, "outbound_ip": outbound_ip, "balance_response": bal}
 
+
+
+@api.get("/admin/gateway-diagnose")
+async def admin_gateway_diagnose(admin: dict = Depends(get_admin_user)):
+    """Fires a live probe at ALL 4 gateways and returns the exact reachability
+    verdict + last error for each. Use this when users complain about
+    'Payment gateway is not reachable right now.' to see which gateway(s)
+    actually failed and why. Doesn't create real orders — uses balance / bank
+    list endpoints which are read-only."""
+    async def _probe_paynow():
+        if not paynow.enabled(): return {"enabled": False, "ok": False, "reason": "not configured"}
+        try:
+            r = await paynow.list_banks()
+            ok = int(r.get("code") or 0) == 0
+            return {"enabled": True, "ok": ok, "code": r.get("code"),
+                    "msg": r.get("msg"), "ip_blocked": paynow.ip_blocked()}
+        except Exception as e:
+            return {"enabled": True, "ok": False, "error": str(e)}
+
+    async def _probe_shpay():
+        if not shpay.enabled(): return {"enabled": False, "ok": False, "reason": "not configured"}
+        try:
+            r = await shpay.get_balance()
+            ok = bool(r.get("success"))
+            return {"enabled": True, "ok": ok, "message": r.get("message")}
+        except Exception as e:
+            return {"enabled": True, "ok": False, "error": str(e)}
+
+    async def _probe_onesspay():
+        if not onesspay.enabled(): return {"enabled": False, "ok": False, "reason": "not configured"}
+        try:
+            r = await onesspay.get_balance()
+            ok = int(r.get("code") or 0) == 200
+            return {"enabled": True, "ok": ok, "code": r.get("code"), "msg": r.get("msg")}
+        except Exception as e:
+            return {"enabled": True, "ok": False, "error": str(e)}
+
+    async def _probe_juntbest():
+        if not juntbest.enabled(): return {"enabled": False, "ok": False, "reason": "not configured"}
+        try:
+            r = await juntbest.get_balance()
+            # Watch out: `r.get("code") or -1` evaluates to -1 when code is 0
+            # (Python `or` treats 0 as falsy) — hence the explicit `is None` check.
+            c = r.get("code")
+            ok = c is not None and int(c) == 0
+            return {"enabled": True, "ok": ok, "code": c, "msg": r.get("msg") or r.get("message")}
+        except Exception as e:
+            return {"enabled": True, "ok": False, "error": str(e)}
+
+    results = await asyncio.gather(
+        _probe_paynow(), _probe_shpay(), _probe_onesspay(), _probe_juntbest(),
+    )
+    return {
+        "outbound_ip": outbound_ip_fast(),
+        "gateways": {
+            "paynow":   results[0],
+            "shpay":    results[1],
+            "onesspay": results[2],
+            "juntbest": results[3],
+        },
+        "any_ok": any(r.get("ok") for r in results),
+    }
 
 @api.get("/admin/server-ip")
 async def admin_server_ip(admin: dict = Depends(get_admin_user)):
