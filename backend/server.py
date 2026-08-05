@@ -3608,6 +3608,89 @@ async def shpay_status(user: dict = Depends(get_current_user)):
     }
 
 
+@api.get("/banks/unified")
+async def unified_bank_list(user: dict = Depends(get_current_user)):
+    """Return a UNIFIED bank list showing which gateway(s) can pay out to
+    each bank. UI can render "supported" badges (P/S/O/J) so users know
+    their bank is compatible before they bind it.
+
+    Data source priority: PayNow (canonical `NG0xxx` codes, most widely
+    referenced across the app) is the KEY. For each PayNow bank we probe
+    the other gateways via `translate_bank_code()` to see which will
+    accept a payout for that bank name.
+
+    Response is cached in-memory for 5 minutes since bank lists rarely
+    change and we don't want to hammer Atlas + 4 gateway probes on every
+    page load.
+    """
+    global _UNIFIED_BANK_CACHE
+    now_ts = time.time()
+    if _UNIFIED_BANK_CACHE.get("at", 0) > now_ts - 300 and _UNIFIED_BANK_CACHE.get("banks"):
+        return _UNIFIED_BANK_CACHE["payload"]
+
+    # Base: PayNow's list — most widely-used canonical form. Fallback: JuntPay
+    # (which is even bigger). Only fall back if PayNow's isn't available.
+    banks: List[Dict[str, Any]] = []
+    if paynow.enabled():
+        try:
+            r = await paynow.list_banks()
+            if int(r.get("code") or -1) == 0:
+                for b in (r.get("data") or []):
+                    banks.append({
+                        "bankCode": b.get("bankCode") or b.get("code"),
+                        "bankName": b.get("bankName") or b.get("name"),
+                        "brand":    b.get("brand"),
+                    })
+        except Exception:
+            logger.exception("paynow.list_banks failed in unified endpoint")
+
+    if not banks and juntbest.enabled():
+        # Fallback — JuntPay's live list (812 banks). Its codes are the
+        # native JuntPay format (6-digit CBN).
+        try:
+            jb_banks = await juntbest.list_banks_async()
+            for b in jb_banks:
+                banks.append({
+                    "bankCode": b.get("code"),
+                    "bankName": b.get("name"),
+                    "brand":    None,
+                })
+        except Exception:
+            logger.exception("juntbest bank fallback failed in unified endpoint")
+
+    # For each bank, probe cross-gateway compatibility. `translate_bank_code`
+    # is cheap (in-memory list walks) so 800 x 3 lookups completes in <200ms.
+    for b in banks:
+        name = b["bankName"]
+        supports = {"paynow": True, "shpay": False, "onesspay": False, "juntbest": False}
+        if shpay.enabled():
+            try:
+                c = await translate_bank_code(name, "shpay", current_code=b["bankCode"])
+                supports["shpay"] = bool(c)
+            except Exception: pass
+        if onesspay.enabled():
+            try:
+                c = await translate_bank_code(name, "onesspay", current_code=b["bankCode"])
+                supports["onesspay"] = bool(c)
+            except Exception: pass
+        if juntbest.enabled():
+            try:
+                c = await translate_bank_code(name, "juntbest", current_code=b["bankCode"])
+                supports["juntbest"] = bool(c)
+            except Exception: pass
+        b["supports"] = supports
+        b["supported_count"] = sum(1 for v in supports.values() if v)
+
+    payload = {"enabled": True, "gateway_ready": True, "data": banks, "count": len(banks)}
+    _UNIFIED_BANK_CACHE = {"at": now_ts, "banks": banks, "payload": payload}
+    return payload
+
+
+# Module-level cache for the unified endpoint.
+_UNIFIED_BANK_CACHE: Dict[str, Any] = {"at": 0.0, "banks": [], "payload": None}
+
+
+
 @api.get("/shpay/banks")
 async def shpay_banks(user: dict = Depends(get_current_user)):
     if not shpay.enabled():

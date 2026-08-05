@@ -1020,3 +1020,40 @@ Please **redeploy** to push these changes to production. After redeploy:
 - Cold call ~600 ms; warm (cached) calls ~200-300 ms.
 - Frontend build passes.
 - Profile/Rewards share the same `useSWRCache` keys so navigation between them is seamless (0 skeleton flash).
+
+## 2026-02-05 · JuntPay wayCode hard-guard + unified bank picker
+
+### User report
+"All enabled payout gateways refused this withdrawal: juntbest: JuntPay declined (code -1): Unsupported payment method: BANK_ACCOUNT"
+
+### Root cause
+Production had `JUNTBEST_PAYOUT_WAY_CODE=BANK_ACCOUNT` in the env (either from a stale copy or a mistyped value). JuntPay v1 accepts ONLY `wayCode: BANK_TRANSFER` — every other value returns `code=-1, msg="Unsupported payment method: X"`.
+
+Live-tested against JuntPay API — all 6 candidate wayCodes fail except one:
+- `BANK_TRANSFER`  → **SUCCESS** ✅
+- `BANK_ACCOUNT`   → "Unsupported payment method: BANK_ACCOUNT"
+- `NGN_TRANSFER`   → "Unsupported payment method: NGN_TRANSFER"
+- `NGN_BANK`, `BANK`, `TRANSFER` → all rejected
+
+### Delivered
+
+**1. Hard-guard in `juntbest.create_payout`** — regardless of what `JUNTBEST_PAYOUT_WAY_CODE` is set to in the env, we force `wayCode: BANK_TRANSFER` for every payout dispatch. Logs a warning if the env value was overridden so admin can fix the misconfig properly. This is a self-healing safety net: even if production has a wrong env var, real withdrawals go through.
+
+**2. New `GET /api/banks/unified` endpoint** — returns a single bank list (up to 812 banks) with per-gateway compatibility badges. Each bank row includes `supports: {paynow, shpay, onesspay, juntbest}` computed via `translate_bank_code()`. Cached in-memory for 5 min. First cold call ~7 s (812 × 3 lookups); subsequent calls near-instant.
+
+**3. `BindAccount.jsx` — new bank picker UX** — the "Choose your bank" drawer now:
+- Pulls from `/banks/unified` (fallback to `/paynow/banks` if unavailable).
+- Sorts banks by compatibility count (4/4 first, then 3/4, etc.) so best-supported banks surface first.
+- Shows 4 tiny green/gray gateway badges (**P** PayNow, **S** SHPAY, **1** 1SSPay, **J** JuntPay) under each bank name with a `Pays via:` label.
+- Users see AT A GLANCE which gateways will process their withdrawal for that bank — so they never bind a bank that only 1 flaky gateway supports without knowing.
+
+### Verified
+- Live JuntPay payout with `BANK_TRANSFER`, code=OPay 100004 → `code=0, msg=SUCCESS`.
+- Live JuntPay payout with `BANK_ACCOUNT` (before guard) → "Unsupported payment method: BANK_ACCOUNT".
+- Live JuntPay payout WITH the guard active, env `BANK_ACCOUNT` overridden → still succeeds.
+- `GET /api/banks/unified` → 812 banks, sample `Sterling Bank 000001 supports=PSOJ (4/4)`, `RUN MFB 090771 supports=PS.J (3/4)`.
+- Screenshot verified: bank picker shows badges beside each bank code.
+- 25 backend regression tests pass.
+
+### Redeploy needed
+Production is still broken until user redeploys — the new hard-guard is what makes their existing withdrawals go through. Optional: they can also remove/set `JUNTBEST_PAYOUT_WAY_CODE=BANK_TRANSFER` in their Emergent env panel for cleanliness.

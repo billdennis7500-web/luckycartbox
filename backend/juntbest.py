@@ -345,19 +345,33 @@ async def create_payout(order_sn: str, amount: float, *,
                         remark: str = "Payout") -> Dict[str, Any]:
     """Create a payout to a Nigerian bank account.
 
-    `bank_code` is the JuntPay bank code from `list_banks()`. In the legacy
-    scheme this was 8-digit `80000xxx`; the new API may use a different set
-    (call `list_banks_cached()` at startup to keep this in sync). The legacy
-    static NIGERIAN_BANKS list is retained below for backward-compat with
-    existing user bank bindings.
+    `bank_code` is the JuntPay bank code from `list_banks()`. The new
+    (JuntPay v1) API returns 6-digit CBN-format codes (`000014` Access,
+    `100004` OPay, `090267` Kuda). The legacy static `NIGERIAN_BANKS`
+    list is retained below only as a last-resort fallback.
+
+    IMPORTANT: JuntPay v1 rejects every `wayCode` except `BANK_TRANSFER`.
+    We enforce that here regardless of env override so a stale/incorrect
+    `JUNTBEST_PAYOUT_WAY_CODE` (e.g. `BANK_ACCOUNT`) can't strand real
+    withdrawals in production.
     """
     c = _config()
+    way_code = c["payout_way_code"]
+    # Hard-guard: the only wayCode JuntPay v1 currently accepts is
+    # BANK_TRANSFER. Anything else gets "Unsupported payment method" and
+    # kills the withdrawal. Log a warning so admin sees the misconfig.
+    if way_code != "BANK_TRANSFER":
+        logger.warning(
+            "JUNTBEST_PAYOUT_WAY_CODE=%r is not supported by JuntPay v1; "
+            "forcing BANK_TRANSFER for this payout.", way_code,
+        )
+        way_code = "BANK_TRANSFER"
     body = _base_body()
     body.update({
         "mchOrderNo":     order_sn,
         "amount":         float(f"{amount:.2f}"),
         "currency":       c["currency"],
-        "wayCode":        c["payout_way_code"],
+        "wayCode":        way_code,
         "transferDesc":   remark or "Payout",
         "accountNumber":  account,
         "bankCode":       bank_code,

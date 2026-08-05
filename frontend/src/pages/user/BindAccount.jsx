@@ -41,12 +41,21 @@ export default function BindAccount() {
 
   const loadBanks = () => {
     setBanksLoading(true);
-    api.get("/paynow/banks")
+    // Unified list: 812 banks with per-gateway compatibility badges.
+    // Fallback to /paynow/banks if the unified endpoint isn't reachable.
+    api.get("/banks/unified")
       .then((r) => {
         setPaynowEnabled(!!r.data?.enabled);
         setBanks(r.data?.data || []);
       })
-      .catch(() => toast.error("Couldn't load bank list. Tap Retry."))
+      .catch(() =>
+        api.get("/paynow/banks")
+          .then((r) => {
+            setPaynowEnabled(!!r.data?.enabled);
+            setBanks(r.data?.data || []);
+          })
+          .catch(() => toast.error("Couldn't load bank list. Tap Retry."))
+      )
       .finally(() => setBanksLoading(false));
   };
 
@@ -70,10 +79,18 @@ export default function BindAccount() {
       .finally(() => setInitialLoad(false));
   }, []);
 
+  // Sort so the best-supported banks (all 4 gateways) show first, then
+  // filter by the user's search text.
   const filteredBanks = useMemo(() => {
-    if (!bankQuery) return banks;
+    const sorted = [...banks].sort((a, b) => {
+      const sa = a.supported_count ?? 1;
+      const sb = b.supported_count ?? 1;
+      if (sb !== sa) return sb - sa;
+      return (a.bankName || "").localeCompare(b.bankName || "");
+    });
+    if (!bankQuery) return sorted;
     const q = bankQuery.toLowerCase();
-    return banks.filter((b) =>
+    return sorted.filter((b) =>
       (b.bankName || "").toLowerCase().includes(q) ||
       (b.bankCode || "").toLowerCase().includes(q)
     );
@@ -312,6 +329,25 @@ export default function BindAccount() {
             ) : (
               filteredBanks.map((b) => {
                 const isSelected = b.bankCode === form.bank_code;
+                const supports = b.supports || {};
+                // Payout compatibility — how many of the 4 gateways can pay
+                // this bank. Users seeing "4/4" know their withdrawals will
+                // auto-route to any available gateway; "2/4" means we may
+                // need to fall back to manual admin approval for some.
+                const badge = (key, label, active) => (
+                  <span
+                    key={key}
+                    title={`${label} — ${active ? "supported" : "not supported"}`}
+                    className={`inline-block w-4 h-4 rounded text-[9px] font-800 font-display grid place-items-center leading-none pt-[1px] ${
+                      active
+                        ? "bg-emerald-500/25 text-emerald-300 border border-emerald-500/50"
+                        : "bg-white/[0.03] text-[var(--nb-muted)] border border-white/[0.06]"
+                    }`}
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                  >
+                    {label[0]}
+                  </span>
+                );
                 return (
                   <button
                     key={b.bankCode}
@@ -325,7 +361,18 @@ export default function BindAccount() {
                     <BankLogo brand={b.brand} />
                     <div className="flex-1 min-w-0 text-left">
                       <div className="text-sm truncate">{b.bankName}</div>
-                      <div className="text-[10px] text-[var(--nb-muted)] tabular">{b.bankCode}</div>
+                      <div className="text-[10px] text-[var(--nb-muted)] tabular flex items-center gap-1.5 mt-0.5">
+                        <span>{b.bankCode}</span>
+                        {b.supports ? (
+                          <span className="flex items-center gap-0.5" data-testid={`bank-badges-${b.bankCode}`}>
+                            <span className="text-[9px] text-[var(--nb-muted)] mr-0.5">Pays via:</span>
+                            {badge("p", "PayNow", supports.paynow)}
+                            {badge("s", "SHPAY", supports.shpay)}
+                            {badge("o", "1SSPay", supports.onesspay)}
+                            {badge("j", "JuntPay", supports.juntbest)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     {isSelected && <Check className="w-4 h-4 text-[#0055FF] shrink-0" />}
                   </button>
