@@ -12,6 +12,7 @@ import {
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { SectionHeader } from "@/components/design";
 
 /* -------------- helpers -------------- */
@@ -128,6 +129,8 @@ export function StatusPill({ status }) {
 /* ============= main ============= */
 export default function Deposit() {
   const { refresh } = useAuth();
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const [accounts, setAccounts] = useState([]);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState(""); // "instant-pay" | payment_account_id
@@ -777,29 +780,42 @@ export default function Deposit() {
                 <div
                   className="relative rounded-2xl overflow-hidden"
                   data-testid="approved-state"
-                  style={{ boxShadow: "0 24px 60px -12px rgba(16,185,129,0.45), 0 0 0 1px rgba(245,197,24,0.35)" }}
+                  style={{
+                    boxShadow: isLight
+                      ? "0 24px 60px -12px rgba(16,185,129,0.28), 0 0 0 1px rgba(245,197,24,0.40)"
+                      : "0 24px 60px -12px rgba(16,185,129,0.45), 0 0 0 1px rgba(245,197,24,0.35)",
+                  }}
                 >
-                  {/* Dashed accent lines top/bottom (matches the marketplace aesthetic) */}
+                  {/* Dashed gold accents (work in both themes) */}
                   <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
                        style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.85 }} />
                   <div className="absolute inset-x-0 bottom-0 h-[2px] pointer-events-none z-10"
                        style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.85 }} />
 
-                  {/* Glassmorphic gold-radial hero */}
+                  {/* Themed hero background — cream+gold radial in light mode,
+                      warm-black radial in dark mode. */}
                   <div
                     className="relative overflow-hidden"
                     style={{
-                      background: "linear-gradient(160deg,#1E1B0A 0%,#221E10 45%,#0B0906 100%)",
+                      background: isLight
+                        ? "linear-gradient(160deg,#FFF8E1 0%,#FFFBEC 45%,#FFFFFF 100%)"
+                        : "linear-gradient(160deg,#1E1B0A 0%,#221E10 45%,#0B0906 100%)",
                     }}
                   >
-                    {/* Radial glows */}
-                    <div className="pointer-events-none absolute -top-24 -right-24 w-64 h-64 rounded-full opacity-40 blur-3xl"
-                         style={{ background: "radial-gradient(circle,#F5C518 0%,transparent 70%)" }} />
-                    <div className="pointer-events-none absolute -bottom-20 -left-20 w-64 h-64 rounded-full opacity-30 blur-3xl"
-                         style={{ background: "radial-gradient(circle,#10B981 0%,transparent 70%)" }} />
+                    {/* Radial glows — dimmed on light so they aren't neon. */}
+                    <div className="pointer-events-none absolute -top-24 -right-24 w-64 h-64 rounded-full blur-3xl"
+                         style={{
+                           background: "radial-gradient(circle,#F5C518 0%,transparent 70%)",
+                           opacity: isLight ? 0.28 : 0.40,
+                         }} />
+                    <div className="pointer-events-none absolute -bottom-20 -left-20 w-64 h-64 rounded-full blur-3xl"
+                         style={{
+                           background: "radial-gradient(circle,#10B981 0%,transparent 70%)",
+                           opacity: isLight ? 0.18 : 0.30,
+                         }} />
 
                     <div className="relative px-6 pt-8 pb-4 text-center">
-                      {/* Animated success ring */}
+                      {/* Animated success ring — same emerald in both themes */}
                       <div className="relative mx-auto w-24 h-24 grid place-items-center">
                         <div className="absolute inset-0 rounded-full animate-ping"
                              style={{ background: "radial-gradient(circle,rgba(16,185,129,0.35),transparent 65%)" }} />
@@ -809,14 +825,16 @@ export default function Deposit() {
                           className="relative w-20 h-20 rounded-full grid place-items-center"
                           style={{
                             background: "linear-gradient(135deg,#10B981 0%,#059669 100%)",
-                            boxShadow: "0 12px 40px -8px rgba(16,185,129,0.7), inset 0 2px 10px rgba(255,255,255,0.25)",
+                            boxShadow: isLight
+                              ? "0 12px 28px -6px rgba(16,185,129,0.55), inset 0 2px 10px rgba(255,255,255,0.28)"
+                              : "0 12px 40px -8px rgba(16,185,129,0.7), inset 0 2px 10px rgba(255,255,255,0.25)",
                           }}
                         >
                           <CheckCircle2 className="w-10 h-10 text-white" strokeWidth={2.4} />
                         </div>
                       </div>
 
-                      {/* Trumpet chip */}
+                      {/* Wallet Credited chip — gold gradient works in both */}
                       <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-display font-800 uppercase tracking-widest text-[10px]"
                            style={{
                              background: "linear-gradient(135deg,#FFE580,#F5C518)",
@@ -827,34 +845,45 @@ export default function Deposit() {
                         <PartyPopper className="w-3 h-3" /> Wallet Credited
                       </div>
 
-                      <div className="mt-3 font-display font-800 text-white text-2xl tracking-tight leading-tight">
+                      <div
+                        className="mt-3 font-display font-800 text-2xl tracking-tight leading-tight"
+                        style={{ color: isLight ? "#141210" : "#FFFFFF" }}
+                      >
                         You're funded!
                       </div>
-                      <div className="mt-1 text-[12px] text-[var(--nb-muted)] leading-snug max-w-xs mx-auto">
+                      <div className="mt-1 text-[12px] leading-snug max-w-xs mx-auto"
+                           style={{ color: isLight ? "#5A5147" : "var(--nb-muted)" }}>
                         Your Luckycart Box wallet just got a fresh top-up. Ready to invest?
                       </div>
 
-                      {/* Big amount */}
+                      {/* Big amount pill */}
                       <div className="mt-5 mx-auto max-w-sm rounded-2xl px-5 py-4"
                            style={{
-                             background: "linear-gradient(135deg,rgba(245,197,24,0.18),rgba(16,185,129,0.12))",
-                             border: "1px solid rgba(245,197,24,0.45)",
-                             boxShadow: "inset 0 1px 12px rgba(245,197,24,0.15)",
+                             background: isLight
+                               ? "linear-gradient(135deg,rgba(245,197,24,0.16),rgba(16,185,129,0.10))"
+                               : "linear-gradient(135deg,rgba(245,197,24,0.18),rgba(16,185,129,0.12))",
+                             border: `1px solid ${isLight ? "rgba(245,197,24,0.55)" : "rgba(245,197,24,0.45)"}`,
+                             boxShadow: isLight
+                               ? "inset 0 1px 12px rgba(245,197,24,0.10)"
+                               : "inset 0 1px 12px rgba(245,197,24,0.15)",
                            }}>
-                        <div className="text-[10px] uppercase tracking-widest font-display font-700 text-[#F5C518]/80 flex items-center justify-center gap-1">
+                        <div className="text-[10px] uppercase tracking-widest font-display font-700 flex items-center justify-center gap-1"
+                             style={{ color: isLight ? "#A17A00" : "rgba(245,197,24,0.85)" }}>
                           <Sparkles className="w-3 h-3" /> Amount received
                         </div>
-                        <div className="mt-1 font-display font-800 text-4xl tabular text-white tracking-tight"
+                        <div className="mt-1 font-display font-800 text-4xl tabular tracking-tight"
+                             style={{ color: isLight ? "#141210" : "#FFFFFF" }}
                              data-testid="approved-amount">
                           {formatNaira(waitDep.amount)}
                         </div>
-                        <div className="mt-1 text-[10px] text-[var(--nb-muted)] tabular">
+                        <div className="mt-1 text-[10px] tabular"
+                             style={{ color: isLight ? "#8A7F72" : "var(--nb-muted)" }}>
                           Deposit ref: {String(waitDep.id || "").slice(-10).toUpperCase()}
                         </div>
                       </div>
                     </div>
 
-                    {/* Action grid — invest / view wallet */}
+                    {/* CTA row — gold primary, themed secondary */}
                     <div className="relative px-4 pb-5 pt-2 grid grid-cols-2 gap-2">
                       <Link
                         to="/marketplace"
@@ -872,7 +901,12 @@ export default function Deposit() {
                         to="/dashboard"
                         onClick={closeWait}
                         data-testid="approved-cta-wallet"
-                        className="h-11 rounded-xl inline-flex items-center justify-center gap-2 font-display font-700 text-sm text-white bg-[var(--nb-card2)] border border-[var(--nb-border)] active:scale-[0.98] transition hover:border-[#F5C518]/40"
+                        className="h-11 rounded-xl inline-flex items-center justify-center gap-2 font-display font-700 text-sm active:scale-[0.98] transition"
+                        style={{
+                          background: isLight ? "#FFFFFF" : "var(--nb-card2)",
+                          border: `1px solid ${isLight ? "rgba(20,18,16,0.10)" : "var(--nb-border)"}`,
+                          color: isLight ? "#141210" : "#FFFFFF",
+                        }}
                       >
                         <Wallet className="w-4 h-4" /> View wallet
                       </Link>
