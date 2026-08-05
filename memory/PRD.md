@@ -27,6 +27,13 @@ Build a Nigerian online investment website with an admin backend and user fronte
 - Admin can credit any user's wallet.
 - Daily profit drop for the plan's `duration_days`.
 
+## What's implemented (2026-02-08 — Daily bonus admin/live sync + copy)
+- ✅ **Live daily-coupon sync**: `PUT /api/admin/settings` now updates TODAY's active `auto_daily` coupon whenever `auto_coupon_amount` or `auto_coupon_max_uses` change. Fixes the "I set ₦50 in admin but users still claim ₦500" bug — previously the amount was frozen at cron-generation time and admin edits didn't propagate until the next day's drop.
+- ✅ **One-shot patch** applied to today's live coupon on the Atlas prod DB (`LUCKY-8L6G` amount 500 → 50, max_uses 10 → 50). Users who had already claimed at ₦500 keep those transactions; the remaining 47 slots now pay ₦50.
+- ✅ **DailyBonusCard copy** clarified to reduce confusion: header now says "Daily bonus · Redeem code", subtitle "Grab today's FREE ₦50 bonus", code-row label "Bonus code · redeem to get ₦50 free", and a full sentence explainer telling the user this is a free redeem code, one claim per person, while slots last.
+- ✅ Verified end-to-end: PUT settings 50 → 75 → coupon.amount 50 → 75; PUT 75 → 50 → coupon.amount back to 50.
+
+
 ## What's implemented (2026-02-08 — PWA install nudge + build fingerprint)
 - ✅ **`GET /api/version` endpoint** — returns commit SHA / branch / commit_time / server_time. Reads env vars first (`GIT_COMMIT`, `GIT_COMMIT_TIME`, `GIT_BRANCH`) with git-shell fallback and 60s in-process cache. Never 500s. Confirmed live: `{commit: "702e8dd...", short: "702e8dd", branch: "main"}`.
 - ✅ **`VersionFooter` component** — discreet build stamp (`Luckycart Box • v 702e8dd`) rendered above the bottom nav on every user page. Tap to expand full commit SHA, branch, and build time. Uses `--nb-muted` low-contrast styling so it never distracts.

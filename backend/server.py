@@ -4803,6 +4803,38 @@ async def admin_update_settings(payload: SettingsIn, admin: dict = Depends(get_a
         except Exception:
             logger.exception("Settings audit write failed — continuing with update")
         await db.settings.update_one({"_id": "global"}, {"$set": updates}, upsert=True)
+
+        # If admin changed the daily-bonus amount / max_uses, sync TODAY's
+        # active auto_daily coupon to the new values. Without this, the
+        # coupon amount is frozen at generation time and admin changes only
+        # take effect from the next day's drop — which is exactly the "I
+        # set 50 but users still claim 500" bug the operator hit.
+        # Past-day coupons are left untouched (they're historical).
+        coupon_keys = {"auto_coupon_amount", "auto_coupon_max_uses"}
+        if coupon_keys & set(updates.keys()):
+            try:
+                merged = await db.settings.find_one({"_id": "global"}) or {}
+                new_amount = float(merged.get("auto_coupon_amount") or 0)
+                new_max = int(merged.get("auto_coupon_max_uses") or 0)
+                today = _lagos_now().strftime("%Y-%m-%d")
+                coupon_updates: Dict[str, Any] = {}
+                if "auto_coupon_amount" in updates and new_amount > 0:
+                    coupon_updates["amount"] = new_amount
+                if "auto_coupon_max_uses" in updates and new_max > 0:
+                    coupon_updates["max_uses"] = new_max
+                if coupon_updates:
+                    sync = await db.coupons.update_one(
+                        {"type": "auto_daily", "generated_date": today, "active": True},
+                        {"$set": coupon_updates},
+                    )
+                    if sync.modified_count:
+                        logger.info(
+                            "Daily coupon synced to new admin settings: %s (matched=%d, modified=%d)",
+                            coupon_updates, sync.matched_count, sync.modified_count,
+                        )
+            except Exception:
+                logger.exception("Daily coupon sync failed — settings still saved OK")
+
     s = await get_settings()
     s.pop("_id", None)
     return s
