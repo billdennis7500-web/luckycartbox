@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatNaira } from "@/lib/api";
 import useSWRCache from "@/lib/useSWRCache";
-import { TrendingUp, CheckCircle2, Sparkles, Timer, Calendar, ChevronRight, Coins } from "lucide-react";
+import { TrendingUp, CheckCircle2, XCircle, Sparkles, Timer, Calendar, ChevronRight, Coins, Ban } from "lucide-react";
 import { AmbientCard, SectionHeader, MicroLabel, PillCTA, TIER_TOKENS } from "@/components/design";
 
 /* -------------- skeleton for perceived-fast load -------------- */
@@ -32,6 +32,7 @@ function InvestmentSkeleton() {
 /* -------------- helpers -------------- */
 function nextPayoutText(inv) {
   if (inv.status === "completed") return "Completed";
+  if (inv.status === "cancelled") return "Terminated";
   const start = inv.last_drop_at ? new Date(inv.last_drop_at) : new Date(inv.created_at);
   const next = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const diff = next - Date.now();
@@ -88,18 +89,26 @@ function Ring({ pct = 0, tone = "#F5C518", size = 56 }) {
 function InvestmentCard({ inv }) {
   const tier = tierForInv(inv);
   const done = inv.status === "completed";
+  // "Terminated" investments are ones an admin cancelled. Stake is forfeit,
+  // no more daily returns, but we still surface them so the user knows
+  // what happened (better UX than the row silently disappearing).
+  const cancelled = inv.status === "cancelled";
   const progress = Math.min(100, Math.round((inv.drops_done / inv.duration_days) * 100));
   const roiPct = inv.price ? (inv.total_earned / inv.price) * 100 : 0;
   const dailyEarn = (inv.price || 0) * ((inv.daily_profit_pct || 0) / 100);
   const projected = dailyEarn * (inv.duration_days || 0);
   const remaining = Math.max(0, projected - inv.total_earned);
-  const glow = done ? "#94A3B8" : tier.glow;
+  // Cancelled → red glow; Completed → grey; Active → tier glow
+  const glow = cancelled ? "#EF4444" : done ? "#94A3B8" : tier.glow;
 
   return (
     <div
       className="relative rounded-2xl overflow-hidden"
       data-testid={`inv-row-${inv.id}`}
-      style={{ boxShadow: `0 6px 32px -8px ${glow}55, 0 0 0 1px ${glow}25` }}
+      style={{
+        boxShadow: `0 6px 32px -8px ${glow}55, 0 0 0 1px ${glow}25`,
+        opacity: cancelled ? 0.85 : 1,
+      }}
     >
       {/* Dashed accent lines top + bottom */}
       <div className="absolute inset-x-0 top-0 h-[2px] pointer-events-none z-10"
@@ -149,13 +158,19 @@ function InvestmentCard({ inv }) {
               </span>
               <span
                 className="text-[10px] px-2 py-0.5 rounded-full font-display font-700 shrink-0"
-                style={done ? {
-                  background: "#94A3B818", color: "#94A3B8", border: "1px solid #94A3B840",
-                } : {
-                  background: "#10B98118", color: "#10B981", border: "1px solid #10B98140",
-                }}
+                style={
+                  cancelled ? {
+                    background: "#EF444418", color: "#EF4444", border: "1px solid #EF444455",
+                  } : done ? {
+                    background: "#94A3B818", color: "#94A3B8", border: "1px solid #94A3B840",
+                  } : {
+                    background: "#10B98118", color: "#10B981", border: "1px solid #10B98140",
+                  }
+                }
               >
-                {done ? (
+                {cancelled ? (
+                  <span className="inline-flex items-center gap-1"><Ban className="w-2.5 h-2.5" />Terminated</span>
+                ) : done ? (
                   <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" />Completed</span>
                 ) : "Active"}
               </span>
@@ -169,17 +184,44 @@ function InvestmentCard({ inv }) {
 
         {/* Body */}
         <div className="px-4 pb-4">
-          {/* Daily earning strip — gold accent */}
-          <div className="mb-4 rounded-xl px-3 py-2 flex items-center justify-between"
-               style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)" }}>
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#10B981]/85 font-display font-700">
-              <Coins className="w-3 h-3" /> Daily earnings
+          {/* Cancellation banner — only shown when admin has terminated this
+              investment. Includes the reason if the admin logged one, so
+              the user knows exactly why it stopped. */}
+          {cancelled && (
+            <div
+              className="mb-4 rounded-xl px-3 py-2.5 flex items-start gap-2"
+              style={{ background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.40)" }}
+              data-testid={`inv-cancelled-banner-${inv.id}`}
+            >
+              <Ban className="w-4 h-4 mt-0.5 shrink-0 text-[#EF4444]" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-display font-800 uppercase tracking-wider text-[#EF4444]">
+                  Investment terminated
+                </div>
+                <div className="mt-0.5 text-xs text-white/90 leading-snug">
+                  This plan was cancelled by the admin. Stake is not refundable and daily returns have stopped.
+                  {inv.cancelled_reason ? (
+                    <> Reason: <span className="text-white font-display font-700">{inv.cancelled_reason}</span></>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            <div className="font-display font-800 tabular text-[#10B981]" data-testid={`inv-daily-${inv.id}`}>
-              +{formatNaira(dailyEarn)}
-              <span className="text-[10px] text-[#10B981]/70 font-500 ml-1">/ day</span>
+          )}
+
+          {/* Daily earning strip — only relevant for active investments.
+              Hidden on cancelled/completed rows to avoid a false promise. */}
+          {!cancelled && (
+            <div className="mb-4 rounded-xl px-3 py-2 flex items-center justify-between"
+                 style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)" }}>
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#10B981]/85 font-display font-700">
+                <Coins className="w-3 h-3" /> Daily earnings
+              </div>
+              <div className="font-display font-800 tabular text-[#10B981]" data-testid={`inv-daily-${inv.id}`}>
+                +{formatNaira(dailyEarn)}
+                <span className="text-[10px] text-[#10B981]/70 font-500 ml-1">/ day</span>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center gap-4">
             <Ring pct={progress} tone={glow} />
@@ -192,12 +234,14 @@ function InvestmentCard({ inv }) {
                 <div className="text-[10px] text-[var(--nb-muted)] tabular">ROI {roiPct.toFixed(1)}%</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80 font-display font-700">Remaining</div>
+                <div className="text-[10px] uppercase tracking-widest text-[#F5C518]/80 font-display font-700">
+                  {cancelled ? "Not paid out" : "Remaining"}
+                </div>
                 <div className="mt-0.5 tabular font-display font-800 text-white">
-                  {formatNaira(remaining)}
+                  {cancelled ? "—" : formatNaira(remaining)}
                 </div>
                 <div className="text-[10px] text-[var(--nb-muted)] tabular">
-                  {Math.max(0, inv.duration_days - inv.drops_done)} days left
+                  {cancelled ? "Terminated" : `${Math.max(0, inv.duration_days - inv.drops_done)} days left`}
                 </div>
               </div>
             </div>
@@ -215,13 +259,15 @@ function InvestmentCard({ inv }) {
           </div>
 
           <div className="mt-3 h-1.5 rounded-full overflow-hidden"
-               style={{ background: "rgba(245,197,24,0.12)" }}>
+               style={{ background: cancelled ? "rgba(239,68,68,0.12)" : "rgba(245,197,24,0.12)" }}>
             <div
               className="h-full transition-all"
               style={{
                 width: `${progress}%`,
-                background: done ? "#94A3B8" : `linear-gradient(90deg,${glow},${glow}80)`,
-                boxShadow: done ? "none" : `0 0 12px ${glow}80`,
+                background: cancelled
+                  ? "#EF4444"
+                  : done ? "#94A3B8" : `linear-gradient(90deg,${glow},${glow}80)`,
+                boxShadow: cancelled || done ? "none" : `0 0 12px ${glow}80`,
               }}
             />
           </div>
@@ -246,7 +292,12 @@ export default function Investments() {
 
   const active = invs.filter((i) => i.status === "active");
   const completed = invs.filter((i) => i.status === "completed");
-  const shown = tab === "active" ? active : tab === "completed" ? completed : invs;
+  const cancelled = invs.filter((i) => i.status === "cancelled");
+  const shown =
+    tab === "active"    ? active
+    : tab === "completed" ? completed
+    : tab === "cancelled" ? cancelled
+    : invs;
 
   const totalActive = active.reduce((s, i) => s + (i.price || 0), 0);
   const totalEarned = invs.reduce((s, i) => s + (i.total_earned || 0), 0);
@@ -298,25 +349,36 @@ export default function Investments() {
         }
       />
 
-      {/* Tabs */}
-      <div className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)]">
-        {[
+      {/* Tabs — Cancelled tab only appears if the user actually has any
+          cancelled investments, to avoid a permanently-empty tab for the
+          99% of users who never get one. */}
+      {(() => {
+        const tabs = [
           { k: "active",    label: `Active (${active.length})`,       tid: "tab-active" },
           { k: "completed", label: `Completed (${completed.length})`, tid: "tab-completed" },
-          { k: "all",       label: `All (${invs.length})`,            tid: "tab-all" },
-        ].map(({ k, label, tid }) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            data-testid={tid}
-            className={`h-9 text-xs rounded-lg font-display font-700 transition-colors ${
-              tab === k ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30" : "text-[var(--nb-muted)] hover:text-white"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        ];
+        if (cancelled.length > 0) {
+          tabs.push({ k: "cancelled", label: `Terminated (${cancelled.length})`, tid: "tab-cancelled" });
+        }
+        tabs.push({ k: "all", label: `All (${invs.length})`, tid: "tab-all" });
+        const cols = tabs.length === 3 ? "grid-cols-3" : "grid-cols-4";
+        return (
+          <div className={`grid ${cols} gap-2 p-1 rounded-xl bg-[var(--nb-card)] border border-[var(--nb-border)]`}>
+            {tabs.map(({ k, label, tid }) => (
+              <button
+                key={k}
+                onClick={() => setTab(k)}
+                data-testid={tid}
+                className={`h-9 text-xs rounded-lg font-display font-700 transition-colors ${
+                  tab === k ? "bg-[#7C3AED] text-white shadow-lg shadow-[#7C3AED]/30" : "text-[var(--nb-muted)] hover:text-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {loading ? (
         <div className="grid gap-3" data-testid="inv-loading">
