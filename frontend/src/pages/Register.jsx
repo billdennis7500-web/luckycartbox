@@ -14,7 +14,7 @@ export default function Register() {
   const nav = useNavigate();
   const [sp] = useSearchParams();
 
-  const [form, setForm] = useState({ name: "", phone: "", password: "", referral_code: "" });
+  const [form, setForm] = useState({ name: "", phone: "", password: "", confirm_password: "", referral_code: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   // Welcome bonus amount is admin-controlled — read from public settings so
@@ -35,8 +35,17 @@ export default function Register() {
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true); setErr("");
+    // Passwords must match before we hit the backend — cheaper feedback
+    // and stops accidental typos from creating an account the user can't
+    // sign back into.
+    if (form.password !== form.confirm_password) {
+      setErr("Passwords don't match. Re-type both to continue.");
+      setLoading(false);
+      return;
+    }
     try {
-      const { user, welcome_bonus_credited } = await register(form);
+      const { confirm_password, ...payload } = form;
+      const { user, welcome_bonus_credited } = await register(payload);
       // Prefer the amount the backend actually credited; fall back to settings.
       const credited = Number(welcome_bonus_credited ?? welcomeBonus ?? 0);
       toast.success(`Account created! ${formatNaira(credited)} welcome bonus credited 🎉`);
@@ -76,13 +85,32 @@ export default function Register() {
               <p className="text-xs text-[var(--nb-muted)] mt-1">At least 6 characters.</p>
             </div>
             <div>
+              <Label htmlFor="confirm_password" className="text-[var(--nb-text)]">Confirm password</Label>
+              <Input id="confirm_password" data-testid="register-confirm-password-input" type="password"
+                     value={form.confirm_password} onChange={set("confirm_password")} required minLength={6}
+                     className={`mt-2 bg-[var(--nb-card2)] text-white h-11 ${
+                       form.confirm_password && form.confirm_password !== form.password
+                         ? "border-[#EF4444]"
+                         : "border-[var(--nb-border)]"
+                     }`} />
+              {form.confirm_password && form.confirm_password !== form.password ? (
+                <p data-testid="register-confirm-mismatch" className="text-xs text-[#EF4444] mt-1">
+                  Passwords don't match.
+                </p>
+              ) : (
+                <p className="text-xs text-[var(--nb-muted)] mt-1">Re-type the same password.</p>
+              )}
+            </div>
+            <div>
               <Label htmlFor="referral_code" className="text-[var(--nb-text)]">Referral code <span className="text-[var(--nb-muted)]">(optional)</span></Label>
               <Input id="referral_code" data-testid="register-referral-input" value={form.referral_code}
                      onChange={set("referral_code")}
                      className="mt-2 bg-[var(--nb-card2)] border-[var(--nb-border)] text-white h-11 uppercase" />
             </div>
             {err && <div data-testid="register-error" className="text-sm text-[#EF4444]">{err}</div>}
-            <Button type="submit" disabled={loading} data-testid="register-submit-button"
+            <Button type="submit"
+                    disabled={loading || (form.confirm_password.length > 0 && form.confirm_password !== form.password)}
+                    data-testid="register-submit-button"
                     className="w-full h-11 bg-[#0055FF] hover:bg-[#3377FF] rounded-md glow-primary">
               {loading ? "Creating…" : "Create account"}
             </Button>
