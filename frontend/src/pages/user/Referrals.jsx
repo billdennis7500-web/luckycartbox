@@ -113,45 +113,6 @@ export default function Referrals() {
         testid="referrals-heading"
       />
 
-      {/* Promo page CTA — shareable poster for WhatsApp/Telegram blast */}
-      <Link
-        to="/rewards-showcase"
-        data-testid="referrals-promo-cta"
-        className="block relative rounded-2xl overflow-hidden active:scale-[0.99] transition"
-        style={{
-          background: "linear-gradient(135deg,#1E1B0A 0%,#0B0906 65%,#050403 100%)",
-          border: "1px solid rgba(245,197,24,0.55)",
-          boxShadow: "0 12px 28px -10px rgba(245,197,24,0.5)",
-        }}
-      >
-        <div className="absolute inset-x-0 top-0 h-[2px]"
-             style={{ background: "repeating-linear-gradient(90deg,#F5C518 0 10px,transparent 10px 18px)", opacity: 0.85 }} />
-        <div className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-45 blur-3xl"
-             style={{ background: "radial-gradient(circle,#F5C518 0%,transparent 70%)" }} />
-
-        <div className="relative p-4 flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl shrink-0 grid place-items-center"
-               style={{
-                 background: "linear-gradient(135deg,#FFE580,#F5C518)",
-                 boxShadow: "0 6px 14px -4px rgba(245,197,24,0.65)",
-               }}>
-            <Sparkles className="w-5 h-5 text-[#1A1508]" strokeWidth={2.5} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-widest font-display font-800 text-[#F5C518]">
-              Shareable Poster
-            </div>
-            <div className="text-white font-display font-800 text-sm leading-tight mt-0.5">
-              Spread the wealth &amp; get paid — up to ₦72,000 in stacked bonuses
-            </div>
-            <div className="text-[11px] text-[var(--nb-muted)] mt-1">
-              Tap to open the shareable rewards poster → blast on WhatsApp status &amp; Telegram
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-[#F5C518] shrink-0" />
-        </div>
-      </Link>
-
       {/* Reward levels action card — links to the milestone-bonuses page.
           Uses var(--nb-card) so it flips white in light-mode; gold accents
           + medallion carry the identity in both themes. */}

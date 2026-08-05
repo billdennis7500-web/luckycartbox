@@ -401,7 +401,6 @@ export default function Profile() {
       <SoftCard padded={false} testid="menu-group-account">
         <div className="divide-y divide-[var(--nb-border)]">
           <MenuRow to="/change-password"  icon={Lock}     label="Change Password"  hint="Keep your account safe"    tone="info"    testid="menu-password" />
-          <MenuRow to="/how-it-works"     icon={Sparkles} label="How it works"     hint="3 habits of top earners"   tone="gold"    testid="menu-how-it-works" />
           <MenuRow to="/customer-service" icon={LifeBuoy} label="Customer Service" hint="WhatsApp, Telegram & FAQ"  tone="success" testid="menu-customer-service" />
           <MenuRow to="/about"            icon={Info}     label="About us"         hint="Mission, values & version" tone="cyan"    testid="menu-about" />
           {user?.role === "admin" && (
