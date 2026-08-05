@@ -45,6 +45,7 @@ Public API — unchanged since the old SDK so /server.py needs zero edits:
 import os
 import time
 import json
+import asyncio
 import hashlib
 import logging
 from typing import Any, Dict, Optional, List
@@ -73,8 +74,11 @@ def _config() -> Dict[str, str]:
         # for the exact wayCode allowed for NGN bank-transfer payins. Common
         # values: "NGN_TRANSFER", "BANK_TRANSFER", "NGN_BANK". Configurable so
         # you don't need a redeploy to try alternatives.
+        # JuntPay v1 requires the SAME wayCode ("BANK_TRANSFER") for both
+        # payins and payouts on Nigerian bank rails. The legacy value
+        # "BANK_ACCOUNT" was rejected with "Unsupported payment method".
         "payin_way_code":  os.environ.get("JUNTBEST_PAYIN_WAY_CODE",  "BANK_TRANSFER"),
-        "payout_way_code": os.environ.get("JUNTBEST_PAYOUT_WAY_CODE", "BANK_ACCOUNT"),
+        "payout_way_code": os.environ.get("JUNTBEST_PAYOUT_WAY_CODE", "BANK_TRANSFER"),
         "payin_notify":    os.environ.get("JUNTBEST_PAYIN_NOTIFY_URL",  ""),
         "payout_notify":   os.environ.get("JUNTBEST_PAYOUT_NOTIFY_URL", ""),
     }
@@ -196,21 +200,41 @@ async def _post(path: str, body: Dict[str, Any], timeout: float = 20.0) -> Dict[
     body["sign"] = sign_body(body)
     url = f"{c['base']}{path}"
     proxy = _proxy_url()
-    try:
-        async with httpx.AsyncClient(timeout=timeout, proxy=proxy) as client:
-            r = await client.post(url, json=body,
-                                  headers={"Content-Type": "application/json",
-                                           "Accept": "application/json"})
-            try:
-                data = r.json()
-            except Exception:
-                data = {"code": -1, "msg": f"non-json response: {r.text[:200]}", "data": None}
-            if r.status_code != 200:
-                logger.warning("JuntPay %s HTTP %s: %s", path, r.status_code, data)
-            return data
-    except Exception as exc:
-        logger.exception("JuntPay %s network error", path)
-        return {"code": -1, "msg": f"network error: {exc}", "data": None}
+
+    # The IPRoyal proxy occasionally returns a 403 (ProxyError) or 5xx on
+    # JuntPay hostnames — likely provider-side rate limiting or transient
+    # blacklist churn. Retry up to 3 attempts with exponential backoff so a
+    # single flaky proxy hop doesn't cascade into a failed withdrawal.
+    RETRIES = 3
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout, proxy=proxy) as client:
+                r = await client.post(url, json=body,
+                                      headers={"Content-Type": "application/json",
+                                               "Accept": "application/json"})
+                try:
+                    data = r.json()
+                except Exception:
+                    data = {"code": -1, "msg": f"non-json response: {r.text[:200]}", "data": None}
+                if r.status_code != 200:
+                    logger.warning("JuntPay %s HTTP %s: %s (attempt %d/%d)", path, r.status_code, data, attempt, RETRIES)
+                    if 500 <= r.status_code < 600 and attempt < RETRIES:
+                        await asyncio.sleep(0.6 * attempt)
+                        continue
+                return data
+        except Exception as exc:
+            last_exc = exc
+            # ProxyError, ConnectTimeout, ReadTimeout, RemoteProtocolError etc.
+            # Retry — these are almost always transient hops through IPRoyal.
+            logger.warning("JuntPay %s attempt %d/%d failed: %s", path, attempt, RETRIES, exc)
+            if attempt < RETRIES:
+                await asyncio.sleep(0.6 * attempt)
+                continue
+            logger.exception("JuntPay %s exhausted retries", path)
+            return {"code": -1, "msg": f"network error: {exc}", "data": None}
+    # Unreachable — the loop always returns or raises, but keep mypy happy.
+    return {"code": -1, "msg": f"network error: {last_exc}", "data": None}
 
 
 # ---------------------------------------------------------------------------
