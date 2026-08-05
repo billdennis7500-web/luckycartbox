@@ -4948,6 +4948,85 @@ async def health_check():
 
 
 # ---------------------------------------------------------------------------
+# /api/version — lightweight build fingerprint used by the frontend footer
+# and by us for post-deploy sanity checks ("is prod actually running the
+# commit I just pushed?"). We prefer environment vars (set at build time)
+# and fall back to a live `git rev-parse` in the mounted repo. Everything
+# is wrapped in a broad try/except so this endpoint can never 500.
+# ---------------------------------------------------------------------------
+_VERSION_CACHE: Dict[str, Any] = {"value": None, "ts": 0.0}
+
+
+def _resolve_version() -> Dict[str, Any]:
+    """Return commit metadata. Cached in-process for 60s so we don't shell
+    out to git on every request."""
+    now = time.time()
+    cached = _VERSION_CACHE.get("value")
+    if cached and (now - _VERSION_CACHE.get("ts", 0)) < 60:
+        return cached
+
+    commit = (os.environ.get("GIT_COMMIT") or "").strip()
+    commit_time = (os.environ.get("GIT_COMMIT_TIME") or "").strip()
+    branch = (os.environ.get("GIT_BRANCH") or "").strip()
+
+    # Fallback: try to read git metadata from the container. Only runs when
+    # env vars are absent (deploy pipelines set them explicitly).
+    if not commit:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(ROOT_DIR.parent), capture_output=True, text=True, timeout=1.5,
+            )
+            if out.returncode == 0:
+                commit = out.stdout.strip()
+        except Exception:
+            commit = ""
+    if commit and not commit_time:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "log", "-1", "--format=%cI"],
+                cwd=str(ROOT_DIR.parent), capture_output=True, text=True, timeout=1.5,
+            )
+            if out.returncode == 0:
+                commit_time = out.stdout.strip()
+        except Exception:
+            commit_time = ""
+    if not branch:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=str(ROOT_DIR.parent), capture_output=True, text=True, timeout=1.5,
+            )
+            if out.returncode == 0:
+                branch = out.stdout.strip()
+        except Exception:
+            branch = ""
+
+    payload = {
+        "service": "luckycartbox-api",
+        "commit": commit or "unknown",
+        "short": (commit or "unknown")[:7],
+        "branch": branch or "unknown",
+        "commit_time": commit_time or None,
+        "server_time": now_utc().isoformat(),
+    }
+    _VERSION_CACHE["value"] = payload
+    _VERSION_CACHE["ts"] = now
+    return payload
+
+
+@api.get("/version")
+async def version_info():
+    """Returns the commit SHA / time the backend is currently running.
+    Used by the discreet frontend footer so users (and us) can confirm
+    which build is live. Never 500s — falls back to `unknown`."""
+    return _resolve_version()
+
+
+# ---------------------------------------------------------------------------
 # Router mount + CORS
 # ---------------------------------------------------------------------------
 app.include_router(api)

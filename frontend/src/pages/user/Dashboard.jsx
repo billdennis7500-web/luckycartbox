@@ -15,6 +15,7 @@ import {
   AmbientCard, SoftCard, SectionHeader, MicroLabel, StackChip, StatChip, PillCTA,
 } from "@/components/design";
 import InstallAppTile from "@/components/InstallAppTile";
+import InstallNudgeBanner from "@/components/InstallNudgeBanner";
 import DailyBonusCard from "@/components/DailyBonusCard";
 import LiveActivityStrip from "@/components/LiveActivityStrip";
 
@@ -80,6 +81,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Install nudge — dismissible banner (auto-hides when installed
+          or on non-installable browsers). Cool-off for 7 days on dismiss. */}
+      <InstallNudgeBanner />
+
       {/* Greeting + Telegram chip */}
       <div className="flex items-start justify-between gap-3">
         <div>

@@ -27,6 +27,13 @@ Build a Nigerian online investment website with an admin backend and user fronte
 - Admin can credit any user's wallet.
 - Daily profit drop for the plan's `duration_days`.
 
+## What's implemented (2026-02-08 — PWA install nudge + build fingerprint)
+- ✅ **`GET /api/version` endpoint** — returns commit SHA / branch / commit_time / server_time. Reads env vars first (`GIT_COMMIT`, `GIT_COMMIT_TIME`, `GIT_BRANCH`) with git-shell fallback and 60s in-process cache. Never 500s. Confirmed live: `{commit: "702e8dd...", short: "702e8dd", branch: "main"}`.
+- ✅ **`VersionFooter` component** — discreet build stamp (`Luckycart Box • v 702e8dd`) rendered above the bottom nav on every user page. Tap to expand full commit SHA, branch, and build time. Uses `--nb-muted` low-contrast styling so it never distracts.
+- ✅ **`InstallNudgeBanner` component** — slim dismissible gold banner at the very top of the Dashboard for users who haven't installed the PWA. Auto-hides when installed or on non-installable browsers (headless / desktop). Dismissal writes a 7-day cool-off to `localStorage` (`lcb_install_nudge_dismissed_at`) so we never nag. On iOS Safari, tapping the banner opens the same 3-step Share → Add-to-Home-Screen dialog reused by `InstallAppTile`.
+- ✅ Both components use the shared `usePWAInstall` hook so the banner and the existing quick-action tile stay in sync (installing via one hides the other).
+
+
 ## What's implemented (2026-02-07 — Fly.io deployment fix)
 - ✅ Added ROOT-level `Dockerfile`, `fly.toml`, and `.dockerignore` at `/app/` (Fly.io looks for these at repo root, not `/app/backend/`). The backend-scoped copies in `/app/backend/` are kept for reference but Fly.io will now pick up the root ones on `fly deploy`.
 - ✅ Fixed `/api/health` 404 bug — the route was declared AFTER `app.include_router(api)` in `server.py`, which FastAPI silently ignores. Moved the `@api.get("/")` and `@api.get("/health")` declarations BEFORE `app.include_router(api)` (lines 3515 & 3520 respectively). Confirmed via curl: `GET /api/health` now returns `200` with `{status:"ok", service:"naijainvest-api", time:<iso>}`.

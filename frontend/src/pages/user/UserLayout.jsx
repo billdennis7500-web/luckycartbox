@@ -7,6 +7,7 @@ import { isImpersonatingTab } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 import { BrandLogo } from "@/components/BrandLogo";
 import MilestoneListener from "@/components/MilestoneListener";
+import VersionFooter from "@/components/VersionFooter";
 
 const NAV = [
   { to: "/dashboard",   label: "Home",        icon: Home,      testid: "botnav-home" },
@@ -134,6 +135,9 @@ export default function UserLayout() {
       {/* Main */}
       <main className="flex-1 max-w-3xl mx-auto w-full px-5 pt-6 pb-32">
         <Outlet />
+        {/* Discreet build fingerprint — helps users and us confirm the
+            live commit after every deploy. */}
+        <VersionFooter />
       </main>
 
       {/* Milestone listener — fires a confetti toast the moment a user
