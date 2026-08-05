@@ -208,6 +208,13 @@ async def get_current_user(request: Request) -> dict:
     user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Banned users are locked out at the auth layer — every request that
+    # depends on `get_current_user` (which is almost everything) hits this
+    # gate. We deliberately do NOT check `role == "admin"` here so we can
+    # ban rogue admin accounts if needed (a second super-admin can always
+    # unban them). See admin_ban_user / admin_unban_user below.
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="Account suspended — contact support")
     # Global "logout all users" gate — any non-admin token issued BEFORE the
     # admin's last force-logout is considered expired. Admin tokens are exempt
     # so an admin can't accidentally kick themselves out with this action.
@@ -1646,6 +1653,10 @@ async def login(payload: LoginIn, response: Response):
         user = await db.users.find_one({"phone": phone})
     if not user or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(401, "Invalid credentials")
+    # Block banned users at the login boundary with a clearer message than
+    # the generic "account suspended" thrown from `get_current_user`.
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="Account suspended. Contact support for details.")
     access = create_access_token(str(user["_id"]), user.get("role", "user"))
     refresh = create_refresh_token(str(user["_id"]))
     set_auth_cookies(response, access, refresh)
@@ -3237,7 +3248,120 @@ async def admin_add_balance(uid: str, payload: AddBalanceIn, admin: dict = Depen
     return {"ok": True, "user": clean(u)}
 
 
-# Deposits admin
+# ---------------------------------------------------------------------------
+# Ban / Unban a user
+# ---------------------------------------------------------------------------
+#
+# Ban semantics (per operator spec):
+#   • Block login (auth layer rejects with a 403 "Account suspended")
+#   • Freeze wallet — withdrawals, coupon redeems, and any bonuses that
+#     credit the wallet are all short-circuited (they all pass through
+#     `get_current_user`, which rejects banned users).
+#   • Existing wallet balance is preserved (untouched by ban).
+#   • Active investments continue to accrue on paper but the user cannot
+#     redeem or withdraw them until unbanned. If admin wants the stake
+#     forfeit, they use the "Remove investment" action below.
+#   • Ban is reversible — Unban restores the exact prior state.
+#
+# We store ban metadata (who / when / why) so ops has an audit trail.
+class BanUserIn(BaseModel):
+    reason: Optional[str] = None
+
+
+@api.post("/admin/users/{uid}/ban")
+async def admin_ban_user(uid: str, payload: BanUserIn, admin: dict = Depends(get_admin_user)):
+    u = await db.users.find_one({"_id": oid(uid)})
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.get("role") == "admin" and str(u["_id"]) == str(admin["_id"]):
+        raise HTTPException(400, "You cannot ban yourself.")
+    await db.users.update_one(
+        {"_id": u["_id"]},
+        {"$set": {
+            "banned": True,
+            "banned_at": now_utc().isoformat(),
+            "banned_by": str(admin["_id"]),
+            "banned_by_email": admin.get("email"),
+            "banned_reason": (payload.reason or "").strip() or None,
+        }},
+    )
+    # Cheap audit crumb — surfaces on the User Detail transactions list.
+    await add_transaction(
+        u["_id"], "admin_ban", 0,
+        f"Account banned by admin{': ' + payload.reason if payload.reason else ''}",
+        {"admin_id": str(admin["_id"]), "admin_email": admin.get("email")},
+    )
+    u = await db.users.find_one({"_id": u["_id"]})
+    return {"ok": True, "user": clean(u)}
+
+
+@api.post("/admin/users/{uid}/unban")
+async def admin_unban_user(uid: str, admin: dict = Depends(get_admin_user)):
+    u = await db.users.find_one({"_id": oid(uid)})
+    if not u:
+        raise HTTPException(404, "User not found")
+    if not u.get("banned"):
+        return {"ok": True, "user": clean(u), "message": "User was not banned."}
+    await db.users.update_one(
+        {"_id": u["_id"]},
+        {"$set": {"banned": False,
+                  "unbanned_at": now_utc().isoformat(),
+                  "unbanned_by": str(admin["_id"]),
+                  "unbanned_by_email": admin.get("email")}},
+    )
+    await add_transaction(
+        u["_id"], "admin_unban", 0,
+        "Account unbanned by admin",
+        {"admin_id": str(admin["_id"]), "admin_email": admin.get("email")},
+    )
+    u = await db.users.find_one({"_id": u["_id"]})
+    return {"ok": True, "user": clean(u)}
+
+
+# ---------------------------------------------------------------------------
+# Cancel a user's active investment (no refund — stake forfeit).
+# Per operator spec: used for scam/misbehaving users. The stake stays with
+# the platform (already deposited); the investment is marked inactive so
+# no further daily returns accrue.
+# ---------------------------------------------------------------------------
+class CancelInvestmentIn(BaseModel):
+    reason: Optional[str] = None
+
+
+@api.post("/admin/investments/{iid}/cancel")
+async def admin_cancel_investment(iid: str, payload: CancelInvestmentIn, admin: dict = Depends(get_admin_user)):
+    inv = await db.investments.find_one({"_id": oid(iid)})
+    if not inv:
+        raise HTTPException(404, "Investment not found")
+    if inv.get("status") != "active":
+        raise HTTPException(400, f"Investment is not active (status: {inv.get('status')})")
+    now_iso = now_utc().isoformat()
+    await db.investments.update_one(
+        {"_id": inv["_id"]},
+        {"$set": {
+            "status": "cancelled",
+            "cancelled_at": now_iso,
+            "cancelled_by": str(admin["_id"]),
+            "cancelled_by_email": admin.get("email"),
+            "cancelled_reason": (payload.reason or "").strip() or None,
+            "end_at": now_iso,   # so scheduler stops touching it
+        }},
+    )
+    # Audit trail on the user's transaction ledger (0 naira — no money moved).
+    await add_transaction(
+        inv["user_id"], "investment_cancelled", 0,
+        f"Investment cancelled by admin (stake forfeit){': ' + payload.reason if payload.reason else ''}",
+        {"admin_id": str(admin["_id"]),
+         "admin_email": admin.get("email"),
+         "investment_id": str(inv["_id"]),
+         "product_name": inv.get("product_name"),
+         "stake": float(inv.get("price", 0))},
+    )
+    updated = await db.investments.find_one({"_id": inv["_id"]})
+    return {"ok": True, "investment": clean(updated)}
+
+
+
 @api.get("/admin/deposits")
 async def admin_deposits(admin: dict = Depends(get_admin_user), status: Optional[str] = None):
     query = {}

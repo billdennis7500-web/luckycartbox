@@ -27,6 +27,17 @@ Build a Nigerian online investment website with an admin backend and user fronte
 - Admin can credit any user's wallet.
 - Daily profit drop for the plan's `duration_days`.
 
+## What's implemented (2026-02-08 — Admin: Ban User + Cancel Investment)
+- ✅ **Ban user**: `POST /api/admin/users/{uid}/ban` (optional reason). Blocks login at the auth layer with a clear "Account suspended" 403, and every subsequent request via `get_current_user` also rejects. Wallet balance is preserved but frozen (no withdrawals, no bonus claims, no coupon redeems). Ban metadata stored: `banned`, `banned_at`, `banned_by`, `banned_by_email`, `banned_reason`. Audit trail written to the user's transaction ledger (`type: admin_ban`, amount 0).
+- ✅ **Unban user**: `POST /api/admin/users/{uid}/unban`. Reversible — restores login and wallet exactly as they were pre-ban. Stores `unbanned_at`, `unbanned_by`.
+- ✅ **Cancel active investment**: `POST /api/admin/investments/{iid}/cancel` (optional reason). Marks the investment `status: cancelled`, sets `end_at` so the scheduler stops touching it, and writes an audit tx (`type: investment_cancelled`). **NO REFUND** — stake is forfeit per operator spec. Rejects if the investment isn't in `active` status.
+- ✅ **Frontend UI in `AdminUserDetail.jsx`**: red "Ban user" button in the header when active, green "Unban user" when already banned; big red "BANNED" badge in the user card header (title-tooltip shows the reason). Ban dialog collects an optional reason, unban is one-click confirm.
+- ✅ **Cancel-investment UI**: red "Cancel" button on every active row in the investments table, opens a confirmation dialog showing the stake amount, days earned, and a bold "STAKE FORFEIT — no refund" warning before proceeding.
+- ✅ **BANNED badge on Users list** so admins can spot banned accounts at a glance without opening the detail page.
+- ✅ **Self-protection**: Admins cannot ban themselves.
+- ✅ Verified end-to-end via curl (ban → login blocked → unban → login OK) and cancel-investment (400 on re-cancel). No collateral damage to production data.
+
+
 ## What's implemented (2026-02-08 — Daily bonus admin/live sync + copy)
 - ✅ **Live daily-coupon sync**: `PUT /api/admin/settings` now updates TODAY's active `auto_daily` coupon whenever `auto_coupon_amount` or `auto_coupon_max_uses` change. Fixes the "I set ₦50 in admin but users still claim ₦500" bug — previously the amount was frozen at cron-generation time and admin edits didn't propagate until the next day's drop.
 - ✅ **One-shot patch** applied to today's live coupon on the Atlas prod DB (`LUCKY-8L6G` amount 500 → 50, max_uses 10 → 50). Users who had already claimed at ₦500 keep those transactions; the remaining 47 slots now pay ₦50.

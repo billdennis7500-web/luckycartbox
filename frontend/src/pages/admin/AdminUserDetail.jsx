@@ -10,7 +10,13 @@ import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft, Wallet, Plus, Minus, RefreshCw, TrendingUp, Landmark, Copy,
   Gift, Sparkles, ArrowDownToLine, Users2, LogIn, UserPlus, UserCircle2,
+  ShieldBan, ShieldCheck, Ban, XCircle,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 function StatChip({ label, value, tone = "default", testid }) {
   const map = {
@@ -44,6 +50,17 @@ export default function AdminUserDetail() {
   const [op, setOp] = useState("credit"); // credit | debit
   const [saving, setSaving] = useState(false);
   const [imperLoading, setImperLoading] = useState(false);
+  // Ban / unban modal state — we ask for a reason on ban so ops has an
+  // audit trail; unban is one-click since it just restores prior state.
+  const [banOpen, setBanOpen] = useState(false);
+  const [banReason, setBanReason] = useState("");
+  const [banBusy, setBanBusy] = useState(false);
+  // Cancel-investment modal state — indexed by the investment id being
+  // cancelled so we can render an inline confirmation without a giant
+  // shared state machine.
+  const [cancelInv, setCancelInv] = useState(null); // holds full inv obj
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   const load = () => api.get(`/admin/users/${uid}`).then((r) => setData(r.data));
   useEffect(() => { load(); }, [uid]); // eslint-disable-line
@@ -102,6 +119,49 @@ export default function AdminUserDetail() {
   const activeInv = useMemo(() => (data?.investments || []).filter((i) => i.status === "active"), [data]);
   const completedInv = useMemo(() => (data?.investments || []).filter((i) => i.status === "completed"), [data]);
 
+  const submitBan = async () => {
+    setBanBusy(true);
+    try {
+      const { data: resp } = await api.post(`/admin/users/${uid}/ban`, {
+        reason: banReason.trim() || null,
+      });
+      toast.success(`${resp.user?.name || "User"} has been banned — they can no longer sign in or move funds.`);
+      setBanOpen(false);
+      setBanReason("");
+      await load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Ban failed");
+    } finally { setBanBusy(false); }
+  };
+
+  const submitUnban = async () => {
+    if (!window.confirm(`Unban ${data?.user?.name || "this user"}? They'll be able to log in and use their wallet again immediately.`)) return;
+    setBanBusy(true);
+    try {
+      const { data: resp } = await api.post(`/admin/users/${uid}/unban`);
+      toast.success(`${resp.user?.name || "User"} is unbanned — welcome back.`);
+      await load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Unban failed");
+    } finally { setBanBusy(false); }
+  };
+
+  const submitCancelInv = async () => {
+    if (!cancelInv) return;
+    setCancelBusy(true);
+    try {
+      await api.post(`/admin/investments/${cancelInv.id}/cancel`, {
+        reason: cancelReason.trim() || null,
+      });
+      toast.success(`Investment cancelled — ${cancelInv.product_name} (${formatNaira(cancelInv.price)}). Stake forfeit, no refund.`);
+      setCancelInv(null);
+      setCancelReason("");
+      await load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Cancel failed");
+    } finally { setCancelBusy(false); }
+  };
+
   if (!data) return <div className="text-[var(--nb-muted)]">Loading…</div>;
   const { user, transactions, investments, total_deposited, inviter, gen1_referrals } = data;
   const bank = user.bank_account;
@@ -115,6 +175,28 @@ export default function AdminUserDetail() {
           <ArrowLeft className="w-4 h-4"/>Back to users
         </Link>
         <div className="flex items-center gap-2">
+          {user.banned ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={submitUnban}
+              disabled={banBusy}
+              data-testid="user-unban-btn"
+              className="border-[#10B981]/40 bg-transparent text-[#10B981] hover:bg-[#10B981]/10"
+            >
+              <ShieldCheck className="w-3 h-3 mr-1"/>{banBusy ? "Unbanning…" : "Unban user"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setBanReason(""); setBanOpen(true); }}
+              data-testid="user-ban-btn"
+              className="border-[#EF4444]/40 bg-transparent text-[#EF4444] hover:bg-[#EF4444]/10"
+            >
+              <ShieldBan className="w-3 h-3 mr-1"/>Ban user
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -154,6 +236,15 @@ export default function AdminUserDetail() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
+            {user.banned && (
+              <span
+                data-testid="user-banned-badge"
+                className="text-[10px] px-2 py-1 rounded-full border bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/40 inline-flex items-center gap-1"
+                title={user.banned_reason || undefined}
+              >
+                <Ban className="w-3 h-3" /> BANNED
+              </span>
+            )}
             <span className={`text-xs px-2 py-1 rounded-full border ${
               user.has_invested
                 ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
@@ -369,11 +460,12 @@ export default function AdminUserDetail() {
                 <th className="px-4 py-3">Progress</th>
                 <th className="px-4 py-3">Earned</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--nb-border)]">
               {investments.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-8 text-[var(--nb-muted)]" data-testid="user-inv-empty">
+                <tr><td colSpan={7} className="text-center py-8 text-[var(--nb-muted)]" data-testid="user-inv-empty">
                   <Sparkles className="w-5 h-5 text-[#0055FF] mx-auto mb-1"/>
                   No investments.
                 </td></tr>
@@ -389,8 +481,25 @@ export default function AdminUserDetail() {
                     <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
                       i.status === "active"
                         ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                        : "bg-[var(--nb-muted)]/15 text-[var(--nb-muted)] border-[var(--nb-muted)]/30"
+                        : i.status === "cancelled"
+                          ? "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30"
+                          : "bg-[var(--nb-muted)]/15 text-[var(--nb-muted)] border-[var(--nb-muted)]/30"
                     }`}>{i.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {i.status === "active" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setCancelReason(""); setCancelInv(i); }}
+                        data-testid={`user-inv-cancel-btn-${i.id}`}
+                        className="h-7 px-2 border-[#EF4444]/40 bg-transparent text-[#EF4444] hover:bg-[#EF4444]/10"
+                      >
+                        <XCircle className="w-3 h-3 mr-1" /> Cancel
+                      </Button>
+                    ) : (
+                      <span className="text-[10px] text-[var(--nb-muted)]">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -441,6 +550,101 @@ export default function AdminUserDetail() {
           </table>
         </Card>
       </section>
+
+      {/* Ban confirmation dialog — asks for optional reason */}
+      <AlertDialog open={banOpen} onOpenChange={setBanOpen}>
+        <AlertDialogContent
+          data-testid="ban-dialog"
+          className="bg-[var(--nb-card)] border-[var(--nb-border)]"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <ShieldBan className="w-5 h-5 text-[#EF4444]" /> Ban {user.name}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[var(--nb-muted)] leading-relaxed">
+              This user will be blocked from logging in and their wallet is frozen (no withdrawals, no bonus claims).
+              Existing balance is preserved. You can unban them anytime to restore access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="mt-2 space-y-2">
+            <Label className="text-white text-sm">Reason (optional, shown in audit trail)</Label>
+            <Textarea
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              placeholder="e.g. Suspicious deposits, fraud complaint, chargebacks…"
+              data-testid="ban-reason-input"
+              className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white min-h-[80px] resize-y"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={banBusy}
+              data-testid="ban-cancel-btn"
+              className="bg-transparent border-[var(--nb-border)] text-white hover:bg-[var(--nb-border)]"
+            >Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={submitBan}
+              disabled={banBusy}
+              data-testid="ban-confirm-btn"
+              className="bg-[#EF4444] hover:bg-[#dc2626] text-white"
+            >
+              {banBusy ? "Banning…" : "Ban user"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel investment confirmation dialog — asks for optional reason */}
+      <AlertDialog open={!!cancelInv} onOpenChange={(o) => { if (!o) { setCancelInv(null); setCancelReason(""); } }}>
+        <AlertDialogContent
+          data-testid="cancel-inv-dialog"
+          className="bg-[var(--nb-card)] border-[var(--nb-border)]"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-[#EF4444]" /> Cancel investment?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[var(--nb-muted)] leading-relaxed">
+              {cancelInv && (
+                <>
+                  <span className="text-white font-display font-700">{cancelInv.product_name}</span>
+                  {" · "}
+                  <span className="tabular">{formatNaira(cancelInv.price)}</span> stake
+                  {" · "}
+                  <span className="tabular">{cancelInv.drops_done}/{cancelInv.duration_days}</span> days earned.
+                  <br />
+                  The stake is <span className="text-[#EF4444] font-display font-700">FORFEIT</span> — no refund to their wallet. Daily returns stop immediately. This action cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="mt-2 space-y-2">
+            <Label className="text-white text-sm">Reason (optional, shown in audit trail)</Label>
+            <Textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Fraudulent deposit, scam behaviour, terms violation…"
+              data-testid="cancel-inv-reason-input"
+              className="bg-[var(--nb-card2)] border-[var(--nb-border)] text-white min-h-[80px] resize-y"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={cancelBusy}
+              data-testid="cancel-inv-cancel-btn"
+              className="bg-transparent border-[var(--nb-border)] text-white hover:bg-[var(--nb-border)]"
+            >Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={submitCancelInv}
+              disabled={cancelBusy}
+              data-testid="cancel-inv-confirm-btn"
+              className="bg-[#EF4444] hover:bg-[#dc2626] text-white"
+            >
+              {cancelBusy ? "Cancelling…" : "Cancel investment"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

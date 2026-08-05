@@ -107,13 +107,22 @@ export default function AdminUsers() {
                   <td className="px-4 py-3 tabular font-display font-600">{formatNaira(u.wallet_balance)}</td>
                   <td className="px-4 py-3 tabular text-[var(--nb-muted)]">{formatNaira(u.total_invested)}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                      u.has_invested
-                        ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
-                        : "bg-[var(--nb-border)] text-[var(--nb-muted)]"
-                    }`}>
-                      {u.has_invested ? "Investor" : "Signed up"}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {u.banned && (
+                        <span
+                          data-testid={`user-banned-badge-${u.id}`}
+                          className="text-[10px] px-2 py-0.5 rounded-full border bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/40"
+                          title={u.banned_reason || "Banned"}
+                        >BANNED</span>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                        u.has_invested
+                          ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30"
+                          : "bg-[var(--nb-border)] text-[var(--nb-muted)]"
+                      }`}>
+                        {u.has_invested ? "Investor" : "Signed up"}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link to={`/admin/users/${u.id}`}>
