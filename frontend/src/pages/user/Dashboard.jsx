@@ -16,6 +16,7 @@ import {
 } from "@/components/design";
 import InstallAppTile from "@/components/InstallAppTile";
 import DailyBonusCard from "@/components/DailyBonusCard";
+import LiveActivityStrip from "@/components/LiveActivityStrip";
 
 function ActionTile({ to, icon: Icon, label, tone, testid }) {
   const tones = {
@@ -154,6 +155,10 @@ export default function Dashboard() {
           </div>
         </div>
       </AmbientCard>
+
+      {/* Live activity strip — 24 h totals + rotating anonymised ticker so
+          the platform always feels active and trustworthy. */}
+      <LiveActivityStrip />
 
       {/* Quick actions */}
       <section>

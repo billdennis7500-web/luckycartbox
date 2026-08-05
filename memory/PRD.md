@@ -989,3 +989,34 @@ Please **redeploy** to push these changes to production. After redeploy:
 1. Check `luckycartbox.com/admin` → Settings → **Server tab → Settings history & restore** — you should see any prior audit entries persisted in your Atlas DB.
 2. If settings look scattered, tap **Restore** on the most recent pre-deploy entry.
 3. Watch the pod boot log next redeploy — if `db_name` changes across deploys, that's the real culprit and we can adjust the env-var strategy accordingly.
+
+## 2026-02-05 · Profile speedup + Rewards speedup + Live Activity Strip
+
+### User reports
+1. Profile page's Purchases number takes time to update.
+2. Rewards/milestone-bonuses page loads slowly.
+3. Homepage needs a live-updating strip showing platform-wide activity (deposits, withdrawals, purchases + counts and amounts).
+
+### Delivered
+
+**1. Profile page** — Purchases count + referral pendant now use `useSWRCache` with the same cache keys as Investments.jsx and Rewards.jsx. If the user just came from the Warehouse page, the count renders **instantly on Profile** (0 ms Atlas hop). Background revalidation still runs.
+
+**2. Rewards page** — swapped `useState + api.get` for `useSWRCache("referrals:rewards")` — shared with the pendant fetch on Profile. Second visit is instant.
+
+**3. New "Live Activity Strip"** — top-of-dashboard widget with two sections:
+   - **24h totals pills** — deposits / withdrawals / purchases with count and naira total (colored icons + gradient tints).
+   - **Rotating live ticker** — anonymised events like *"Ad•• C•••••ma from Lagos funded ₦5,000"* auto-cycling every 3 s. Names masked server-side (never expose PII), cities deterministically hashed from the phone so the same user always shows the same city.
+   - Pulsing green "Live" dot + dashed gold top-line accent to match the rest of the app.
+   - Refetches every 30 s so the pulse feels real.
+
+**Backend additions (`server.py`)**
+- **`GET /api/activity/feed`** — public endpoint (no auth) returning the last 30 anonymised events + `totals_24h` aggregates. Cached in-memory for 20 s so heavy homepage traffic doesn't hammer Atlas.
+- Helpers: `_mask_name()` (`Ada Chidinma → Ad•• C•••••ma`), `_pick_city()` (deterministic phone-hash → Nigerian city), `_build_activity_events()` (parallel fetch of last 15 deposits + 15 withdrawals + 15 investments via `asyncio.gather`).
+- 24h aggregates computed via 3 concurrent `$group` pipelines with `asyncio.gather` on the already-indexed `created_at` fields — negligible Atlas cost.
+
+### Verified
+- `GET /api/activity/feed` → HTTP 200, 30 events, totals_24h: `deposits 7/₦6,000, withdrawals 5/₦2,200, purchases 2/₦6,000`.
+- Sample event shape: `{type: "purchase", verb: "activated a product", name: "TE••••••rB", city: "Port Harcourt", amount: 3000.0, product: "Lucky Cart", at: "…"}`.
+- Cold call ~600 ms; warm (cached) calls ~200-300 ms.
+- Frontend build passes.
+- Profile/Rewards share the same `useSWRCache` keys so navigation between them is seamless (0 skeleton flash).

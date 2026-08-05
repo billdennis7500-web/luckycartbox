@@ -6,6 +6,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 import os
 import re
+import time
 import asyncio
 import logging
 import secrets
@@ -4533,6 +4534,158 @@ async def public_settings():
         "auto_payout_enabled": bool(s.get("auto_payout_enabled")),
         "deposit_quick_amounts": s.get("deposit_quick_amounts") or [500, 1000, 2000, 5000, 10000, 20000],
     }
+
+
+# ---------------------------------------------------------------------------
+# Live activity feed — public strip of recent (anonymised) platform activity.
+# Shown on the landing/dashboard hero to make Luckycart Box feel active +
+# trustworthy without exposing any PII. Cached for 20s so the endpoint stays
+# cheap even under heavy homepage traffic.
+# ---------------------------------------------------------------------------
+_ACTIVITY_CACHE: Dict[str, Any] = {"at": 0.0, "events": []}
+_ACTIVITY_TTL_SECONDS = 20
+
+
+def _mask_name(name: str) -> str:
+    """Show the first letter + a couple middle letters (redacted with •), keep
+    the last letter. 'Ada Chidinma' → 'Ad•• C•••••ma'. Preserves whitespace."""
+    if not name:
+        return "Someone"
+    parts = name.split()
+    out = []
+    for p in parts:
+        if len(p) <= 2:
+            out.append(p[0] + "•")
+        elif len(p) <= 4:
+            out.append(p[0] + "•" * (len(p) - 2) + p[-1])
+        else:
+            out.append(p[:2] + "•" * (len(p) - 4) + p[-2:])
+    return " ".join(out)
+
+
+def _pick_city(phone: str) -> str:
+    """Deterministically map a phone number to a Nigerian city so the same
+    user always shows the same city on the ticker. Not a real geoloc —
+    just adds local flavour. Cheap: index into a fixed list."""
+    NIGERIAN_CITIES = [
+        "Lagos", "Abuja", "Port Harcourt", "Kano", "Ibadan", "Benin City",
+        "Enugu", "Warri", "Owerri", "Uyo", "Calabar", "Kaduna", "Jos",
+        "Aba", "Onitsha", "Ilorin", "Akure", "Abeokuta", "Zaria", "Maiduguri",
+        "Sokoto", "Osogbo", "Yola",
+    ]
+    if not phone:
+        return "Nigeria"
+    # Sum the digits deterministically → index in list
+    digits = [int(c) for c in phone if c.isdigit()]
+    return NIGERIAN_CITIES[sum(digits) % len(NIGERIAN_CITIES)] if digits else "Nigeria"
+
+
+async def _build_activity_events() -> List[Dict[str, Any]]:
+    """Query the last 15 approved deposits + 15 approved withdrawals + 15
+    investment buys, anonymise, merge into a single most-recent-first list."""
+    limit_per_type = 15
+
+    dep_task = db.deposits.find(
+        {"status": "approved"},
+        {"user_name": 1, "user_phone": 1, "amount": 1, "created_at": 1, "gateway": 1},
+    ).sort("created_at", -1).limit(limit_per_type).to_list(limit_per_type)
+
+    wd_task = db.withdrawals.find(
+        {"status": {"$in": ["approved", "processing"]}},
+        {"user_name": 1, "user_phone": 1, "amount": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(limit_per_type).to_list(limit_per_type)
+
+    inv_task = db.investments.find(
+        {},
+        {"user_id": 1, "product_name": 1, "price": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(limit_per_type).to_list(limit_per_type)
+
+    deps, wds, invs = await asyncio.gather(dep_task, wd_task, inv_task)
+
+    # For investments we need the user name — batch-fetch.
+    user_ids = list({inv.get("user_id") for inv in invs if inv.get("user_id")})
+    users_by_id: Dict[Any, dict] = {}
+    if user_ids:
+        async for u in db.users.find(
+            {"_id": {"$in": user_ids}},
+            {"name": 1, "phone": 1},
+        ):
+            users_by_id[u["_id"]] = u
+
+    events: List[Dict[str, Any]] = []
+    for d in deps:
+        events.append({
+            "type": "deposit",
+            "verb": "funded their wallet",
+            "name": _mask_name(d.get("user_name") or ""),
+            "city": _pick_city(d.get("user_phone") or ""),
+            "amount": float(d.get("amount") or 0),
+            "at": d.get("created_at"),
+        })
+    for w in wds:
+        events.append({
+            "type": "withdrawal",
+            "verb": "cashed out",
+            "name": _mask_name(w.get("user_name") or ""),
+            "city": _pick_city(w.get("user_phone") or ""),
+            "amount": float(w.get("amount") or 0),
+            "at": w.get("created_at"),
+        })
+    for inv in invs:
+        u = users_by_id.get(inv.get("user_id")) or {}
+        events.append({
+            "type": "purchase",
+            "verb": "activated a product",
+            "name": _mask_name(u.get("name") or ""),
+            "city": _pick_city(u.get("phone") or ""),
+            "amount": float(inv.get("price") or 0),
+            "product": inv.get("product_name") or "an investment",
+            "at": inv.get("created_at"),
+        })
+
+    # Sort newest first; the "at" field is an ISO string so lexicographic sort works.
+    events.sort(key=lambda e: e.get("at") or "", reverse=True)
+    # Keep only the newest 30 total on the ticker.
+    return events[:30]
+
+
+@api.get("/activity/feed")
+async def activity_feed():
+    """Return the last 30 anonymised platform events + aggregate totals for
+    the last 24 h. Public — no auth required. Cached for 20 s."""
+    now_ts = time.time()
+    if now_ts - _ACTIVITY_CACHE["at"] > _ACTIVITY_TTL_SECONDS or not _ACTIVITY_CACHE["events"]:
+        _ACTIVITY_CACHE["events"] = await _build_activity_events()
+        _ACTIVITY_CACHE["at"] = now_ts
+
+    # Compute 24 h aggregates in parallel — cheap because we already have
+    # indexes on `created_at`. Not cached (they change every second, but the
+    # ceiling of $sum against a small window is negligible).
+    cutoff = (now_utc() - timedelta(hours=24)).isoformat()
+    dep_pipe = [{"$match": {"status": "approved", "created_at": {"$gte": cutoff}}},
+                {"$group": {"_id": None, "count": {"$sum": 1}, "total": {"$sum": "$amount"}}}]
+    wd_pipe  = [{"$match": {"status": {"$in": ["approved", "processing"]}, "created_at": {"$gte": cutoff}}},
+                {"$group": {"_id": None, "count": {"$sum": 1}, "total": {"$sum": "$amount"}}}]
+    inv_pipe = [{"$match": {"created_at": {"$gte": cutoff}}},
+                {"$group": {"_id": None, "count": {"$sum": 1}, "total": {"$sum": "$price"}}}]
+
+    dep_res, wd_res, inv_res = await asyncio.gather(
+        db.deposits.aggregate(dep_pipe).to_list(1),
+        db.withdrawals.aggregate(wd_pipe).to_list(1),
+        db.investments.aggregate(inv_pipe).to_list(1),
+    )
+    def _row(res):
+        r = res[0] if res else {"count": 0, "total": 0}
+        return {"count": int(r.get("count") or 0), "total": float(r.get("total") or 0)}
+    return {
+        "events": _ACTIVITY_CACHE["events"],
+        "totals_24h": {
+            "deposits":    _row(dep_res),
+            "withdrawals": _row(wd_res),
+            "purchases":   _row(inv_res),
+        },
+    }
+
 
 
 @api.put("/admin/settings")

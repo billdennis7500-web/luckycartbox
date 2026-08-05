@@ -15,6 +15,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { api, formatApiError, formatNaira } from "@/lib/api";
+import useSWRCache from "@/lib/useSWRCache";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -175,7 +176,14 @@ function TierCard({ tier, onClaim, claiming }) {
 }
 
 export default function Rewards() {
-  const [data, setData] = useState(null);
+  // SWR cache — repeat visits (from Profile → tap medallion → Rewards) render
+  // instantly. Same cache key as Profile.jsx's `refLevel` fetcher, so both
+  // pages share the payload.
+  const { data, refetch, setData } = useSWRCache(
+    "referrals:rewards",
+    () => api.get("/referrals/rewards").then((r) => r.data),
+    { fallback: null },
+  );
   const [claiming, setClaiming] = useState(0);
 
   const load = useCallback(async () => {
@@ -185,11 +193,12 @@ export default function Rewards() {
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Failed to load rewards");
     }
-  }, []);
+  }, [setData]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    // SWR already fired the initial fetch. Nothing to do here; kept as a
+    // no-op to preserve the file's shape.
+  }, []);
 
   const claim = async (tier) => {
     setClaiming(tier.level);

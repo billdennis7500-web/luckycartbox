@@ -22,6 +22,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { api, formatNaira } from "@/lib/api";
+import useSWRCache from "@/lib/useSWRCache";
 import {
   ArrowDownToLine, ArrowUpFromLine, Users as UsersIcon, LogOut,
   Shield, Copy, ChevronRight, Ticket, Landmark, Inbox, ScrollText, History,
@@ -184,21 +185,29 @@ function HeroCard({ label, value, ctaLabel, ctaTo, tone = "gold", icon: Icon, te
 export default function Profile() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  const [invCount, setInvCount] = useState(null);
-  const [refLevel, setRefLevel] = useState(null);
 
-  useEffect(() => {
-    api.get("/investments").then((r) => setInvCount((r.data || []).length))
-       .catch(() => setInvCount(0));
-    // Referral pendant — fetch current unlocked tier for the avatar medallion
-    api.get("/referrals/rewards").then((r) => {
-      const d = r.data || {};
-      const unlocked = (d.tiers || []).filter((t) => t.unlocked);
-      // Highest unlocked tier is the "achieved" level shown as pendant
-      const top = unlocked.length ? unlocked[unlocked.length - 1] : null;
-      setRefLevel(top);
-    }).catch(() => setRefLevel(null));
-  }, []);
+  // Use the same sessionStorage cache both `/investments` and `/rewards`
+  // populate elsewhere. Since Investments.jsx caches under key "investments",
+  // reading the same key here means: if the user just came from the
+  // Warehouse page, the purchase count renders INSTANTLY on Profile —
+  // zero API hop for that number. First-ever visit still shows a tiny spinner.
+  const { data: invs } = useSWRCache(
+    "investments",
+    () => api.get("/investments").then((r) => r.data),
+    { fallback: null },
+  );
+  const invCount = invs === null ? null : (Array.isArray(invs) ? invs.length : 0);
+
+  const { data: rewardsData } = useSWRCache(
+    "referrals:rewards",
+    () => api.get("/referrals/rewards").then((r) => r.data),
+    { fallback: null },
+  );
+  const refLevel = useMemo(() => {
+    if (!rewardsData?.tiers) return null;
+    const unlocked = rewardsData.tiers.filter((t) => t.unlocked);
+    return unlocked.length ? unlocked[unlocked.length - 1] : null;
+  }, [rewardsData]);
 
   const level = useMemo(() => deriveLevel(user?.total_invested || 0), [user?.total_invested]);
   const tierColor = level.current.color;
