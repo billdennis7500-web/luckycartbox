@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiError } from "@/lib/api";
+import useSWRCache from "@/lib/useSWRCache";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy, AlertTriangle, Trash2, Loader2, Sparkles, Wallet, MessageCircle, Award, CreditCard, Server, ShieldAlert, LogOut } from "lucide-react";
+import { Copy, AlertTriangle, Trash2, Loader2, Sparkles, Wallet, MessageCircle, Award, CreditCard, Server, ShieldAlert, LogOut, History } from "lucide-react";
 import { SectionHeader } from "@/components/design";
 
 /**
@@ -615,6 +616,7 @@ export default function AdminSettings() {
         <>
           <ServerIPCard />
           <WebhookUrlsCard />
+          <SettingsHistoryCard />
         </>
       )}
 
@@ -894,28 +896,24 @@ function WebhookUrlsCard() {
 /* -------------------------------------------------------------------------- */
 
 function GatewayTogglesCard() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading, refetch, setData } = useSWRCache(
+    "admin:gateways",
+    () => api.get("/admin/gateways").then((r) => r.data),
+    { fallback: null },
+  );
+  const rows = data?.gateways || [];
   const [saving, setSaving] = useState(false);
-
-  const load = () => {
-    setLoading(true);
-    api.get("/admin/gateways")
-      .then((r) => setRows(r.data?.gateways || []))
-      .catch(() => toast.error("Failed to load gateway toggles"))
-      .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
 
   const setToggle = async (key, direction, value) => {
     setSaving(true);
     try {
       const patch = { [key]: { [direction]: value } };
       const { data } = await api.put("/admin/gateways", patch);
-      setRows(data?.gateways || []);
+      setData(data);  // update local + sessionStorage cache immediately
       toast.success(`${key} ${direction} ${value ? "enabled" : "disabled"}`);
     } catch (e) {
       toast.error(formatApiError(e.response?.data?.detail) || "Failed");
+      refetch(); // resync from server on error
     } finally {
       setSaving(false);
     }
@@ -1150,6 +1148,138 @@ function ForceLogoutCard() {
           </Dialog>
         </div>
       </div>
+    </Card>
+  );
+}
+
+
+/* -------------------------------------------------------------------------- */
+/*  Settings History — audit trail of admin settings changes with restore.    */
+/*  Critical safety net for the "settings scattered after redeploy" scenario. */
+/* -------------------------------------------------------------------------- */
+
+function SettingsHistoryCard() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [restoringId, setRestoringId] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/admin/settings/audit?limit=25")
+      .then((r) => setRows(r.data?.entries || []))
+      .catch(() => toast.error("Failed to load settings history"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const restore = async (auditId) => {
+    if (!confirm("Restore the settings snapshot from before this change? This overwrites your current settings.")) return;
+    setRestoringId(auditId);
+    try {
+      const { data } = await api.post(`/admin/settings/restore/${auditId}`);
+      toast.success(`Restored ${data.count} settings from ${new Date().toLocaleTimeString()}`);
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail) || "Restore failed");
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const fmtWhen = (iso) => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+  };
+
+  const fmtVal = (v) => {
+    if (v === null || v === undefined) return "—";
+    if (typeof v === "boolean") return v ? "ON" : "OFF";
+    if (typeof v === "object") return JSON.stringify(v).slice(0, 40) + (JSON.stringify(v).length > 40 ? "…" : "");
+    return String(v);
+  };
+
+  return (
+    <Card className="bg-[var(--nb-card)] border-[var(--nb-border)] p-6 rounded-xl space-y-3" data-testid="settings-history-card">
+      <div>
+        <h2 className="font-display text-lg font-600 flex items-center gap-2">
+          <History className="w-4 h-4 text-[#F5C518]" /> Settings history &amp; restore
+        </h2>
+        <p className="text-xs text-[var(--nb-muted)] mt-1">
+          Every settings change is snapshotted here. If a value gets accidentally reset (deploy, misclick, teammate), tap <span className="text-white">Restore</span> to roll back instantly.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-[var(--nb-muted)]">Loading history…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-sm text-[var(--nb-muted)]">No changes recorded yet. Make an edit and it'll appear here.</div>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((r) => {
+            const isRestore = (r.changed_keys || []).includes("__RESTORE__");
+            return (
+            <div key={r.id} className="rounded-lg border border-[var(--nb-border)] bg-[var(--nb-card2)] p-3"
+                 data-testid={`audit-row-${r.id}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs tabular text-[var(--nb-muted)]">{fmtWhen(r.at)}</span>
+                    {isRestore ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#F5C51820] text-[#F5C518] font-800 uppercase tracking-wider">Restore</span>
+                    ) : null}
+                    <span className="text-xs text-white">{r.admin_email || "admin"}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--nb-muted)]">
+                    Changed:{" "}
+                    <span className="text-white">
+                      {(r.changed_keys || []).filter(k => k !== "__RESTORE__").join(", ") || "—"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+                    className="border-[var(--nb-border)] bg-transparent text-white h-8 px-2 text-xs"
+                    data-testid={`audit-details-${r.id}`}
+                  >
+                    {expanded === r.id ? "Hide" : "Details"}
+                  </Button>
+                  {!isRestore && (
+                    <Button
+                      size="sm"
+                      onClick={() => restore(r.id)}
+                      disabled={restoringId === r.id}
+                      className="h-8 px-3 text-xs font-800 text-[#1A1508]"
+                      style={{ background: "linear-gradient(135deg,#FFE580,#F5C518)" }}
+                      data-testid={`audit-restore-${r.id}`}
+                    >
+                      {restoringId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Restore"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {expanded === r.id && (
+                <div className="mt-3 rounded-lg border border-[var(--nb-border)] bg-black/20 p-2 text-[11px] tabular space-y-1 max-h-72 overflow-auto">
+                  {(r.changed_keys || []).filter(k => k !== "__RESTORE__").map((k) => (
+                    <div key={k} className="flex items-start gap-2">
+                      <span className="text-[var(--nb-muted)] shrink-0 w-40 truncate">{k}:</span>
+                      <span className="text-red-400 line-through shrink-0">{fmtVal((r.before || {})[k])}</span>
+                      <span className="text-[var(--nb-muted)]">→</span>
+                      <span className="text-emerald-400">{fmtVal((r.after || {})[k])}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );})}
+        </div>
+      )}
     </Card>
   );
 }

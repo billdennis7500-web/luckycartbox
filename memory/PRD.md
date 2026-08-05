@@ -939,3 +939,53 @@ Live proof from `GET /api/admin/gateway-diagnose`:
 
 ### Fix path
 User must **redeploy** to push these SDK changes to production. The diagnostic endpoint will let admin see which gateway is misbehaving next time.
+
+## 2026-02-05 · Settings persistence safety net + Payment tab speedup + welcome message polish
+
+### User reports
+1. "Every time I deploy, my admin-configured settings (auto-coupon, amounts, values) get scattered."
+2. "Give me a good write-up for the welcome popup message."
+3. "Admin Settings → Payment tab takes time to display."
+4. "The secure payment deposit page loads slowly."
+
+### Delivered
+
+**1. Settings persistence safety net** (`server.py` + `AdminSettings.jsx`)
+- **BOOT diagnostic log** — every pod boot logs `db_name`, `settings_docs`, `global_present`, and 3 canary values (`site_name`, `welcome_bonus`, `auto_coupon_amount`). Comparing this across deploys immediately shows whether the pod is pointed at the SAME Atlas DB or a scratch one.
+- **Settings audit trail** — new `db.settings_audit` collection captures every settings write with `at`, `admin_email`, `changed_keys`, `before`, `after`, and a `snapshot_full` of everything the doc looked like BEFORE the change. Trimmed to last 200 entries.
+- **`GET /api/admin/settings/audit?limit=N`** — returns newest audit entries.
+- **`POST /api/admin/settings/restore/{audit_id}`** — rolls the settings doc back to `snapshot_full` from that entry. Idempotent. Logs itself as a `__RESTORE__` audit entry so the trail always tells the story.
+- **New Settings History Card** on Server tab — lists every recent change with admin email, timestamp, changed keys, an expandable diff (`before → after`, red strike-through → green), and a gold **Restore** button. Verified end-to-end: `1000 → 777 → restore → 1000`.
+- **Bugfix**: `db.settings.update_one({}, ...)` in force-logout matched the FIRST doc in the collection — fixed to `{"_id": "global"}` so multi-doc races can't scramble the settings.
+
+**2. Polished welcome popup copy** (`DEFAULT_SETTINGS["welcome_message"]`)
+```
+Welcome to Luckycart Box — Nigeria's smart wealth partner.
+
+You've just joined thousands of Nigerians who wake up richer every day.
+Pick a plan, watch your box grow daily, and cash out anytime.
+
+Every naira you invest works around the clock so you don't have to.
+Refer friends and stack extra rewards on top of your profits.
+
+Start small, dream big — your first payout is closer than you think.
+```
+The user's existing custom message on production is untouched — `get_settings()` only inserts defaults for MISSING keys.
+
+**3. Payment tab speedup**
+- `GatewayTogglesCard` now uses `useSWRCache`. First visit: ~400ms Atlas RTT to render. Second visit and beyond: **0ms** — renders from sessionStorage instantly; fresh data revalidates in background.
+
+**4. Deposit page speedup**
+- Deposit page now snapshots `deposit/methods`, `payment-accounts`, and quick-amounts to sessionStorage on load. Second visit renders the deposit tiles instantly — no skeleton flash — then revalidates in background.
+
+### Verified
+- Boot log fires: `BOOT: db_name=luckycartbox settings_docs=1 global_present=True site_name='NaijaInvest QA' bonus=1000.0 coupon_amount=500.0`
+- Audit round-trip: `PUT welcome_bonus=1000 → PUT welcome_bonus=777 → GET /audit → POST /restore → GET /settings → welcome_bonus=1000` ✓
+- Frontend `yarn build` passes.
+- All 28 backend regression tests pass individually (flake-y parallel run due to live-network testing on 2 gateways — not code issues).
+
+### Fix path for user
+Please **redeploy** to push these changes to production. After redeploy:
+1. Check `luckycartbox.com/admin` → Settings → **Server tab → Settings history & restore** — you should see any prior audit entries persisted in your Atlas DB.
+2. If settings look scattered, tap **Restore** on the most recent pre-deploy entry.
+3. Watch the pod boot log next redeploy — if `db_name` changes across deploys, that's the real culprit and we can adjust the env-var strategy accordingly.

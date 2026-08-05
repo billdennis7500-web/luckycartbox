@@ -159,6 +159,32 @@ export default function Deposit() {
   const [verifyRevealed, setVerifyRevealed] = useState(false);
   const pollRef = useRef(null);
 
+  // Read initial deposit config from sessionStorage so the second visit
+  // renders with zero skeleton flash. Fresh data still fires in the
+  // background via `load()` and updates the UI if anything changed.
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem("dep:config");
+      if (!cached) return;
+      const c = JSON.parse(cached);
+      if (c.paynow  !== undefined) setInstantEnabled(!!c.paynow);
+      if (c.shpay   !== undefined) setShpayEnabled(!!c.shpay);
+      if (c.oness   !== undefined) setOnesspayEnabled(!!c.oness);
+      if (c.junt    !== undefined) setJuntbestEnabled(!!c.junt);
+      if (Array.isArray(c.accounts)) setAccounts(c.accounts);
+      if (Array.isArray(c.qa) && c.qa.length) setQuickAmounts(c.qa);
+      // Cached data present — hide skeleton immediately; revalidate in bg.
+      setInitialLoad(false);
+    } catch { /* corrupt cache — ignore, will refill below */ }
+  }, []);
+
+  const _cacheDepConfig = (patch) => {
+    try {
+      const cur = JSON.parse(sessionStorage.getItem("dep:config") || "{}");
+      sessionStorage.setItem("dep:config", JSON.stringify({ ...cur, ...patch }));
+    } catch { /* quota — ignore */ }
+  };
+
   const load = () => {
     // Two-phase load with atomic reveal + hard timeouts.
     //
@@ -204,6 +230,13 @@ export default function Deposit() {
           setShpayEnabled(!!d.shpay);
           setOnesspayEnabled(!!d.onesspay);
           setJuntbestEnabled(!!d.juntbest);
+          // Snapshot to sessionStorage for instant re-render on next visit.
+          _cacheDepConfig({
+            paynow: !!d.paynow,
+            shpay:  !!d.shpay,
+            oness:  !!d.onesspay,
+            junt:   !!d.juntbest,
+          });
           return true;
         }
         return false;
@@ -213,13 +246,20 @@ export default function Deposit() {
     );
 
     const pAccounts = withTimeout(
-      api.get("/payment-accounts").then((r) => setAccounts(r.data)).catch(() => {}),
+      api.get("/payment-accounts").then((r) => {
+        setAccounts(r.data);
+        _cacheDepConfig({ accounts: r.data });
+      }).catch(() => {}),
       3000, undefined,
     );
     const pSettings = withTimeout(
       api.get("/settings/public").then((r) => {
         const qa = r.data?.deposit_quick_amounts;
-        if (Array.isArray(qa) && qa.length) setQuickAmounts(qa.map(Number).filter(n => n > 0));
+        if (Array.isArray(qa) && qa.length) {
+          const nums = qa.map(Number).filter(n => n > 0);
+          setQuickAmounts(nums);
+          _cacheDepConfig({ qa: nums });
+        }
       }).catch(() => {}),
       3000, undefined,
     );

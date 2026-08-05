@@ -240,7 +240,14 @@ DEFAULT_SETTINGS = {
     "telegram_channel_url": "",
     "whatsapp_channel_url": "",
     "support_hours": "Monday to Sunday, 10:00 AM to 5:00 PM",
-    "welcome_message": "Welcome to Luckycart Box — grow your money the smart way. Invest today, cash out tomorrow.",
+    "welcome_message": (
+        "Welcome to Luckycart Box — Nigeria's smart wealth partner.\n\n"
+        "You've just joined thousands of Nigerians who wake up richer every "
+        "day. Pick a plan, watch your box grow daily, and cash out anytime.\n\n"
+        "Every naira you invest works around the clock so you don't have to. "
+        "Refer friends and stack extra rewards on top of your profits.\n\n"
+        "Start small, dream big — your first payout is closer than you think."
+    ),
     "withdrawal_fee_pct": 15.0,
     "auto_payout_enabled": False,
     "deposit_quick_amounts": [500, 1000, 2000, 5000, 10000, 20000],
@@ -621,6 +628,23 @@ async def get_settings() -> dict:
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
+    # BOOT DIAGNOSTIC — log which DB we're pointed at + whether user settings
+    # already exist. If admin sees settings "reset" after a redeploy, this log
+    # will show whether the pod is pointed at the SAME DB it was before
+    # (settings would still be present) or a DIFFERENT one (settings absent).
+    try:
+        settings_count = await db.settings.count_documents({})
+        s_doc = await db.settings.find_one({"_id": "global"}, {"site_name": 1, "welcome_bonus": 1, "auto_coupon_amount": 1})
+        logger.warning(
+            "BOOT: db_name=%s  settings_docs=%d  global_present=%s  site_name=%r  bonus=%s  coupon_amount=%s",
+            db.name, settings_count, bool(s_doc),
+            (s_doc or {}).get("site_name"),
+            (s_doc or {}).get("welcome_bonus"),
+            (s_doc or {}).get("auto_coupon_amount"),
+        )
+    except Exception:
+        logger.exception("Boot diagnostic failed")
+
     await db.users.create_index("phone", unique=True, sparse=True)
     await db.users.create_index("email", unique=True, sparse=True)
     await db.users.create_index("referral_code", unique=True)
@@ -3055,7 +3079,9 @@ async def admin_force_logout_all_users(admin: dict = Depends(get_admin_user)):
     JWTs are stateless.
     """
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    await db.settings.update_one({}, {"$set": {"session_epoch": now_ts}}, upsert=True)
+    # Use an explicit filter — the earlier `{}` filter matched the FIRST doc
+    # in the collection which is not necessarily `_id: "global"`.
+    await db.settings.update_one({"_id": "global"}, {"$set": {"session_epoch": now_ts}}, upsert=True)
     # Count currently active non-admin users for the confirmation toast.
     active_users = await db.users.count_documents({"role": {"$ne": "admin"}})
     logger.warning(
@@ -4513,10 +4539,76 @@ async def public_settings():
 async def admin_update_settings(payload: SettingsIn, admin: dict = Depends(get_admin_user)):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if updates:
+        # Snapshot the CURRENT settings to the audit collection before we
+        # overwrite anything, so admin can restore an earlier state if a
+        # setting gets wiped (e.g. by a bad deploy or misclick). Cheap
+        # storage; keeps the last 200 snapshots per site.
+        try:
+            current = await db.settings.find_one({"_id": "global"}) or {}
+            await db.settings_audit.insert_one({
+                "at": now_utc().isoformat(),
+                "admin_id": str(admin.get("_id")),
+                "admin_email": admin.get("email"),
+                "changed_keys": list(updates.keys()),
+                "before": {k: current.get(k) for k in updates.keys()},
+                "after": updates,
+                "snapshot_full": {k: v for k, v in current.items() if k != "_id"},
+            })
+            # Trim: keep only the newest 200 audit entries
+            count = await db.settings_audit.count_documents({})
+            if count > 200:
+                old = await db.settings_audit.find({}).sort("at", 1).limit(count - 200).to_list(count - 200)
+                if old:
+                    await db.settings_audit.delete_many({"_id": {"$in": [o["_id"] for o in old]}})
+        except Exception:
+            logger.exception("Settings audit write failed — continuing with update")
         await db.settings.update_one({"_id": "global"}, {"$set": updates}, upsert=True)
     s = await get_settings()
     s.pop("_id", None)
     return s
+
+
+@api.get("/admin/settings/audit")
+async def admin_settings_audit(admin: dict = Depends(get_admin_user), limit: int = 50):
+    """Return the newest `limit` settings-change snapshots (max 200). Useful
+    to see EXACTLY what changed, when, and by whom — and to restore a prior
+    state if a setting was accidentally wiped."""
+    limit = max(1, min(int(limit or 50), 200))
+    rows = await db.settings_audit.find({}).sort("at", -1).limit(limit).to_list(limit)
+    for r in rows:
+        r["id"] = str(r.pop("_id"))
+    return {"entries": rows, "count": len(rows)}
+
+
+@api.post("/admin/settings/restore/{audit_id}")
+async def admin_settings_restore(audit_id: str, admin: dict = Depends(get_admin_user)):
+    """Restore the settings snapshot that PRECEDED the given audit entry.
+    This is the exact state your admin panel had BEFORE that particular
+    change. Idempotent — restoring the same snapshot twice is a no-op."""
+    audit = await db.settings_audit.find_one({"_id": oid(audit_id)})
+    if not audit:
+        raise HTTPException(404, "Audit entry not found")
+    snap = audit.get("snapshot_full") or {}
+    if not snap:
+        raise HTTPException(400, "This audit entry has no full snapshot — nothing to restore")
+    # Log the restore action as its own audit entry so we can trace back.
+    try:
+        await db.settings_audit.insert_one({
+            "at": now_utc().isoformat(),
+            "admin_id": str(admin.get("_id")),
+            "admin_email": admin.get("email"),
+            "changed_keys": ["__RESTORE__"],
+            "before": {},
+            "after": {"restored_from_audit_id": audit_id},
+            "snapshot_full": snap,
+        })
+    except Exception:
+        logger.exception("Restore audit-log write failed — continuing with restore")
+    # Full replace — but keep the doc _id.
+    snap_clean = {k: v for k, v in snap.items() if k != "_id"}
+    await db.settings.update_one({"_id": "global"}, {"$set": snap_clean}, upsert=True)
+    return {"ok": True, "restored_keys": list(snap_clean.keys()),
+            "count": len(snap_clean), "restored_from": audit_id}
 
 
 # ---------------------------------------------------------------------------
